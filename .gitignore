@@ -147,6 +147,13 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# 執行輸出（report.md / evidence.json / execution_log.jsonl 為每次執行產物，不進版控）
+output/
+
+# macOS 壓縮檔解壓縮產生的垃圾檔案
+.DS_Store
+__MACOSX/
+
 # Environments
 .env
 .envrc

@@ -1,0 +1,54 @@
+{
+  "price": [
+    {
+      "source": "本地共同基準資料集 (data/{coin}_daily_ohlcv.csv)",
+      "source_url": null,
+      "content_reference": "近 14 日收盤價與成交量摘要（dry-run 假資料，非真實查詢結果）",
+      "related_claim": "{coin} 近期價格走勢與成交量變化"
+    },
+    {
+      "source": "CoinGecko (dry-run fixture)",
+      "source_url": "https://api.coingecko.com/api/v3/simple/price",
+      "content_reference": "{coin} 即時價格與 24h 漲跌幅（dry-run 假資料）",
+      "related_claim": "{coin} 當前即時報價"
+    }
+  ],
+  "onchain": [
+    {
+      "source": "鏈上資料來源 (dry-run fixture)",
+      "source_url": null,
+      "content_reference": "{coin} 近期鏈上活躍地址數／交易量摘要（dry-run 假資料）",
+      "related_claim": "{coin} 鏈上活躍度"
+    }
+  ],
+  "news": [
+    {
+      "source": "CoinDesk RSS (dry-run fixture)",
+      "source_url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+      "content_reference": "{coin} 相關新聞標題與摘要（dry-run 假資料）",
+      "related_claim": "{coin} 近期重大新聞事件"
+    },
+    {
+      "source": "Cointelegraph RSS (dry-run fixture)",
+      "source_url": "https://cointelegraph.com/rss",
+      "content_reference": "{coin} 相關新聞標題與摘要（dry-run 假資料）",
+      "related_claim": "{coin} 近期重大新聞事件"
+    }
+  ],
+  "social": [
+    {
+      "source": "Reddit r/CryptoCurrency (dry-run fixture)",
+      "source_url": "https://www.reddit.com/r/CryptoCurrency/search.json",
+      "content_reference": "{coin} 相關討論串標題與熱度摘要（dry-run 假資料）",
+      "related_claim": "{coin} 社群討論熱度與情緒"
+    }
+  ],
+  "macro": [
+    {
+      "source": "Fear & Greed Index (dry-run fixture)",
+      "source_url": "https://api.alternative.me/fng/",
+      "content_reference": "當前恐懼貪婪指數數值（dry-run 假資料）",
+      "related_claim": "整體市場情緒指標"
+    }
+  ]
+}
