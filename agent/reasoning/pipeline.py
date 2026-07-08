@@ -17,6 +17,8 @@ from agent.reasoning.prompts import (
     build_step_a_prompt,
     build_step_b_prompt,
     build_step_c_prompt,
+    build_step_c1_bull_prompt,
+    build_step_c2_bear_prompt,
     build_step_d_prompt,
     classify_question_type,
     extract_json,
@@ -32,6 +34,7 @@ class ReasoningResult:
     inference: list[dict] = field(default_factory=list)
     conclusion: dict = field(default_factory=dict)
     follow_up_watchpoints: list[str] = field(default_factory=list)
+    debate: dict = field(default_factory=dict)
 
 
 class ReasoningStepError(RuntimeError):
@@ -182,12 +185,56 @@ def _real_reasoning(
         f"consistent={len(cross_validation['consistent_signals'])}, contradictions={len(cross_validation['contradictions'])}",
     )
 
-    # Step C：推論層
-    step_c_raw = _call_json_step(
-        llm_client, build_step_c_prompt(coin, question, question_type, facts, cross_validation), "step_c_inference"
-    )
-    inference = _sanitize_inference(step_c_raw.get("inference", []), known_ids)
-    _log("step_c_inference", "ok", f"hypotheses_count={len(inference)}")
+    # Step C：推論層，改為正方 vs 反方辯論（提升對抗性，避免單一模型自問自答式的假辯論）。
+    # 辯論任一步（C1 正方 / C2 反方）失敗，都會退回單模型一次產出多假設的舊版 Step C，
+    # 確保推論層本身的失敗不會直接讓整條推理鏈中斷。
+    debate: dict = {}
+    try:
+        step_c1_raw = _call_json_step(
+            llm_client,
+            build_step_c1_bull_prompt(coin, question, question_type, facts, cross_validation),
+            "step_c1_bull",
+        )
+        bull_argument = step_c1_raw.get("argument", "")
+        bull_evidence_ids = _sanitize_ids(step_c1_raw.get("evidence_ids", []), known_ids)
+        _log("step_c1_bull", "ok", f"evidence_count={len(bull_evidence_ids)}")
+
+        step_c2_raw = _call_json_step(
+            llm_client,
+            build_step_c2_bear_prompt(coin, question, question_type, facts, cross_validation, bull_argument),
+            "step_c2_bear",
+        )
+        bear_argument = step_c2_raw.get("argument", "")
+        bear_critique = step_c2_raw.get("critique", "")
+        bear_evidence_ids = _sanitize_ids(step_c2_raw.get("evidence_ids", []), known_ids)
+        _log("step_c2_bear", "ok", f"evidence_count={len(bear_evidence_ids)}")
+
+        debate = {
+            "bull_argument": bull_argument,
+            "bull_evidence_ids": bull_evidence_ids,
+            "bear_critique": bear_critique,
+            "bear_argument": bear_argument,
+            "bear_evidence_ids": bear_evidence_ids,
+        }
+        inference = [
+            {
+                "hypothesis": f"[正方] {bull_argument}",
+                "supporting_evidence_ids": bull_evidence_ids,
+                "opposing_evidence_ids": bear_evidence_ids,
+            },
+            {
+                "hypothesis": f"[反方] {bear_argument}",
+                "supporting_evidence_ids": bear_evidence_ids,
+                "opposing_evidence_ids": bull_evidence_ids,
+            },
+        ]
+    except ReasoningStepError as exc:
+        _log("step_c_debate", "error", f"正反方辯論失敗，退回單模型推論: {exc}")
+        step_c_raw = _call_json_step(
+            llm_client, build_step_c_prompt(coin, question, question_type, facts, cross_validation), "step_c_inference_fallback"
+        )
+        inference = _sanitize_inference(step_c_raw.get("inference", []), known_ids)
+        _log("step_c_inference_fallback", "ok", f"hypotheses_count={len(inference)}")
 
     # Step D：結論層
     step_d_raw = _call_json_step(
@@ -218,6 +265,7 @@ def _real_reasoning(
         inference=inference,
         conclusion=conclusion,
         follow_up_watchpoints=follow_up_watchpoints,
+        debate=debate,
     )
 
 

@@ -1,0 +1,85 @@
+"""用假 LLM client 驗證推理鏈邏輯，不需要真的呼叫 Bedrock/Gemini。"""
+
+import pytest
+
+from agent.reasoning.pipeline import run_reasoning
+from agent.schemas import Evidence, now_iso
+
+
+class FakeLLMClient:
+    """依序回放預先寫好的回應；放入 Exception 實例代表模擬該次呼叫失敗。"""
+
+    def __init__(self, responses: list):
+        self._responses = list(responses)
+        self.call_count = 0
+
+    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
+        self.call_count += 1
+        if not self._responses:
+            raise AssertionError("FakeLLMClient 的回應腳本用完了，呼叫次數超出預期")
+        item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def _evidences() -> list[Evidence]:
+    return [
+        Evidence(
+            id="ev-001",
+            source="test-source",
+            fetched_at=now_iso(),
+            content_reference="ref",
+            related_claim="claim",
+            source_type="price",
+        )
+    ]
+
+
+STEP_A_RESPONSE = '{"facts": [{"source_type": "price", "summary": "s", "evidence_ids": ["ev-001"]}]}'
+STEP_B_RESPONSE = '{"consistent_signals": ["c1"], "contradictions": []}'
+STEP_D_RESPONSE = (
+    '{"market_judgment": "mj", "confidence": "中", "limitations": [], '
+    '"invalidation_conditions": [], "evidence_ids": ["ev-001"], "follow_up_watchpoints": ["w1"]}'
+)
+
+
+def test_debate_happy_path_populates_bull_and_bear():
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',  # Step C1 正方
+        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',  # Step C2 反方
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["bull_argument"] == "bull arg"
+    assert result.debate["bear_argument"] == "bear arg"
+    assert result.debate["bear_critique"] == "crit"
+    assert len(result.inference) == 2
+    assert result.inference[0]["hypothesis"].startswith("[正方]")
+    assert result.inference[1]["hypothesis"].startswith("[反方]")
+    assert result.conclusion["market_judgment"] == "mj"
+    assert client.call_count == 5
+
+
+def test_debate_failure_falls_back_to_single_model_inference():
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        RuntimeError("simulated network failure on bull step"),  # Step C1 失敗
+        '{"inference": [{"hypothesis": "h", "supporting_evidence_ids": ["ev-001"], "opposing_evidence_ids": []}]}',  # fallback Step C
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate == {}
+    assert len(result.inference) == 1
+    assert result.inference[0]["hypothesis"] == "h"
+    assert result.conclusion["market_judgment"] == "mj"
+    assert client.call_count == 5

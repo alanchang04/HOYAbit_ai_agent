@@ -19,6 +19,17 @@ QUESTION_TYPE_FRAMING: dict[QuestionType, str] = {
     "comparison": "本題屬於「比較分析」題型：若證據僅涵蓋單一幣種，請在限制中明確指出比較對象的資料不足，避免憑空比較。",
 }
 
+BULL_FRAMING: dict[QuestionType, str] = {
+    "multi_source": "你要建構「市場狀態比表面看起來更正面/更有支撐」的論證。",
+    "hypothesis_test": "你要建構「題目中的陳述為真」的論證。",
+    "comparison": "你要建構「當前市場位置對本幣種相對有利」的論證。",
+}
+BEAR_FRAMING: dict[QuestionType, str] = {
+    "multi_source": "你要建構「市場狀態比表面看起來更脆弱/風險更高」的論證。",
+    "hypothesis_test": "你要建構「題目中的陳述為假或站不住腳」的論證。",
+    "comparison": "你要建構「當前市場位置對本幣種相對不利/風險較高」的論證。",
+}
+
 
 def classify_question_type(question: str) -> QuestionType:
     """依關鍵字粗略判斷題型；三種題型的推理骨架皆為事實→交叉驗證→推論→結論，
@@ -98,6 +109,7 @@ def build_step_b_prompt(coin: str, question: str, evidences: list[Evidence], fac
 def build_step_c_prompt(
     coin: str, question: str, question_type: QuestionType, facts: list[dict], cross_validation: dict
 ) -> str:
+    """單模型推論層 prompt（正反方辯論失敗時的 fallback，不分角色，一次產出多個假設）。"""
     framing = QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])
     return f"""題目：{question}
 幣種：{coin}
@@ -118,6 +130,75 @@ def build_step_c_prompt(
     {{"hypothesis": "市場狀態假設描述", "supporting_evidence_ids": ["ev-001"], "opposing_evidence_ids": []}},
     ...
   ]
+}}
+"""
+
+
+def build_step_c1_bull_prompt(
+    coin: str, question: str, question_type: QuestionType, facts: list[dict], cross_validation: dict
+) -> str:
+    """推論層 Step C1：正方分析師，只准建構最有利的論證。"""
+    framing = BULL_FRAMING.get(question_type, BULL_FRAMING["multi_source"])
+    return f"""題目：{question}
+幣種：{coin}
+
+你現在的角色是【正方分析師】。{framing}
+
+事實層：
+{json.dumps(facts, ensure_ascii=False, indent=2)}
+
+交叉驗證層：
+{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+
+規則：
+1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
+2. 你的論證必須誠實：若證據其實薄弱、樣本數少、或有明顯反例，要在論證中承認，不要誇大成過度肯定的語氣。
+3. 必須引用 evidence id 支撐你的論點。
+
+請只輸出以下 JSON 格式：
+{{
+  "argument": "正方完整論證（可以是一段完整的話，需引用具體事實）",
+  "evidence_ids": ["ev-001", ...]
+}}
+"""
+
+
+def build_step_c2_bear_prompt(
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    facts: list[dict],
+    cross_validation: dict,
+    bull_argument: str,
+) -> str:
+    """推論層 Step C2：反方分析師，可看到正方論證，任務是批評它並建構反向論證。"""
+    framing = BEAR_FRAMING.get(question_type, BEAR_FRAMING["multi_source"])
+    return f"""題目：{question}
+幣種：{coin}
+
+事實層：
+{json.dumps(facts, ensure_ascii=False, indent=2)}
+
+交叉驗證層：
+{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+
+正方分析師的論證如下：
+{bull_argument}
+
+你現在的角色是【反方分析師】。{framing}
+你的任務有兩部分：
+1. critique：具體指出正方論證的邏輯漏洞、忽略的反面證據、樣本選擇偏誤，或過度解讀之處（不可只是空泛地說「證據不足」，要指名道姓引用具體 evidence id 或論點）。
+2. argument：建構你自己的反方論證，盡量引用正方沒有使用到、或方向相反的事實與證據。
+
+規則：
+1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
+2. 必須引用 evidence id 支撐你的論點。
+
+請只輸出以下 JSON 格式：
+{{
+  "critique": "對正方論證的具體批評",
+  "argument": "反方完整論證（可以是一段完整的話，需引用具體事實）",
+  "evidence_ids": ["ev-003", ...]
 }}
 """
 

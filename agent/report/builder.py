@@ -18,6 +18,8 @@ def _collect_referenced_ids(result: ReasoningResult) -> set[str]:
         ids.update(inf.get("supporting_evidence_ids", []))
         ids.update(inf.get("opposing_evidence_ids", []))
     ids.update(result.conclusion.get("evidence_ids", []))
+    ids.update(result.debate.get("bull_evidence_ids", []))
+    ids.update(result.debate.get("bear_evidence_ids", []))
     return ids
 
 
@@ -81,6 +83,24 @@ def build_report_markdown(
     else:
         lines.append("- 本次未偵測到明顯矛盾訊號")
     lines.append("")
+
+    if result.debate:
+        lines.append("**正方 vs 反方辯論：**")
+        lines.append("")
+        lines.append(f"*正方論證：* {result.debate.get('bull_argument', '')}")
+        bull_ids = result.debate.get("bull_evidence_ids", [])
+        if bull_ids:
+            lines.append(f"- 引用證據：{', '.join(bull_ids)}")
+        lines.append("")
+        if result.debate.get("bear_critique"):
+            lines.append(f"*反方對正方的批評：* {result.debate['bear_critique']}")
+            lines.append("")
+        lines.append(f"*反方論證：* {result.debate.get('bear_argument', '')}")
+        bear_ids = result.debate.get("bear_evidence_ids", [])
+        if bear_ids:
+            lines.append(f"- 引用證據：{', '.join(bear_ids)}")
+        lines.append("")
+
     lines.append("**推論假設：**")
     for inf in result.inference:
         lines.append(f"- {inf.get('hypothesis', '')}")
