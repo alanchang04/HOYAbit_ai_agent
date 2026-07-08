@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent.collectors.base import BaseCollector
+from agent.collectors.coin_map import detect_coins_in_text
 from agent.collectors.dry_run import DryRunCollector
 from agent.collectors.macro import MacroCollector
 from agent.collectors.news import NewsCollector
@@ -55,11 +56,12 @@ def build_collectors(logger: ExecutionLogger, settings: Settings, dry_run: bool)
 
 
 async def collect_all(
-    collectors: list[BaseCollector], coin: str, remaining_seconds: float
+    collectors: list[BaseCollector], coins: list[str], remaining_seconds: float
 ) -> list[EvidenceDraft]:
+    """對每個 collector × 每個幣種平行執行（比較分析題型會有 2 個幣種）。"""
     if remaining_seconds <= 0:
         return []
-    tasks = [c.run(coin) for c in collectors]
+    tasks = [c.run(coin) for c in collectors for coin in coins]
     results = await asyncio.gather(*tasks)
     drafts: list[EvidenceDraft] = []
     for r in results:
@@ -79,6 +81,7 @@ def run_pipeline(
     question: str,
     dry_run: bool = True,
     output_dir: str | None = None,
+    coin2: str | None = None,
 ) -> RunResult:
     settings = get_settings()
     start_time = time.monotonic()
@@ -91,10 +94,41 @@ def run_pipeline(
     for warning in check_optional_keys():
         logger.log(phase=LogPhase.COLLECT, action="config_check", detail=warning, status=LogStatus.SKIPPED)
 
+    question_type = classify_question_type(question)
+
+    # 「比較分析」題型需要第二個幣種的證據：優先用使用者明確指定的 --coin2，
+    # 否則嘗試從題目文字自動偵測（題目模板通常會直接寫出「比較【幣種A】與
+    # 【幣種B】」）。偵測不到就維持單幣種證據，report 會依既有 framing
+    # 在限制中明確揭露比較對象資料不足，而非憑空比較。
+    if question_type == "comparison":
+        if coin2 is None:
+            detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
+            if detected:
+                coin2 = detected[0]
+        if coin2:
+            coin2 = coin2.upper()
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="comparison_coin2_resolved",
+                detail=f"coin2={coin2}",
+                status=LogStatus.OK,
+            )
+        else:
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="comparison_coin2_not_found",
+                detail="comparison 題型但未指定/偵測到第二個幣種，本次僅蒐集單一幣種證據",
+                status=LogStatus.SKIPPED,
+            )
+    else:
+        coin2 = None
+
+    coins = [coin] + ([coin2] if coin2 else [])
+
     logger.log(
         phase=LogPhase.COLLECT,
         action="pipeline_start",
-        detail=f"coin={coin}, question={question!r}, dry_run={dry_run}",
+        detail=f"coins={coins}, question={question!r}, dry_run={dry_run}",
         status=LogStatus.OK,
     )
 
@@ -113,7 +147,7 @@ def run_pipeline(
         )
         drafts: list[EvidenceDraft] = []
     else:
-        drafts = asyncio.run(collect_all(collectors, coin, remaining_before_collect))
+        drafts = asyncio.run(collect_all(collectors, coins, remaining_before_collect))
 
     evidences = assign_evidence_ids(drafts)
 
@@ -133,7 +167,7 @@ def run_pipeline(
         logger.log(phase=LogPhase.REASON, action=step, detail=detail, status=LogStatus(status))
 
     if dry_run:
-        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True)
+        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2)
     else:
         llm_client = build_llm_client(settings)
         logger.log(
@@ -144,7 +178,7 @@ def run_pipeline(
         )
         try:
             reasoning_result = run_reasoning(
-                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step
+                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
@@ -171,7 +205,7 @@ def run_pipeline(
         status=LogStatus.OK,
     )
 
-    report_md = build_report_markdown(coin, question, reasoning_result, evidences)
+    report_md = build_report_markdown(coin, question, reasoning_result, evidences, coin2=coin2)
     report_path = out_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
     logger.log(phase=LogPhase.REPORT, action="report_written", detail=str(report_path), status=LogStatus.OK)

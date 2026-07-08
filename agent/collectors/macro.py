@@ -27,6 +27,7 @@ class MacroCollector(BaseCollector):
                 item = resp.json()["data"][0]
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source="Fear & Greed Index (alternative.me)",
                         source_url="https://api.alternative.me/fng/",
                         fetched_at=now_iso(),
@@ -49,6 +50,7 @@ class MacroCollector(BaseCollector):
                 rates = data.get("rates", {})
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source="Frankfurter 美元匯率（歐洲央行公開資料，美元強弱代理指標）",
                         source_url="https://api.frankfurter.app/latest?from=USD",
                         fetched_at=now_iso(),
@@ -76,6 +78,7 @@ class MacroCollector(BaseCollector):
                     obs = resp.json()["observations"][0]
                     evidences.append(
                         EvidenceDraft(
+                            coin=coin,
                             source="FRED DGS10（10年期美債殖利率，補充來源）",
                             source_url="https://fred.stlouisfed.org/series/DGS10",
                             fetched_at=now_iso(),

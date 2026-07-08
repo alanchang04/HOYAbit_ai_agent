@@ -38,13 +38,15 @@ def build_report_markdown(
     question: str,
     result: ReasoningResult,
     evidences: list[Evidence],
+    coin2: str | None = None,
 ) -> str:
     validate_evidence_references(result, evidences)
     ev_by_id = {e.id for e in evidences}
     ev_lookup = {e.id: e for e in evidences}
+    coin2 = coin2 or result.coin2
 
     lines: list[str] = []
-    lines.append(f"# {coin} 市場分析報告")
+    lines.append(f"# {coin} vs {coin2} 市場分析報告" if coin2 else f"# {coin} 市場分析報告")
     lines.append("")
     lines.append(f"> 題目：{question}")
     lines.append(f"> 題型分類：{result.question_type}")
@@ -59,7 +61,8 @@ def build_report_markdown(
     lines.append("")
     for fact in result.facts:
         ids = fact.get("evidence_ids", [])
-        lines.append(f"- {fact.get('summary', '')}")
+        coin_prefix = f"[{fact['coin']}] " if coin2 and fact.get("coin") else ""
+        lines.append(f"- {coin_prefix}{fact.get('summary', '')}")
         for eid in ids:
             ev = ev_lookup.get(eid)
             if ev:

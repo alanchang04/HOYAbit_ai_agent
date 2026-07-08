@@ -125,6 +125,7 @@ class PriceCollector(BaseCollector):
             summary_rows = indicator_rows[-14:]
             evidences.append(
                 EvidenceDraft(
+                    coin=coin,
                     source=f"HOYA BIT 共同基準資料集 (data/{coin}_daily_ohlcv.csv)",
                     source_url=None,
                     fetched_at=now_iso(),
@@ -139,6 +140,7 @@ class PriceCollector(BaseCollector):
             if indicators:
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source=f"本地技術指標計算（依 data/{coin}_daily_ohlcv.csv 最近 {len(indicator_rows)} 日計算，非外部資料）",
                         source_url=None,
                         fetched_at=now_iso(),
@@ -166,6 +168,7 @@ class PriceCollector(BaseCollector):
                 data = resp.json()[info.coingecko_id]
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source="CoinGecko /simple/price",
                         source_url="https://api.coingecko.com/api/v3/simple/price",
                         fetched_at=now_iso(),
@@ -189,6 +192,7 @@ class PriceCollector(BaseCollector):
                     raw = resp.json()["RAW"][info.cryptocompare_symbol]["USD"]
                     evidences.append(
                         EvidenceDraft(
+                            coin=coin,
                             source="CryptoCompare /data/pricemultifull（CoinGecko 備援）",
                             source_url="https://min-api.cryptocompare.com/data/pricemultifull",
                             fetched_at=now_iso(),

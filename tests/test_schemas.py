@@ -6,6 +6,7 @@ from agent.schemas import Evidence, EvidenceDraft, LogEntry, LogPhase, LogStatus
 
 def test_evidence_draft_valid():
     draft = EvidenceDraft(
+        coin="BTC",
         source="CoinGecko",
         source_url="https://api.coingecko.com/api/v3/simple/price",
         fetched_at=now_iso(),
@@ -20,6 +21,7 @@ def test_evidence_requires_valid_id_pattern():
     with pytest.raises(ValidationError):
         Evidence(
             id="not-a-valid-id",
+            coin="BTC",
             source="x",
             fetched_at=now_iso(),
             content_reference="x",
@@ -31,6 +33,7 @@ def test_evidence_requires_valid_id_pattern():
 def test_evidence_valid_id():
     ev = Evidence(
         id="ev-001",
+        coin="BTC",
         source="x",
         fetched_at=now_iso(),
         content_reference="x",
@@ -43,6 +46,7 @@ def test_evidence_valid_id():
 def test_evidence_rejects_bad_timestamp():
     with pytest.raises(ValidationError):
         EvidenceDraft(
+            coin="BTC",
             source="x",
             fetched_at="not-a-timestamp",
             content_reference="x",

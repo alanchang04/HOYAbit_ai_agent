@@ -27,6 +27,7 @@ def _evidences() -> list[Evidence]:
     return [
         Evidence(
             id="ev-001",
+            coin="BTC",
             source="test-source",
             fetched_at=now_iso(),
             content_reference="ref",
@@ -83,3 +84,29 @@ def test_debate_failure_falls_back_to_single_model_inference():
     assert result.inference[0]["hypothesis"] == "h"
     assert result.conclusion["market_judgment"] == "mj"
     assert client.call_count == 5
+
+
+def test_comparison_mode_threads_coin2_through_result():
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg for BTC", "evidence_ids": ["ev-001"]}',
+        '{"critique": "crit", "argument": "bear arg for ETH", "evidence_ids": ["ev-001"]}',
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    result = run_reasoning(
+        "BTC", "比較 BTC 與 ETH 的市場位置", _evidences(), dry_run=False, llm_client=client, coin2="ETH"
+    )
+
+    assert result.coin2 == "ETH"
+    assert result.question_type == "comparison"
+    assert result.debate["bull_argument"] == "bull arg for BTC"
+
+
+def test_dry_run_comparison_mentions_both_coins():
+    result = run_reasoning("BTC", "比較 BTC 與 ETH", _evidences(), dry_run=True, coin2="ETH")
+
+    assert result.coin2 == "ETH"
+    assert "ETH" in result.conclusion["market_judgment"]

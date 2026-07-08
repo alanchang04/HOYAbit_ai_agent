@@ -35,13 +35,16 @@ class ReasoningResult:
     conclusion: dict = field(default_factory=dict)
     follow_up_watchpoints: list[str] = field(default_factory=list)
     debate: dict = field(default_factory=dict)
+    coin2: str | None = None
 
 
 class ReasoningStepError(RuntimeError):
     """某一步驟呼叫 LLM 或解析回應失敗時拋出，由呼叫端決定如何降級處理。"""
 
 
-def _dry_run_reasoning(coin: str, question: str, question_type: QuestionType, evidences: list[Evidence]) -> ReasoningResult:
+def _dry_run_reasoning(
+    coin: str, question: str, question_type: QuestionType, evidences: list[Evidence], coin2: str | None = None
+) -> ReasoningResult:
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
         by_type.setdefault(ev.source_type.value, []).append(ev)
@@ -55,6 +58,7 @@ def _dry_run_reasoning(coin: str, question: str, question_type: QuestionType, ev
     ]
 
     all_ids = [e.id for e in evidences]
+    coin_label = f"{coin} 與 {coin2}" if coin2 else coin
 
     return ReasoningResult(
         question_type=question_type,
@@ -65,19 +69,20 @@ def _dry_run_reasoning(coin: str, question: str, question_type: QuestionType, ev
         },
         inference=[
             {
-                "hypothesis": f"（dry-run 假資料）{coin} 市場狀態假設",
+                "hypothesis": f"（dry-run 假資料）{coin_label} 市場狀態假設",
                 "supporting_evidence_ids": all_ids[:1],
                 "opposing_evidence_ids": [],
             }
         ],
         conclusion={
-            "market_judgment": f"（dry-run 假資料，非真實分析）針對「{question}」，{coin} 的市場判斷待正式資料與 Bedrock 推理補上。",
+            "market_judgment": f"（dry-run 假資料，非真實分析）針對「{question}」，{coin_label} 的市場判斷待正式資料與 Bedrock 推理補上。",
             "confidence": "低",
             "limitations": ["本次為 --dry-run 假資料流程，未使用真實市場資料與 LLM 推理"],
             "invalidation_conditions": ["正式執行並取得真實資料後，本假結論應被取代"],
             "evidence_ids": all_ids,
         },
         follow_up_watchpoints=["（dry-run 假資料）此為流程驗證用，非真實觀察重點"],
+        coin2=coin2,
     )
 
 
@@ -125,13 +130,14 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
     for fact in facts:
         if not isinstance(fact, dict):
             continue
-        sanitized.append(
-            {
-                "source_type": fact.get("source_type", ""),
-                "summary": fact.get("summary", ""),
-                "evidence_ids": _sanitize_ids(fact.get("evidence_ids", []), known_ids),
-            }
-        )
+        entry = {
+            "source_type": fact.get("source_type", ""),
+            "summary": fact.get("summary", ""),
+            "evidence_ids": _sanitize_ids(fact.get("evidence_ids", []), known_ids),
+        }
+        if isinstance(fact.get("coin"), str):
+            entry["coin"] = fact["coin"]
+        sanitized.append(entry)
     return sanitized
 
 
@@ -159,6 +165,7 @@ def _real_reasoning(
     evidences: list[Evidence],
     llm_client: LLMClient,
     log_step=None,
+    coin2: str | None = None,
 ) -> ReasoningResult:
     known_ids = {e.id for e in evidences}
 
@@ -167,13 +174,15 @@ def _real_reasoning(
             log_step(step, status, detail)
 
     # Step A：事實層
-    step_a_raw = _call_json_step(llm_client, build_step_a_prompt(coin, question, evidences), "step_a_facts")
+    step_a_raw = _call_json_step(
+        llm_client, build_step_a_prompt(coin, question, evidences, coin2=coin2), "step_a_facts"
+    )
     facts = _sanitize_facts(step_a_raw.get("facts", []), known_ids)
     _log("step_a_facts", "ok", f"facts_count={len(facts)}")
 
     # Step B：交叉驗證層
     step_b_raw = _call_json_step(
-        llm_client, build_step_b_prompt(coin, question, evidences, facts), "step_b_cross_validation"
+        llm_client, build_step_b_prompt(coin, question, evidences, facts, coin2=coin2), "step_b_cross_validation"
     )
     cross_validation = {
         "consistent_signals": step_b_raw.get("consistent_signals", []) if isinstance(step_b_raw.get("consistent_signals"), list) else [],
@@ -192,7 +201,7 @@ def _real_reasoning(
     try:
         step_c1_raw = _call_json_step(
             llm_client,
-            build_step_c1_bull_prompt(coin, question, question_type, facts, cross_validation),
+            build_step_c1_bull_prompt(coin, question, question_type, facts, cross_validation, coin2=coin2),
             "step_c1_bull",
         )
         bull_argument = step_c1_raw.get("argument", "")
@@ -201,7 +210,9 @@ def _real_reasoning(
 
         step_c2_raw = _call_json_step(
             llm_client,
-            build_step_c2_bear_prompt(coin, question, question_type, facts, cross_validation, bull_argument),
+            build_step_c2_bear_prompt(
+                coin, question, question_type, facts, cross_validation, bull_argument, coin2=coin2
+            ),
             "step_c2_bear",
         )
         bear_argument = step_c2_raw.get("argument", "")
@@ -231,7 +242,9 @@ def _real_reasoning(
     except ReasoningStepError as exc:
         _log("step_c_debate", "error", f"正反方辯論失敗，退回單模型推論: {exc}")
         step_c_raw = _call_json_step(
-            llm_client, build_step_c_prompt(coin, question, question_type, facts, cross_validation), "step_c_inference_fallback"
+            llm_client,
+            build_step_c_prompt(coin, question, question_type, facts, cross_validation, coin2=coin2),
+            "step_c_inference_fallback",
         )
         inference = _sanitize_inference(step_c_raw.get("inference", []), known_ids)
         _log("step_c_inference_fallback", "ok", f"hypotheses_count={len(inference)}")
@@ -239,7 +252,7 @@ def _real_reasoning(
     # Step D：結論層
     step_d_raw = _call_json_step(
         llm_client,
-        build_step_d_prompt(coin, question, question_type, facts, cross_validation, inference),
+        build_step_d_prompt(coin, question, question_type, facts, cross_validation, inference, coin2=coin2),
         "step_d_conclusion",
     )
     conclusion = {
@@ -266,6 +279,7 @@ def _real_reasoning(
         conclusion=conclusion,
         follow_up_watchpoints=follow_up_watchpoints,
         debate=debate,
+        coin2=coin2,
     )
 
 
@@ -276,13 +290,14 @@ def run_reasoning(
     dry_run: bool = True,
     llm_client: LLMClient | None = None,
     log_step=None,
+    coin2: str | None = None,
 ) -> ReasoningResult:
     question_type = classify_question_type(question)
 
     if dry_run:
-        return _dry_run_reasoning(coin, question, question_type, evidences)
+        return _dry_run_reasoning(coin, question, question_type, evidences, coin2=coin2)
 
     if llm_client is None:
         raise RuntimeError("非 dry-run 模式需要傳入 llm_client。")
 
-    return _real_reasoning(coin, question, question_type, evidences, llm_client, log_step=log_step)
+    return _real_reasoning(coin, question, question_type, evidences, llm_client, log_step=log_step, coin2=coin2)

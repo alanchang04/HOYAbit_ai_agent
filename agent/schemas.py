@@ -20,6 +20,7 @@ class SourceType(str, Enum):
 class EvidenceDraft(BaseModel):
     """Collector 產出的證據草稿，尚未分配全域唯一 id（由 orchestrator 統一分配）。"""
 
+    coin: str
     source: str
     source_url: str | None = None
     fetched_at: str

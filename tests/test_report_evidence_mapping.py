@@ -6,9 +6,10 @@ from agent.report.builder import EvidenceReferenceError, build_report_markdown, 
 from agent.schemas import Evidence, now_iso
 
 
-def make_evidence(eid: str) -> Evidence:
+def make_evidence(eid: str, coin: str = "BTC") -> Evidence:
     return Evidence(
         id=eid,
+        coin=coin,
         source="test-source",
         fetched_at=now_iso(),
         content_reference="ref",
@@ -65,3 +66,28 @@ def test_dry_run_pipeline_end_to_end(tmp_path):
     assert (tmp_path / "execution_log.jsonl").exists()
     assert len(result.evidences) > 0
     assert "BTC" in result.report_markdown
+
+
+def test_dry_run_comparison_auto_detects_second_coin_and_collects_both(tmp_path):
+    result = run_pipeline(
+        coin="BTC",
+        question="比較 BTC 與 ETH 在流動性與風險敞口上的差異",
+        dry_run=True,
+        output_dir=str(tmp_path),
+    )
+
+    coins_in_evidence = {e.coin for e in result.evidences}
+    assert coins_in_evidence == {"BTC", "ETH"}
+    assert "BTC vs ETH" in result.report_markdown
+
+
+def test_dry_run_comparison_with_explicit_coin2_override(tmp_path):
+    result = run_pipeline(
+        coin="BTC",
+        question="分析看看",  # 題目文字本身沒提到第二幣種，靠 --coin2 明確指定
+        dry_run=True,
+        output_dir=str(tmp_path),
+        coin2="SOL",
+    )
+    # 題目文字沒有比較關鍵字，所以會被分類成 multi_source，coin2 不會被採用
+    assert result.reasoning.coin2 is None

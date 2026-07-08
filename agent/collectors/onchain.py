@@ -65,6 +65,7 @@ class OnchainCollector(BaseCollector):
             data = resp.json()["data"]
             return [
                 EvidenceDraft(
+                    coin=coin,
                     source="Blockchair /bitcoin/stats",
                     source_url="https://api.blockchair.com/bitcoin/stats",
                     fetched_at=now_iso(),
@@ -93,6 +94,7 @@ class OnchainCollector(BaseCollector):
                 gas_price_gwei = int(gas_hex, 16) / 1e9
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source=f"公開 EVM RPC ({rpc_url})",
                         source_url=rpc_url,
                         fetched_at=now_iso(),
@@ -119,6 +121,7 @@ class OnchainCollector(BaseCollector):
                 data = resp.json()
                 evidences.append(
                     EvidenceDraft(
+                        coin=coin,
                         source=f"{'Etherscan' if 'etherscan' in etherscan_url else 'BscScan'} /api?module=stats",
                         source_url=etherscan_url,
                         fetched_at=now_iso(),
@@ -143,6 +146,7 @@ class OnchainCollector(BaseCollector):
             avg_tps = sum(s["numTransactions"] / s["samplePeriodSecs"] for s in samples) / len(samples) if samples else 0
             return [
                 EvidenceDraft(
+                    coin=coin,
                     source="Solana 公開 RPC getRecentPerformanceSamples",
                     source_url="https://api.mainnet-beta.solana.com",
                     fetched_at=now_iso(),
@@ -166,6 +170,7 @@ class OnchainCollector(BaseCollector):
                 validated = info.get("validated_ledger", {})
                 return [
                     EvidenceDraft(
+                        coin=coin,
                         source=f"XRPL 公開 JSON-RPC ({rpc_url})",
                         source_url=rpc_url,
                         fetched_at=now_iso(),

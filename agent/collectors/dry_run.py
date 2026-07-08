@@ -31,6 +31,7 @@ class DryRunCollector(BaseCollector):
         for tpl in templates:
             evidences.append(
                 EvidenceDraft(
+                    coin=coin,
                     source=tpl["source"].format(coin=coin),
                     source_url=tpl.get("source_url"),
                     fetched_at=fetched_at,

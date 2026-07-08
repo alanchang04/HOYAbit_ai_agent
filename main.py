@@ -14,16 +14,20 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+from agent.collectors.coin_map import SUPPORTED_COINS
 from agent.config import get_settings
 from agent.orchestrator import run_pipeline
-
-SUPPORTED_COINS = {"BTC", "ETH", "SOL", "BNB", "XRP"}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="HOYA BIT 加密市場分析 AI Agent")
     parser.add_argument("--coin", required=True, help="幣種代號，如 BTC / ETH / SOL / BNB / XRP")
     parser.add_argument("--question", required=True, help="題目全文")
+    parser.add_argument(
+        "--coin2",
+        default=None,
+        help="比較分析題型可選：第二個比較幣種代號。未提供時會嘗試從題目文字自動偵測",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -41,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] 不支援的幣種: {coin}（支援：{', '.join(sorted(SUPPORTED_COINS))}）", file=sys.stderr)
         return 1
 
+    coin2 = args.coin2.upper() if args.coin2 else None
+    if coin2 and coin2 not in SUPPORTED_COINS:
+        print(f"[ERROR] 不支援的 --coin2: {coin2}（支援：{', '.join(sorted(SUPPORTED_COINS))}）", file=sys.stderr)
+        return 1
+
     if not args.dry_run:
         settings = get_settings()
         if settings.llm_backend.lower() != "bedrock":
@@ -53,7 +62,9 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    result = run_pipeline(coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir)
+    result = run_pipeline(
+        coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir, coin2=coin2
+    )
 
     print(f"執行完成，耗時 {result.elapsed_seconds:.2f} 秒（degraded_mode={result.degraded_mode}）")
     print(f"證據筆數：{len(result.evidences)}")

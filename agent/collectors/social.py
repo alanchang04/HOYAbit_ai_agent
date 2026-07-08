@@ -35,6 +35,7 @@ class SocialCollector(BaseCollector):
                         p = post["data"]
                         evidences.append(
                             EvidenceDraft(
+                                coin=coin,
                                 source=f"Reddit r/{subreddit}",
                                 source_url=f"https://www.reddit.com{p.get('permalink', '')}",
                                 fetched_at=now_iso(),

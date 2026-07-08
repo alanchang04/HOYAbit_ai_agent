@@ -18,6 +18,11 @@ QUESTION_TYPE_FRAMING: dict[QuestionType, str] = {
     "hypothesis_test": "本題屬於「假設驗證」題型：請針對題目中的陳述，明確蒐集支持與反對的證據，並給出最終判斷與理由。",
     "comparison": "本題屬於「比較分析」題型：若證據僅涵蓋單一幣種，請在限制中明確指出比較對象的資料不足，避免憑空比較。",
 }
+# comparison 題型且已知第二幣種時，覆寫上面的通用 framing，改用具體幣種名稱
+COMPARISON_FRAMING_WITH_COIN2 = (
+    "本題屬於「比較分析」題型：請比較 {coin} 與 {coin2} 在流動性、市場關注度、風險敞口上的差異，"
+    "並說明在什麼條件下各自更值得優先關注。"
+)
 
 BULL_FRAMING: dict[QuestionType, str] = {
     "multi_source": "你要建構「市場狀態比表面看起來更正面/更有支撐」的論證。",
@@ -29,6 +34,27 @@ BEAR_FRAMING: dict[QuestionType, str] = {
     "hypothesis_test": "你要建構「題目中的陳述為假或站不住腳」的論證。",
     "comparison": "你要建構「當前市場位置對本幣種相對不利/風險較高」的論證。",
 }
+# comparison 題型且已知第二幣種時，覆寫成「正方挺 coin、反方挺 coin2」的具體對抗框架
+BULL_FRAMING_COMPARISON_WITH_COIN2 = "你要建構「{coin} 相對於 {coin2} 更值得優先關注」的論證。"
+BEAR_FRAMING_COMPARISON_WITH_COIN2 = "你要建構「{coin2} 相對於 {coin} 更值得優先關注」的論證（也就是反對正方對 {coin} 的偏好）。"
+
+
+def _resolve_framing(question_type: QuestionType, coin: str, coin2: str | None) -> str:
+    if question_type == "comparison" and coin2:
+        return COMPARISON_FRAMING_WITH_COIN2.format(coin=coin, coin2=coin2)
+    return QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])
+
+
+def _resolve_bull_framing(question_type: QuestionType, coin: str, coin2: str | None) -> str:
+    if question_type == "comparison" and coin2:
+        return BULL_FRAMING_COMPARISON_WITH_COIN2.format(coin=coin, coin2=coin2)
+    return BULL_FRAMING.get(question_type, BULL_FRAMING["multi_source"])
+
+
+def _resolve_bear_framing(question_type: QuestionType, coin: str, coin2: str | None) -> str:
+    if question_type == "comparison" and coin2:
+        return BEAR_FRAMING_COMPARISON_WITH_COIN2.format(coin=coin, coin2=coin2)
+    return BEAR_FRAMING.get(question_type, BEAR_FRAMING["multi_source"])
 
 
 def classify_question_type(question: str) -> QuestionType:
@@ -59,34 +85,50 @@ def _format_evidence_list(evidences: list[Evidence]) -> str:
     lines = []
     for e in evidences:
         lines.append(
-            f"- id={e.id} | type={e.source_type.value} | source={e.source} | "
+            f"- id={e.id} | coin={e.coin} | type={e.source_type.value} | source={e.source} | "
             f"fetched_at={e.fetched_at} | content={e.content_reference}"
         )
     return "\n".join(lines) if lines else "（本次無可用證據）"
 
 
-def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence]) -> str:
+def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coin2: str | None = None) -> str:
+    coin_note = (
+        f"本題涉及兩個幣種：{coin} 與 {coin2}。每筆證據都已標註 coin 欄位，"
+        f"請在每個 fact 中一併填入該事實所屬的幣種（coin 欄位），若證據同時適用兩者可自行判斷歸類。"
+        if coin2
+        else ""
+    )
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
+{coin_note}
 
-以下是本次蒐集到的所有證據（含 evidence id）：
+以下是本次蒐集到的所有證據（含 evidence id 與 coin 欄位）：
 {_format_evidence_list(evidences)}
 
-請執行【事實層】分析：將上述證據依 source_type 分組，各自摘要成客觀事實陳述（不做推論、不下判斷）。
+請執行【事實層】分析：將上述證據依 source_type（{'與 coin ' if coin2 else ''}）分組，各自摘要成客觀事實陳述（不做推論、不下判斷）。
 
 請只輸出以下 JSON 格式：
 {{
   "facts": [
-    {{"source_type": "price", "summary": "客觀事實摘要", "evidence_ids": ["ev-001", "ev-002"]}},
+    {{"source_type": "price", "coin": "{coin}", "summary": "客觀事實摘要", "evidence_ids": ["ev-001", "ev-002"]}},
     ...
   ]
 }}
 """
 
 
-def build_step_b_prompt(coin: str, question: str, evidences: list[Evidence], facts: list[dict]) -> str:
+def build_step_b_prompt(
+    coin: str, question: str, evidences: list[Evidence], facts: list[dict], coin2: str | None = None
+) -> str:
+    cross_coin_note = (
+        f"本題涉及兩個幣種（{coin} 與 {coin2}），除了各幣種內部的一致/矛盾訊號，"
+        f"也請特別留意「跨幣種」的對比訊號（例如哪個幣種的鏈上活躍度相對更高、哪個情緒面更負面）。"
+        if coin2
+        else ""
+    )
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
+{cross_coin_note}
 
 事實層摘要如下：
 {json.dumps(facts, ensure_ascii=False, indent=2)}
@@ -107,12 +149,17 @@ def build_step_b_prompt(coin: str, question: str, evidences: list[Evidence], fac
 
 
 def build_step_c_prompt(
-    coin: str, question: str, question_type: QuestionType, facts: list[dict], cross_validation: dict
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    facts: list[dict],
+    cross_validation: dict,
+    coin2: str | None = None,
 ) -> str:
     """單模型推論層 prompt（正反方辯論失敗時的 fallback，不分角色，一次產出多個假設）。"""
-    framing = QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])
+    framing = _resolve_framing(question_type, coin, coin2)
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
 {framing}
 
 事實層：
@@ -135,12 +182,17 @@ def build_step_c_prompt(
 
 
 def build_step_c1_bull_prompt(
-    coin: str, question: str, question_type: QuestionType, facts: list[dict], cross_validation: dict
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    facts: list[dict],
+    cross_validation: dict,
+    coin2: str | None = None,
 ) -> str:
     """推論層 Step C1：正方分析師，只准建構最有利的論證。"""
-    framing = BULL_FRAMING.get(question_type, BULL_FRAMING["multi_source"])
+    framing = _resolve_bull_framing(question_type, coin, coin2)
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
 
 你現在的角色是【正方分析師】。{framing}
 
@@ -170,11 +222,12 @@ def build_step_c2_bear_prompt(
     facts: list[dict],
     cross_validation: dict,
     bull_argument: str,
+    coin2: str | None = None,
 ) -> str:
     """推論層 Step C2：反方分析師，可看到正方論證，任務是批評它並建構反向論證。"""
-    framing = BEAR_FRAMING.get(question_type, BEAR_FRAMING["multi_source"])
+    framing = _resolve_bear_framing(question_type, coin, coin2)
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
 
 事實層：
 {json.dumps(facts, ensure_ascii=False, indent=2)}
@@ -210,10 +263,11 @@ def build_step_d_prompt(
     facts: list[dict],
     cross_validation: dict,
     inference: list[dict],
+    coin2: str | None = None,
 ) -> str:
-    framing = QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])
+    framing = _resolve_framing(question_type, coin, coin2)
     return f"""題目：{question}
-幣種：{coin}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
 {framing}
 
 事實層：

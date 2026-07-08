@@ -49,6 +49,7 @@ class NewsCollector(BaseCollector):
                             continue
                         evidences.append(
                             EvidenceDraft(
+                                coin=coin,
                                 source=f"{feed_name} RSS",
                                 source_url=entry.get("link", feed_url),
                                 fetched_at=now_iso(),
@@ -78,6 +79,7 @@ class NewsCollector(BaseCollector):
                     for post in results:
                         evidences.append(
                             EvidenceDraft(
+                                coin=coin,
                                 source="CryptoPanic（付費/補充來源，已揭露）",
                                 source_url=post.get("url"),
                                 fetched_at=now_iso(),
