@@ -110,3 +110,33 @@ def test_dry_run_comparison_mentions_both_coins():
 
     assert result.coin2 == "ETH"
     assert "ETH" in result.conclusion["market_judgment"]
+
+
+@pytest.mark.parametrize("coin", ["BTC", "ETH", "SOL", "BNB", "XRP"])
+def test_debate_happy_path_works_for_every_supported_coin(coin):
+    """離線驗證五個幣種都能跑完整個推理鏈，不需要消耗真實 LLM 額度。"""
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',
+        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+    evidences = [
+        Evidence(
+            id="ev-001",
+            coin=coin,
+            source="test-source",
+            fetched_at=now_iso(),
+            content_reference="ref",
+            related_claim="claim",
+            source_type="price",
+        )
+    ]
+
+    result = run_reasoning(coin, f"分析 {coin} 市場狀態", evidences, dry_run=False, llm_client=client)
+
+    assert result.conclusion["market_judgment"] == "mj"
+    assert result.debate["bull_argument"] == "bull arg"
+    assert client.call_count == 5
