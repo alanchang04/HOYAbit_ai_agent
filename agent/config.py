@@ -12,6 +12,11 @@ load_dotenv()
 
 @dataclass
 class Settings:
+    # --- LLM backend 切換 ---
+    # "bedrock" 為競賽正式規定唯一合法後端；"gemini" 僅供開發階段（尚未拿到 Bedrock
+    # 存取權限時）快速迭代 prompt 用，正式執行/繳交前必須切回 "bedrock"。
+    llm_backend: str = field(default_factory=lambda: os.getenv("LLM_BACKEND", "bedrock"))
+
     # --- Bedrock ---
     aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     bedrock_model_id: str = field(
@@ -19,6 +24,10 @@ class Settings:
             "BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0"
         )
     )
+
+    # --- Gemini（僅供開發階段暫代 Bedrock 使用，正式比賽不得使用）---
+    gemini_api_key: str | None = field(default_factory=lambda: os.getenv("GEMINI_API_KEY"))
+    gemini_model_id: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash"))
 
     # --- 選用 API keys（缺少時該 collector 會退回免 key 端點或標記 skipped）---
     cryptopanic_api_key: str | None = field(default_factory=lambda: os.getenv("CRYPTOPANIC_API_KEY"))

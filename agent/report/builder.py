@@ -105,7 +105,11 @@ def build_report_markdown(
 
     lines.append("## 5. 後續觀察重點")
     lines.append("")
-    lines.append("- （待補：依題型與市場狀況列出後續應追蹤的指標或事件）")
+    if result.follow_up_watchpoints:
+        for point in result.follow_up_watchpoints:
+            lines.append(f"- {point}")
+    else:
+        lines.append("- （本次推理未產出具體後續觀察重點）")
     lines.append("")
 
     lines.append("---")

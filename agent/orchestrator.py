@@ -21,8 +21,9 @@ from agent.collectors.price import PriceCollector
 from agent.collectors.social import SocialCollector
 from agent.config import Settings, check_optional_keys, get_settings
 from agent.logging_utils import ExecutionLogger
-from agent.reasoning.bedrock_client import BedrockClient
-from agent.reasoning.pipeline import ReasoningResult, run_reasoning
+from agent.reasoning.llm_client import build_llm_client
+from agent.reasoning.pipeline import ReasoningResult, ReasoningStepError, run_reasoning
+from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
 from agent.schemas import Evidence, EvidenceDraft, LogPhase, LogStatus
 
@@ -128,8 +129,41 @@ def run_pipeline(
         status=LogStatus.OK,
     )
 
-    bedrock_client = None if dry_run else BedrockClient(settings)
-    reasoning_result = run_reasoning(coin, question, evidences, dry_run=dry_run, bedrock_client=bedrock_client)
+    def log_step(step: str, status: str, detail: str = "") -> None:
+        logger.log(phase=LogPhase.REASON, action=step, detail=detail, status=LogStatus(status))
+
+    if dry_run:
+        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True)
+    else:
+        llm_client = build_llm_client(settings)
+        logger.log(
+            phase=LogPhase.REASON,
+            action="llm_backend",
+            detail=f"backend={settings.llm_backend}",
+            status=LogStatus.OK,
+        )
+        try:
+            reasoning_result = run_reasoning(
+                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step
+            )
+        except ReasoningStepError as exc:
+            # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
+            # 讓 report.md / evidence.json / execution_log.jsonl 仍能完整產出。
+            logger.log(phase=LogPhase.REASON, action="reasoning_failed", detail=str(exc), status=LogStatus.ERROR)
+            reasoning_result = ReasoningResult(
+                question_type=classify_question_type(question),
+                facts=[],
+                cross_validation={},
+                inference=[],
+                conclusion={
+                    "market_judgment": "本次執行因推理鏈呼叫失敗，無法產出正式市場判斷，請參考 execution_log.jsonl 排查原因。",
+                    "confidence": "低",
+                    "limitations": [f"推理鏈執行失敗: {exc}"],
+                    "invalidation_conditions": ["修復推理鏈問題後重新執行"],
+                    "evidence_ids": [],
+                },
+            )
+
     logger.log(
         phase=LogPhase.REASON,
         action="reasoning_complete",

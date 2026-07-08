@@ -1,16 +1,26 @@
 """四步推理鏈組裝：事實層 → 交叉驗證層 → 推論層 → 結論層。
 
-Stage 1：`dry_run=True` 時回傳依實際 evidence 組成的假推理結果，
+`dry_run=True` 時回傳依實際 evidence 組成的假推理結果（不呼叫任何 LLM），
 用於驗證整體 pipeline 與 report-evidence 對應檢查。
-Stage 3：`dry_run=False` 時將接上 Bedrock 呼叫，依 prompts.py 的
-四步驟分別呼叫並解析回應（目前為骨架，尚未實作）。
+`dry_run=False` 時依序呼叫 llm_client 完成四步推理，並在每一步後
+過濾掉模型可能捏造、不存在於 evidence 清單中的 evidence id（防止幻覺
+引用讓 Phase 4 的報告檢查失敗、拖垮整個流程）。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from agent.reasoning.prompts import classify_question_type
+from agent.reasoning.llm_client import LLMClient
+from agent.reasoning.prompts import (
+    SYSTEM_PROMPT,
+    build_step_a_prompt,
+    build_step_b_prompt,
+    build_step_c_prompt,
+    build_step_d_prompt,
+    classify_question_type,
+    extract_json,
+)
 from agent.schemas import Evidence, QuestionType
 
 
@@ -21,6 +31,11 @@ class ReasoningResult:
     cross_validation: dict = field(default_factory=dict)
     inference: list[dict] = field(default_factory=list)
     conclusion: dict = field(default_factory=dict)
+    follow_up_watchpoints: list[str] = field(default_factory=list)
+
+
+class ReasoningStepError(RuntimeError):
+    """某一步驟呼叫 LLM 或解析回應失敗時拋出，由呼叫端決定如何降級處理。"""
 
 
 def _dry_run_reasoning(coin: str, question: str, question_type: QuestionType, evidences: list[Evidence]) -> ReasoningResult:
@@ -59,6 +74,150 @@ def _dry_run_reasoning(coin: str, question: str, question_type: QuestionType, ev
             "invalidation_conditions": ["正式執行並取得真實資料後，本假結論應被取代"],
             "evidence_ids": all_ids,
         },
+        follow_up_watchpoints=["（dry-run 假資料）此為流程驗證用，非真實觀察重點"],
+    )
+
+
+def _call_json_step(llm_client: LLMClient, user_prompt: str, step_name: str) -> dict:
+    """呼叫 LLM 並解析 JSON，若第一次解析失敗，重試一次並明確要求修正格式。
+
+    無論是 LLM 呼叫本身失敗（網路、配額、認證等）或回應無法解析為 JSON，
+    一律轉成 ReasoningStepError，讓上層 orchestrator 可以統一捕捉、
+    退化為誠實揭露失敗原因的報告，而不是讓整個 process 直接崩潰。
+    """
+    try:
+        raw = llm_client.converse(SYSTEM_PROMPT, user_prompt)
+    except Exception as exc:  # noqa: BLE001
+        raise ReasoningStepError(f"{step_name} 呼叫 LLM 失敗: {exc}") from exc
+
+    try:
+        return extract_json(raw)
+    except Exception:  # noqa: BLE001
+        retry_prompt = (
+            f"{user_prompt}\n\n"
+            f"你上一次的回應無法被解析為合法 JSON（原始回應：{raw[:500]!r}）。"
+            f"請只輸出合法 JSON，不要有任何其他文字或 code fence。"
+        )
+        try:
+            raw_retry = llm_client.converse(SYSTEM_PROMPT, retry_prompt)
+        except Exception as exc:  # noqa: BLE001
+            raise ReasoningStepError(f"{step_name} 重試呼叫 LLM 失敗: {exc}") from exc
+        try:
+            return extract_json(raw_retry)
+        except Exception as exc:  # noqa: BLE001
+            raise ReasoningStepError(f"{step_name} 兩次皆無法解析為合法 JSON: {exc}") from exc
+
+
+def _sanitize_ids(ids: list, known_ids: set[str]) -> list[str]:
+    """過濾掉不存在於 evidence 清單中的 id，避免模型幻覺引用讓後續報告檢查崩潰。"""
+    if not isinstance(ids, list):
+        return []
+    return [i for i in ids if isinstance(i, str) and i in known_ids]
+
+
+def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
+    sanitized = []
+    if not isinstance(facts, list):
+        return sanitized
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+        sanitized.append(
+            {
+                "source_type": fact.get("source_type", ""),
+                "summary": fact.get("summary", ""),
+                "evidence_ids": _sanitize_ids(fact.get("evidence_ids", []), known_ids),
+            }
+        )
+    return sanitized
+
+
+def _sanitize_inference(inference: list, known_ids: set[str]) -> list[dict]:
+    sanitized = []
+    if not isinstance(inference, list):
+        return sanitized
+    for inf in inference:
+        if not isinstance(inf, dict):
+            continue
+        sanitized.append(
+            {
+                "hypothesis": inf.get("hypothesis", ""),
+                "supporting_evidence_ids": _sanitize_ids(inf.get("supporting_evidence_ids", []), known_ids),
+                "opposing_evidence_ids": _sanitize_ids(inf.get("opposing_evidence_ids", []), known_ids),
+            }
+        )
+    return sanitized
+
+
+def _real_reasoning(
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    evidences: list[Evidence],
+    llm_client: LLMClient,
+    log_step=None,
+) -> ReasoningResult:
+    known_ids = {e.id for e in evidences}
+
+    def _log(step: str, status: str, detail: str = "") -> None:
+        if log_step:
+            log_step(step, status, detail)
+
+    # Step A：事實層
+    step_a_raw = _call_json_step(llm_client, build_step_a_prompt(coin, question, evidences), "step_a_facts")
+    facts = _sanitize_facts(step_a_raw.get("facts", []), known_ids)
+    _log("step_a_facts", "ok", f"facts_count={len(facts)}")
+
+    # Step B：交叉驗證層
+    step_b_raw = _call_json_step(
+        llm_client, build_step_b_prompt(coin, question, evidences, facts), "step_b_cross_validation"
+    )
+    cross_validation = {
+        "consistent_signals": step_b_raw.get("consistent_signals", []) if isinstance(step_b_raw.get("consistent_signals"), list) else [],
+        "contradictions": step_b_raw.get("contradictions", []) if isinstance(step_b_raw.get("contradictions"), list) else [],
+    }
+    _log(
+        "step_b_cross_validation",
+        "ok",
+        f"consistent={len(cross_validation['consistent_signals'])}, contradictions={len(cross_validation['contradictions'])}",
+    )
+
+    # Step C：推論層
+    step_c_raw = _call_json_step(
+        llm_client, build_step_c_prompt(coin, question, question_type, facts, cross_validation), "step_c_inference"
+    )
+    inference = _sanitize_inference(step_c_raw.get("inference", []), known_ids)
+    _log("step_c_inference", "ok", f"hypotheses_count={len(inference)}")
+
+    # Step D：結論層
+    step_d_raw = _call_json_step(
+        llm_client,
+        build_step_d_prompt(coin, question, question_type, facts, cross_validation, inference),
+        "step_d_conclusion",
+    )
+    conclusion = {
+        "market_judgment": step_d_raw.get("market_judgment", ""),
+        "confidence": step_d_raw.get("confidence", "低"),
+        "limitations": step_d_raw.get("limitations", []) if isinstance(step_d_raw.get("limitations"), list) else [],
+        "invalidation_conditions": step_d_raw.get("invalidation_conditions", [])
+        if isinstance(step_d_raw.get("invalidation_conditions"), list)
+        else [],
+        "evidence_ids": _sanitize_ids(step_d_raw.get("evidence_ids", []), known_ids),
+    }
+    follow_up_watchpoints = (
+        [w for w in step_d_raw.get("follow_up_watchpoints", []) if isinstance(w, str)]
+        if isinstance(step_d_raw.get("follow_up_watchpoints"), list)
+        else []
+    )
+    _log("step_d_conclusion", "ok", f"confidence={conclusion['confidence']}")
+
+    return ReasoningResult(
+        question_type=question_type,
+        facts=facts,
+        cross_validation=cross_validation,
+        inference=inference,
+        conclusion=conclusion,
+        follow_up_watchpoints=follow_up_watchpoints,
     )
 
 
@@ -67,18 +226,15 @@ def run_reasoning(
     question: str,
     evidences: list[Evidence],
     dry_run: bool = True,
-    bedrock_client=None,
+    llm_client: LLMClient | None = None,
+    log_step=None,
 ) -> ReasoningResult:
     question_type = classify_question_type(question)
 
     if dry_run:
         return _dry_run_reasoning(coin, question, question_type, evidences)
 
-    if bedrock_client is None:
-        raise RuntimeError(
-            "非 dry-run 模式需要傳入 bedrock_client。真實四步推理鏈將於 Stage 3 實作。"
-        )
+    if llm_client is None:
+        raise RuntimeError("非 dry-run 模式需要傳入 llm_client。")
 
-    raise NotImplementedError(
-        "真實 Bedrock 推理鏈尚未實作，將於 Stage 3 完成（事實/交叉驗證/推論/結論四步呼叫）。"
-    )
+    return _real_reasoning(coin, question, question_type, evidences, llm_client, log_step=log_step)

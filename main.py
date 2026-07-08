@@ -14,6 +14,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+from agent.config import get_settings
 from agent.orchestrator import run_pipeline
 
 SUPPORTED_COINS = {"BTC", "ETH", "SOL", "BNB", "XRP"}
@@ -41,12 +42,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if not args.dry_run:
-        print(
-            "[ERROR] 真實資料蒐集（Stage 2）已完成，但 Bedrock 四步推理鏈（Stage 3）尚未實作，"
-            "目前仍僅支援 --dry-run。若想單獨驗證真實 collector，請用 scripts/test_collectors.py。",
-            file=sys.stderr,
-        )
-        return 1
+        settings = get_settings()
+        if settings.llm_backend.lower() != "bedrock":
+            print(
+                "=" * 70 + "\n"
+                f"[警告] 目前 LLM_BACKEND={settings.llm_backend}，並非競賽規定的 Bedrock。\n"
+                "此後端僅供開發階段暫代使用，正式執行/繳交前必須在 .env 把\n"
+                "LLM_BACKEND 改回 bedrock，否則會違反「LLM 推理僅能使用 Bedrock」的硬性規定。\n"
+                + "=" * 70,
+                file=sys.stderr,
+            )
 
     result = run_pipeline(coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir)
 
