@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.pytest_cache/
+output/
+tests/
+.env
+.env.example
+*.md
+!README.md
+(HOYA BIT)*

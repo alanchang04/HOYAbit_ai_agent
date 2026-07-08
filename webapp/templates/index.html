@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>加密市場分析 AI Agent</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>HOYA BIT 加密市場分析 AI Agent</h1>
+    <p class="subtitle">多源資訊信任提煉：輸入幣種與題目，產出具備分層推理與可回溯證據的市場分析報告。</p>
+
+    <form method="post" action="/analyze">
+      <label>
+        幣種
+        <select name="coin" required>
+          {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+
+      <label>
+        題目全文
+        <textarea name="question" rows="4" required placeholder="例如：分析 BTC 過去兩週的市場表現，整合價格走勢、鏈上活躍度、主要新聞事件與社群討論熱度，給出整體市場狀態判斷。"></textarea>
+      </label>
+
+      <label>
+        第二幣種（比較分析題型可選，留空則自動從題目文字偵測）
+        <select name="coin2">
+          <option value="">（無）</option>
+          {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+
+      <label class="checkbox-row">
+        <input type="checkbox" name="dry_run" value="true">
+        Dry-run（不打真實 API/LLM，僅供流程排練）
+      </label>
+
+      <button type="submit">開始分析</button>
+    </form>
+
+    <p class="note">
+      正式執行需時約數十秒至數分鐘（視 collector 與 LLM 回應速度而定），執行期間請勿關閉分頁。
+    </p>
+  </div>
+</body>
+</html>

@@ -3,8 +3,9 @@
 多源資訊信任提煉系統：針對指定幣種與題目，在時限內蒐集價格／鏈上／新聞／社群／總經資料，
 產出具備分層推理（事實 → 交叉驗證 → 推論 → 結論）與可回溯證據的市場分析報告。
 
-> **目前進度：Stage 1-3 完成**（骨架、五類真實 collector、四步推理鏈含正反方辯論）。
-> Bedrock 尚待帳號開通驗證，開發階段可先用 `LLM_BACKEND=gemini`（見下方 LLM backend 說明）。
+> **目前進度：Stage 1-6 骨幹完成**（五類真實 collector、含正反方辯論的四步推理鏈、整合測試、
+> Web UI、Docker）。Bedrock 尚待帳號開通驗證，開發階段可先用 `LLM_BACKEND=gemini`（見下方 LLM backend 說明），
+> 正式執行/繳交前務必切回 `LLM_BACKEND=bedrock`。
 
 ## 安裝
 
@@ -48,6 +49,32 @@ cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 
 ```bash
 .venv/Scripts/python.exe -m pytest -q
+```
+
+## Web UI（本機）
+
+與 CLI 共用同一個 `agent/orchestrator.py` 的 `run_pipeline()`，不是兩套邏輯。
+
+```bash
+.venv/Scripts/python.exe -m uvicorn webapp.app:app --host 0.0.0.0 --port 8000
+```
+
+開啟 http://localhost:8000 ，填入幣種／題目（比較分析可留空第二幣種讓系統自動偵測）、
+可勾選 dry-run。執行完成後頁面會顯示完整 `report.md` 內容，並提供三個檔案的下載連結。
+`GET /healthz` 供健康檢查用（App Runner 部署會用到）。
+
+## Docker
+
+```bash
+docker build -t hoyabit-agent .
+docker run --rm -p 8000:8000 --env-file .env hoyabit-agent
+```
+
+開啟 http://localhost:8000 即可使用，行為與本機執行 Web UI 完全相同。CLI 也可以在容器內執行：
+
+```bash
+docker run --rm --env-file .env hoyabit-agent \
+  python main.py --coin BTC --question "..." --dry-run
 ```
 
 ## 驗證真實 collector（Stage 2，不經過推理/報告）
@@ -148,7 +175,10 @@ agent/
     pipeline.py               # 四步推理鏈組裝（含辯論與 fallback）
   report/                 # report.md 組裝與 evidence 對應檢查
   fixtures/               # --dry-run 用假資料
-webapp/                   # 簡易 Web UI（Stage 6）
+webapp/
+  app.py                    # FastAPI：與 CLI 共用 run_pipeline()
+  templates/                # index.html（表單）、result.html（報告顯示）
+  static/style.css
 data/                      # 主辦方提供之 5 幣種 Daily OHLCV 共同基準資料
 scripts/
   test_collectors.py       # 獨立驗證腳本：單獨執行五類真實 collector
@@ -156,6 +186,7 @@ scripts/
 tests/                     # pytest：schema、collector 失敗隔離、report-evidence 對應、
                             # OHLCV/技術指標邏輯、推理鏈辯論與 fallback、comparison 雙幣種
 main.py                    # CLI 進入點（--coin / --coin2 / --question / --dry-run）
+Dockerfile / .dockerignore  # Web UI 與 CLI 共用同一個 image
 ```
 
 ## 硬性限制
@@ -165,4 +196,43 @@ main.py                    # CLI 進入點（--coin / --coin2 / --question / --d
 - 每個 collector 皆有獨立 timeout 與例外隔離，單一來源失敗不影響全流程（見 `agent/collectors/base.py`）。
 - 推理鏈任一步驟（含辯論）失敗都會被捕捉並退化為誠實揭露失敗原因的報告，不會讓整個流程崩潰。
 
-後續階段（AWS 架構圖、App Runner 部署說明）將於 Stage 6 補上。
+## AWS 部署（App Runner）
+
+```
+使用者瀏覽器 ──HTTPS──▶ App Runner（跑 Dockerfile 這個 image，含 Web UI）
+                              │
+                              ├──InvokeModel──▶ Bedrock（同 region，走 App Runner instance role）
+                              └──HTTPS──▶ CoinGecko / Blockchair / RSS / Reddit / Fear&Greed / Frankfurter 等公開 API
+                              
+ECR（存放 image） ◀──docker push── 本機/CI build
+```
+
+選 App Runner 而非 EC2：不用管理 VM、免自架反向代理與憑證，`docker push` 後幾分鐘就有公開 HTTPS 網址，符合比賽時間有限的情境。
+
+### 部署步驟
+
+```bash
+# 1. 設定 AWS CLI（需要 IAM user/role 有 ecr:*、apprunner:* 權限）
+aws configure
+
+# 2. 建立 ECR repository（僅需一次）
+aws ecr create-repository --repository-name hoyabit-agent --region us-east-1
+
+# 3. 登入 ECR、build、tag、push
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+docker build -t hoyabit-agent .
+docker tag hoyabit-agent:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hoyabit-agent:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hoyabit-agent:latest
+
+# 4. 建立 App Runner service（Console 操作較直覺：
+#    App Runner → Create service → Container registry → 選剛 push 的 image
+#    → Port 設 8000 → Health check path 設 /healthz）
+```
+
+**環境變數**：在 App Runner service 的環境變數設定裡填 `LLM_BACKEND=bedrock`、`AWS_REGION`、`BEDROCK_MODEL_ID` 等（對照 `.env.example`）。**不要**把 AWS access key 寫進環境變數——改用 App Runner 的 **instance role**，掛一個只有 `bedrock:InvokeModel` 權限的 IAM role，SDK（boto3）會自動用該 role 認證，比賽現場也不用管理任何金鑰外洩風險。
+
+### 實際部署
+
+以上是本機已驗證過的 build/run 流程（Docker image 確認可正常建置與執行，見上方「Docker」章節），但**尚未實際部署到 AWS**——這需要你的 AWS 帳號與 CLI 存取設定好之後才能執行 `aws ecr` / `aws apprunner` 指令。
