@@ -69,6 +69,40 @@ def build_ma_block(coin: str, ma: dict) -> str:
     return f"[{coin}] " + "，".join(parts)
 
 
+def compute_ma_series(rows: list[dict]) -> list[dict]:
+    """算整段歷史（本資料集是 2021-06-01 ~ 2026-05-31，約 5 年）每一天的
+    MA20/60/120，不是只算最後一天的快照。前面天數不夠對應窗口的欄位留空字串。
+    """
+    closes = [float(r["close"]) for r in rows]
+    series = []
+    for i, row in enumerate(rows):
+        entry = {"date": row["date"], "close": closes[i]}
+        window_closes = closes[: i + 1]
+        for window in MA_WINDOWS:
+            if len(window_closes) >= window:
+                ma = sum(window_closes[-window:]) / window
+                entry[f"ma{window}"] = round(ma, 4)
+                entry[f"ma{window}_position"] = "站上" if closes[i] >= ma else "跌破"
+            else:
+                entry[f"ma{window}"] = ""
+                entry[f"ma{window}_position"] = ""
+        series.append(entry)
+    return series
+
+
+def write_series_output(coin: str, series: list[dict]) -> Path:
+    """Step 5：完整歷史序列（每天一筆 MA20/60/120）寫成 CSV，跟單日快照的
+    ma_20_60_120.json 分開放——快照給「現在站在哪」，序列給「整段走勢/回測用」。
+    """
+    fieldnames = ["date", "close", "ma20", "ma20_position", "ma60", "ma60_position", "ma120", "ma120_position"]
+    out_path = RAW_DATA_DIR / coin / "ma_20_60_120_series.csv"
+    with out_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(series)
+    return out_path
+
+
 def write_output(coin: str, rows: list[dict], ma: dict, ohlcv_block: str, ma_block: str) -> Path:
     """Step 4：算好的東西寫回 raw_data/price/{COIN}/ma_20_60_120.json，跟該幣的
     原始 CSV 放在同一個資料夾，之後每個幣種點進去就同時看得到原始資料跟算出來的指標。
@@ -100,7 +134,11 @@ def main() -> None:
         print(ohlcv_block)
         print(ma_block)
         out_path = write_output(coin, rows, ma, ohlcv_block, ma_block)
-        print(f"→ 已寫入 {out_path}")
+        print(f"→ 已寫入快照 {out_path}")
+
+        series = compute_ma_series(rows)
+        series_path = write_series_output(coin, series)
+        print(f"→ 已寫入完整歷史序列（{len(series)} 天）{series_path}")
         print()
 
 
