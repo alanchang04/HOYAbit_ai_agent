@@ -1,0 +1,8 @@
+{
+  "coin": "XRP",
+  "source": "CoinGecko /simple/price",
+  "price_usd": 1.1,
+  "change_24h_pct": 0.5922431470787437,
+  "volume_24h_usd": 855963979.1330632,
+  "fetched_at": "2026-07-20T11:47:31Z"
+}

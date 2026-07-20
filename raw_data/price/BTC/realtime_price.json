@@ -1,0 +1,8 @@
+{
+  "coin": "BTC",
+  "source": "CoinGecko /simple/price",
+  "price_usd": 64809,
+  "change_24h_pct": 0.5391748434827361,
+  "volume_24h_usd": 23703038775.842857,
+  "fetched_at": "2026-07-20T11:47:30Z"
+}

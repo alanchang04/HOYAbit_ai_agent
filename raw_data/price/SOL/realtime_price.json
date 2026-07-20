@@ -1,0 +1,8 @@
+{
+  "coin": "SOL",
+  "source": "CoinGecko /simple/price",
+  "price_usd": 76.99,
+  "change_24h_pct": 1.1226687618577842,
+  "volume_24h_usd": 1557315113.2355974,
+  "fetched_at": "2026-07-20T11:47:31Z"
+}

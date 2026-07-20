@@ -1,0 +1,8 @@
+{
+  "coin": "BNB",
+  "source": "CoinGecko /simple/price",
+  "price_usd": 570.45,
+  "change_24h_pct": 0.49809423977763756,
+  "volume_24h_usd": 463672245.4705799,
+  "fetched_at": "2026-07-20T11:47:31Z"
+}
