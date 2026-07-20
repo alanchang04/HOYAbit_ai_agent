@@ -1,8 +1,24 @@
-# Requirements — 全專案升級：信任提煉流水線與 Execution Logs 可視化
+# Requirements Document
 
+> 全專案升級：信任提煉流水線與 Execution Logs 可視化
 > Kiro spec：`trust-refinement-upgrade`
 > 本規格取代 `UPGRADE_SPEC_execution_logs.md`（v2）成為可執行版本；v2 保留作背景參考。
 > 完整審計依據見 `AUDIT.md`（2026-07-18，逐檔原始碼盤點）。
+
+## Glossary
+
+| 詞彙 | 定義 |
+|---|---|
+| L1–L5 | 信任提煉流水線的五層：L1 信源層／L2 內容層／L3 事實提取層／L4 交叉驗證層／L5 結論層（見 R4） |
+| `source_weight` | 單筆證據的信任權重（0–1），現行為靜態規則表（`agent/filters/source_weights.py`），待依 Ken 的四因子公式改版（見「架構決策記錄」） |
+| `FilterDecision` | L2 過濾判定紀錄（kept/downweighted/removed 三態＋理由），schema 見 R3-3 |
+| `RunMetrics` | 單次執行的整體品質指標（信心／雜訊剔除率／token 數／完整性狀態），schema 見 R3-3 |
+| `noise_removal_rate` | L3 事實提取層的剔除率 = removed / input |
+| `report_view.json` | 四面板前端的資料契約，由 `view_builder.py` 組裝（見 R5） |
+| 四面板 | 原始證據流／未過濾基準對照／信任提煉流水線／分析報告（見 R7） |
+| Baseline（基準對照組） | 未做信任提煉、全量證據直接餵 LLM 的對照輸出，用於凸顯提煉的價值（見 R7-2） |
+| `INTACT` / `DEGRADED` | `RunMetrics.integrity_status` 的兩種狀態，語意為「分析完整性」，**非投資訊號**（見 R9-1） |
+| Ken 的加權投票架構 | 隊友 Ken 在 `07_流程圖迭代定案.md` 提出的替代設計（Signal→票權 w→敏感度分析→查表信心）；資料層已採用，LLM 層（結論由投票算出、LLM 只敘事）已否決，見下方「架構決策記錄」與 `team-division.md` |
 
 ## Introduction
 
@@ -10,6 +26,19 @@
 只是扁平的工具呼叫紀錄，無法展示「資料如何被信任提煉」。本升級把 log 升級為分層事件流、
 新增可視化四面板，並一併修復兩個已知 bug、補上比較題型的量化指標缺口、
 註記 Bedrock 切換（最後才測試）、建立 Kiro 使用證據（對應 +10% 加分）。
+
+## ⚠️ 架構決策記錄（2026-07-20，取代本檔案原有 R4-1/R4-2 的部分內容）
+
+隊友 Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」架構，與本規格
+原本的「LLM 四步辯論鏈直接產生結論」是兩種不同哲學。團隊已裁定：
+
+- **資料層（信源分級／去重／權重公式）：採用 Ken 的設計**，取代下方 R4-1（L1）、
+  R4-2（L2 模板相似度部分）目前的簡化版規則表。詳細差異與待實作項目見
+  `team-division.md`「架構分歧」章節與新增的 **R12**。R4-1/R4-2 條文暫時保留
+  作為「目前實作」的記錄，但視為待改版，不再是最終設計依據。
+- **LLM 層（結論如何產生）：不採用** Ken 的「Phase 4/5 加權投票算結論、LLM 只
+  敘事」模式。R4-5（L5 數值信心公式）與既有辯論鏈設計**維持不變、繼續有效**。
+  若要納入 Ken 的量化訊號，只能作為額外證據輸入，不得取代裁判角色。
 
 ## 現況盤點（逐檔驗證，2026-07-19）
 
@@ -55,7 +84,7 @@
 驗收條件：
 1. WHEN 比較題型執行 THE SYSTEM SHALL 從兩份本地 CSV 計算雙幣相對指標（90 日相關係數、beta、各自最大回撤、相對強弱比值之 90 日位置）並輸出為 price 類證據（零外部 API）
 2. WHEN macro collector 抓取 Fear & Greed THE SYSTEM SHALL 以 `limit=30` 取近 30 日資料，證據內容含當前值與 30 日百分位
-3. WHEN news collector 完成過濾 THE SYSTEM SHALL 額外輸出一筆量化證據：該幣種於各 RSS 來源的命中則數（市場關注度代理指標）
+3. WHEN news collector 完成過濾 THE SYSTEM SHALL 額外輸出一筆量化證據：該幣種於各 RSS 來源的命中則數（市場關注度代理指標）——**⚠️ 此條計數時機待改**：目前在 collector 內、去重前計數；依 R12（Ken 設計）應搬到去重之後
 4. WHEN 上述任一計算因資料不足失敗 THE SYSTEM SHALL 隔離失敗（記 log、跳過該證據），不中斷流程
 
 ### R3 Schema 與 execution log 分層擴充
@@ -71,9 +100,13 @@
 ### R4 信任提煉流水線 L1–L5
 **User Story**：作為評審，我希望看到資料經過哪幾層處理、每層剔除了什麼、為什麼。
 
+> ⚠️ **R4-1、R4-2a、R4-2b 已被 R12（Ken 的資料層設計）取代，內容保留僅供對照
+> 「目前實作 vs 目標設計」的差異，改版時請以 R12 為準。** R4-2c、R4-3～R4-7
+> 維持不變、繼續有效。
+
 驗收條件：
-1. **L1 信源層**：每筆證據 SHALL 依靜態權重表獲得 `source_weight`＋`weight_reason`（官方 CSV/本地指標/鏈上 RPC ≥0.7；新聞/總經 0.35–0.7；社群 <0.35），並 log 一筆彙總 metrics
-2. **L2 內容層（本方實作縮減版）**：
+1. **L1 信源層（現行，待改版）**：每筆證據 SHALL 依靜態權重表獲得 `source_weight`＋`weight_reason`（官方 CSV/本地指標/鏈上 RPC ≥0.7；新聞/總經 0.35–0.7；社群 <0.35），並 log 一筆彙總 metrics
+2. **L2 內容層（本方實作縮減版，a/b 待改版）**：
    a. PR 話術偵測 SHALL 以英文詞典比對（"skyrocket"、"to the moon"、"guaranteed"、"once-in-a-lifetime" 等），命中即產出 `FilterDecision(downweighted)` 並下調權重，reason 註明命中詞與權重變化
    b. 模板相似度 SHALL 以純本地演算法（token 集合相似度，閾值 0.8）偵測跨來源雷同內容，標記「非獨立來源」
    c. 情緒分布（F9） SHALL 僅定義介面與 view 欄位，實作歸同伴 RAG；缺席時面板顯示「未啟用」
@@ -132,3 +165,33 @@
 2. SHALL 建立 `.kiro/steering/`（product.md/tech.md/structure.md：專案脈絡、合規紅線、架構約束），使 Kiro 產出遵守專案規則
 3. SHALL 設定至少一個 agent hook（如：儲存 `agent/**/*.py` 時自動跑 pytest）
 4. 簡報素材 SHALL 含 Kiro 工作流截圖與「評估過 AgentCore 但因單次執行/15 分鐘場景選擇自刻 orchestrator」的取捨說明
+
+### R12 資料層改版：採用 Ken 的信任評分設計（取代 R4-1、R4-2a、R4-2b）
+**User Story**：作為評審，我希望信源分級與去重邏輯有明確、可審計的規則，且同一份灌水
+資料不會被重複計為多個獨立來源。
+
+> 背景：本條依 `07_流程圖迭代定案.md` 制定，設計權威為 Ken；本規格負責把它轉成
+> 可驗收條件，實作歸屬（Kevin／Alan／協作）待定，見 `team-division.md`。
+
+驗收條件：
+1. WHEN 證據進入 Phase 2（證據化） THE SYSTEM SHALL 先做標題相似度去重（本地字串級，不經
+   LLM），並算出 `raw_count`／`deduped_count`／`dedup_rate` 隨證據一併保存
+2. WHEN news collector 計算命中則數（R2-3） THE SYSTEM SHALL 使用去重後的數量，不得使用
+   去重前的原始筆數
+3. WHEN 系統為證據評分 THE SYSTEM SHALL 用四因子公式 `w = 新鮮度 × 來源等級 × 覆蓋度 ×
+   dedup_penalty` 取代現行 R4-1 的靜態單一權重表：
+   a. 來源等級 SHALL 查靜態信譽表（`static/source_reputation.json`，賽前定案＋一行分級理由，
+      印進報告附錄）
+   b. 覆蓋度 SHALL 定義為「去重後的獨立來源數」（非 collector 成功率，該量另稱「覆蓋率」，
+      用於 R4-5 信心公式，兩者 SHALL 在文件與程式中明確區分，不得混用）
+   c. `dedup_penalty` SHALL 獨立於覆蓋度計算，不得併入覆蓋度（理由：覆蓋度量來源多樣性，
+      dedup_penalty 量單一來源內部的灌水/聯播程度，兩者量測對象不同）
+   d. WHEN 去重前筆數 <5 THE `dedup_penalty` SHALL 固定為 1（不觸發降權），避免小樣本除零
+      或誤判
+4. WHEN 拉盤話術詞庫命中 THE SYSTEM SHALL 將該證據的來源等級降一級（取代現行 R4-2a 的
+   「權重 ×0.5」做法）；此判定與 dedup_penalty 降權 SHALL 允許同時疊加（兩者是獨立維度，
+   非重複扣分，需在文件註明避免被誤認為 bug）
+5. WHEN 上述任一計算失敗或所需靜態表缺失 THE SYSTEM SHALL 隔離失敗、退回 R4-1 現行規則表
+   作為 fallback，不得中斷整體流程
+6. 本條 SHALL NOT 變更 R4-5（L5 數值信心公式）與辯論鏈（`pipeline.py` Step A–D）的結論
+   產生邏輯——量化訊號僅能作為額外輸入，不得取代裁判角色（見「架構決策記錄」）

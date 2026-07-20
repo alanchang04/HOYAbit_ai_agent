@@ -1,9 +1,25 @@
-# Design — 全專案升級：信任提煉流水線與 Execution Logs 可視化
+# Design Document
 
+> 全專案升級：信任提煉流水線與 Execution Logs 可視化
 > 對應 `requirements.md`。實作語言與慣例沿用現有 codebase（Python 3.11、pydantic v2、
 > 標準庫優先、繁中註解、失敗隔離原則）。不引入新的重量級依賴。
+>
+> ⚠️ **2026-07-20 架構決策**：§3.1（L1 信源權重）與 §3.2（L2 內容層）的 PR/模板相似度
+> 部分已被隊友 Ken 的 `07_流程圖迭代定案.md` 設計取代，詳見新增的 §3.9。§3.1/§3.2
+> 保留作為「目前實作」記錄，改版時以 §3.9 為準。§3.3–§3.7（L3-L5 metrics、信心公式、
+> token usage、雙幣指標、macro 單次執行）與 §4 之後（baseline／view_builder／前端）
+> **不受影響、維持不變**——LLM 結論仍由辯論鏈產生，Ken 的「投票算結論」模式不採用。
 
-## 1. 架構總覽（插入點）
+## Overview
+
+本設計把現有「五類蒐集 → 四步推理 → report.md」流程升級為可視化的信任提煉流水線：
+在既有蒐集/推理階段前後插入 L1-L5 分層評分與過濾，並新增 `report_view.json` 供
+四面板前端消費。所有插入點皆為既有函式的前後掛鉤或新增獨立模組，不改動既有三個
+命題交付檔案（report.md／evidence.json／execution_log.jsonl）的格式與內容。
+
+## Architecture
+
+### 1. 架構總覽（插入點）
 
 ```
 run_pipeline()（orchestrator.py）
@@ -26,7 +42,9 @@ run_pipeline()（orchestrator.py）
 既有三個輸出檔案（report.md / evidence.json / execution_log.jsonl）格式與內容不變，
 只是 log 每行**多兩個選用欄位**（layer/metrics，舊行為不受影響）。
 
-## 2. 資料模型（schemas.py 新增）
+## Data Models
+
+### 2. 資料模型（schemas.py 新增）
 
 依 requirements R3 逐字實作：
 
@@ -62,6 +80,24 @@ class RunMetrics(BaseModel):
 
 `EvidenceDraft` 加四欄（全預設值）；`LogEntry` 加 `layer`/`metrics`（預設 None/{}）。
 向後相容驗證：既有 41 個測試零修改通過（R3-4 的驗收）。
+
+## Components and Interfaces
+
+| 元件 | 介面 | 說明 |
+|---|---|---|
+| `agent/filters/source_weights.py`（§3.1，待改版見 §3.9） | `apply_source_weights(evidences, logger) -> None`（原地補 `source_weight`/`weight_reason`） | L1 信源層 |
+| `agent/filters/content.py`（§3.2，待改版見 §3.9） | `apply_content_filters(evidences, logger) -> list[FilterDecision]` | L2 內容層 |
+| `agent/reasoning/pipeline.py`（不變） | `run_reasoning(...) -> ReasoningResult`；內部 Step A-D 補寫 L3-L5 metrics | 推理鏈＋辯論＋L3-L5 metrics |
+| `agent/reasoning/confidence.py`（不變） | 內嵌於 pipeline Step D 後，純函式輸出 `(score, breakdown)` | L5 數值信心公式 |
+| `agent/reasoning/baseline.py`（§4） | `run_baseline(question, evidences, llm_client) -> dict` | 未過濾對照組，同一 `LLMClient` |
+| `agent/collectors/relative.py`（§3.6） | `compute_relative_metrics(coin, coin2, data_dir) -> EvidenceDraft` | 雙幣相對指標，純本地 |
+| `agent/report/view_builder.py`（§6） | `build_report_view(out_dir, evidences, reasoning_result, run_metrics, filter_decisions, baseline_result, ...) -> dict \| None` | 組裝 `report_view.json`，失敗回傳 None 不拋例外 |
+| `webapp/templates/result.html` / `view.html`（§7） | 讀 `report_view.json` ＋ `execution_log.jsonl` 渲染 | 前端 MVP／完整四面板 |
+
+各元件之間透過 `Evidence`／`FilterDecision`／`RunMetrics`／`ReasoningResult` 這幾個
+共用 pydantic model 傳遞資料，彼此不直接呼叫對方內部函式（維持低耦合，方便個別替換，
+例如 §3.9 的 Ken 設計改版只需替換 `source_weights.py`/`content.py` 內部實作，不影響
+下游 pipeline／view_builder 的呼叫介面）。
 
 ## 3. 各層設計
 
@@ -146,6 +182,47 @@ ticker 大小寫敏感（`"ETH" in text`）＋全名別名小寫比對（`"ether
 `coin_map.py` 匯出 `_FULL_NAME_ALIASES`（改名 `FULL_NAME_ALIASES`）供共用，單一事實來源。
 回歸測試：含 "method"/"solution" 的標題不得命中 ETH/SOL；含 "Ethereum"/"SOL" 的正常命中。
 
+### 3.9 資料層目標設計：採用 Ken 的信任評分公式（R12，取代 3.1/3.2a/3.2b）
+
+> 設計權威為 Ken（`07_流程圖迭代定案.md`），本節只是把它轉寫成與本文件其他章節
+> 一致的格式，實作歸屬未定（見 `team-division.md`）。**本節只影響 L1/L2 的評分/去重
+> 邏輯，不影響 §3.3-3.8、§4 之後任何章節**——結論仍由辯論鏈產生（Property 6）。
+
+**Phase 2（證據化）新增去重步驟**：標題相似度去重（本地字串級，不經 LLM），
+與去重同步算出並隨證據傳遞：
+- `raw_count`：去重前筆數
+- `deduped_count`：去重後筆數
+- `dedup_rate = 1 − deduped_count／raw_count`
+
+**權重公式改為四因子**（取代 §3.1 現行單一權重表）：
+
+```
+w = 新鮮度 × 來源等級 × 覆蓋度 × dedup_penalty
+```
+
+| 因子 | 定義 | 來源 |
+|---|---|---|
+| 新鮮度 | 證據時效性（越新越高） | 沿用 `fetched_at` 計算 |
+| 來源等級 | 查靜態信譽表 | `static/source_reputation.json`（賽前定案＋一行分級理由，印進報告附錄） |
+| 覆蓋度 | 去重後的**獨立來源數**（來源多樣性） | Phase 2 去重結果 |
+| `dedup_penalty` | 灌水/聯播程度，**獨立於覆蓋度計算**（覆蓋度量多樣性，dedup_penalty 量單一敘事被灌水的程度，兩者量測對象不同，不可併入同一因子） | Phase 2 的 `dedup_rate`；去重前筆數 <5 時固定為 1（不觸發降權，避免除零/小樣本誤判） |
+
+**拉盤話術詞庫**（取代 §3.2 現行 PR_TERMS 的「權重 ×0.5」做法）：命中則**來源等級降一級**，
+與 `dedup_penalty` 降權是獨立維度、允許同時疊加（不是重複扣分，需在報告/文件註明避免
+被誤認為 bug）。
+
+**與現行 §3.1/§3.2 的差異總表**：
+
+| 項目 | 現行實作（§3.1/§3.2） | Ken 目標設計（本節） |
+|---|---|---|
+| 權重結構 | 單一 `source_weight`（規則表查一次） | 四因子相乘（新鮮度×來源等級×覆蓋度×dedup_penalty） |
+| 去重時機 | 無去重，命中則數在 collector 內、去重前計數（違反 R2-3 新版驗收條件） | Phase 2 先去重，命中則數用去重後數字 |
+| 模板相似度／PR 降權 | `content.py` 各自獨立乘一次係數 | 併入 `dedup_penalty`（相似度）＋來源等級降級（話術），可疊加 |
+| 覆蓋度 vs 覆蓋率 | 未定義覆蓋度 | 明確區分：覆蓋度＝去重後獨立來源數（L1/L2 用）；覆蓋率＝collector 成功執行比例（L5 信心公式用，見 §3.4，兩者不可混用） |
+
+**Fallback**：靜態信譽表或去重邏輯計算失敗時，SHALL 退回 §3.1 現行規則表作為
+fallback，不得中斷整體流程（R12-5）。
+
 ## 4. Baseline 對照組（R7-2）
 
 `agent/reasoning/baseline.py`：
@@ -203,11 +280,52 @@ ticker 大小寫敏感（`"ETH" in text`）＋全名別名小寫比對（`"ether
 照樣跑詞典/相似度——純本地無成本）；baseline 於 dry-run 時輸出固定假文案。
 結果：`--dry-run` 產出的 report_view.json 每個欄位皆非空。
 
-## 9. 錯誤處理與 degraded 整合
+## Error Handling
+
+### 9. 錯誤處理與 degraded 整合
 
 - 任一新增層失敗：記 log（error）→ 跳過該層 → `integrity_status="DEGRADED"`＋
   view 註明哪層被跳過（沿用既有隔離哲學，絕不讓新功能弄壞舊的穩定性）
 - degraded mode（超時）：L2 直接跳過，同樣標 DEGRADED
+
+## Correctness Properties
+
+以下不變量在測試策略（見下）與 code review 時都要能對應驗證：
+
+### Property 1: 向後相容
+新增欄位一律有預設值，既有 pydantic model 建構呼叫不需修改即可通過。
+
+**Validates: Requirements 3.4**
+
+### Property 2: 面板數字可追溯
+`report_view.json` 任何數字都必須能在 `execution_log.jsonl` 或 `evidence.json` 中
+查到來源，不允許前端／view_builder 自行發明數值。
+
+**Validates: Requirements 5.4**
+
+### Property 3: 三個命題交付檔案不變
+無論本規格如何擴充，`report.md`／`evidence.json`／`execution_log.jsonl` 的既有欄位
+與產生邏輯不受影響。
+
+**Validates: Requirements 5.5**
+
+### Property 4: 單層失敗不中斷全流程
+L1/L2/baseline/view_builder 任一環節失敗，其餘流程必須照常完成並產出三個命題交付
+檔案，沿用既有 collector 失敗隔離原則。
+
+**Validates: Requirements 9.3**
+
+### Property 5: LLM backend 中立
+所有推理相關程式碼只透過 `LLMClient` 介面呼叫，替換 bedrock/gemini 不需要修改
+`pipeline.py`／`baseline.py` 的邏輯。
+
+**Validates: Requirements 10.1**
+
+### Property 6: 結論產生權不下放
+市場判斷與信心必須來自 `pipeline.py` 的辯論鏈（Step D），不得由規則式評分（L1-L5
+的權重/過濾/量化指標）直接決定，這些只能作為輸入（2026-07-20 架構決策，見文件頂部）。
+
+**Validates: Requirements 12.6**
 
 ## 10. Bedrock 切換註記（R10，不在本規格實作範圍內測試）
 
@@ -220,7 +338,9 @@ ticker 大小寫敏感（`"ETH" in text`）＋全名別名小寫比對（`"ether
 4. 3 題型端到端＋view 檢查
 本規格所有功能只經 `LLMClient` 介面，天然 backend 中立。
 
-## 11. 測試策略
+## Testing Strategy
+
+### 11. 測試策略
 
 - 單元：source_weights 查表、PR/相似度過濾、相對指標數學（手算樣本）、信心公式、
   news 比對回歸、macro 單次回歸、view_builder 組裝（假輸入）、usage 累計（FakeLLMClient 擴充）
