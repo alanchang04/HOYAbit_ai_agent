@@ -22,11 +22,15 @@ from agent.collectors.price import PriceCollector
 from agent.collectors.social import SocialCollector
 from agent.config import Settings, check_optional_keys, get_settings
 from agent.logging_utils import ExecutionLogger
+from agent.reasoning.baseline import run_baseline, run_baseline_dry_run
 from agent.reasoning.llm_client import build_llm_client
 from agent.reasoning.pipeline import ReasoningResult, ReasoningStepError, run_reasoning
 from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
-from agent.schemas import Evidence, EvidenceDraft, LogPhase, LogStatus
+from agent.report.view_builder import build_report_view
+from agent.filters.content import apply_content_filters
+from agent.filters.source_weights import apply_source_weights
+from agent.schemas import Evidence, EvidenceDraft, FilterDecision, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro"]
 
@@ -58,10 +62,21 @@ def build_collectors(logger: ExecutionLogger, settings: Settings, dry_run: bool)
 async def collect_all(
     collectors: list[BaseCollector], coins: list[str], remaining_seconds: float
 ) -> list[EvidenceDraft]:
-    """對每個 collector × 每個幣種平行執行（比較分析題型會有 2 個幣種）。"""
+    """對每個 collector × 每個幣種平行執行（比較分析題型會有 2 個幣種）。
+
+    特例：macro collector 產出的是幣種無關的全域資料（Fear & Greed Index、
+    央行匯率等），無論有幾個幣種都只用主幣種跑一次，避免重複證據。
+    """
     if remaining_seconds <= 0:
         return []
-    tasks = [c.run(coin) for c in collectors for coin in coins]
+    tasks: list = []
+    for c in collectors:
+        if c.source_type == "macro":
+            # macro 是幣種無關的全域資料，只用主幣種跑一次
+            tasks.append(c.run(coins[0]))
+        else:
+            for coin in coins:
+                tasks.append(c.run(coin))
     results = await asyncio.gather(*tasks)
     drafts: list[EvidenceDraft] = []
     for r in results:
@@ -82,6 +97,7 @@ def run_pipeline(
     dry_run: bool = True,
     output_dir: str | None = None,
     coin2: str | None = None,
+    with_baseline: bool = False,
 ) -> RunResult:
     settings = get_settings()
     start_time = time.monotonic()
@@ -138,6 +154,9 @@ def run_pipeline(
     remaining_before_collect = settings.hard_deadline_seconds - elapsed
     degraded_mode = elapsed > settings.degraded_mode_trigger_seconds
 
+    # 追蹤 degraded 原因，任一項非空時最終 integrity_status="DEGRADED"
+    degraded_reasons: list[str] = []
+
     if degraded_mode:
         logger.log(
             phase=LogPhase.COLLECT,
@@ -146,10 +165,50 @@ def run_pipeline(
             status=LogStatus.SKIPPED,
         )
         drafts: list[EvidenceDraft] = []
+        degraded_reasons.append("collector timeout（已超過 degraded_mode_trigger_seconds）")
     else:
         drafts = asyncio.run(collect_all(collectors, coins, remaining_before_collect))
 
     evidences = assign_evidence_ids(drafts)
+
+    # L1 信源權重：統一補權重（collector 不動，單點修改）
+    apply_source_weights(evidences, logger)
+
+    # L2 內容層過濾（純本地，毫秒級）
+    filter_decisions: list[FilterDecision] = []
+    try:
+        filter_decisions = apply_content_filters(evidences, logger)
+    except Exception as exc:
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_content_failed",
+            detail=str(exc),
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+        degraded_reasons.append("L2 content filter skipped")
+
+    # 比較題型：計算雙幣相對指標
+    if question_type == "comparison" and coin2:
+        try:
+            from agent.collectors.relative import compute_relative_metrics
+            relative_draft = compute_relative_metrics(coin.upper(), coin2)
+            next_id = len(evidences) + 1
+            relative_ev = Evidence(id=f"ev-{next_id:03d}", **relative_draft.model_dump())
+            evidences.append(relative_ev)
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="relative_metrics_computed",
+                detail=f"{coin.upper()}/{coin2} 雙幣相對指標已加入",
+                status=LogStatus.OK,
+            )
+        except Exception as exc:
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="relative_metrics_failed",
+                detail=str(exc),
+                status=LogStatus.ERROR,
+            )
 
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
@@ -167,7 +226,7 @@ def run_pipeline(
         logger.log(phase=LogPhase.REASON, action=step, detail=detail, status=LogStatus(status))
 
     if dry_run:
-        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2)
+        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2, logger=logger)
     else:
         llm_client = build_llm_client(settings)
         logger.log(
@@ -178,7 +237,7 @@ def run_pipeline(
         )
         try:
             reasoning_result = run_reasoning(
-                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2
+                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
@@ -198,6 +257,18 @@ def run_pipeline(
                 },
             )
 
+        # 讀取 LLM usage 統計
+        usage = getattr(llm_client, "usage", None)
+        if usage:
+            total_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            logger.log(
+                phase=LogPhase.REASON,
+                action="llm_usage",
+                detail=f"total_tokens={total_tokens}, calls={usage.get('calls', 0)}",
+                status=LogStatus.OK,
+                metrics=usage,
+            )
+
     logger.log(
         phase=LogPhase.REASON,
         action="reasoning_complete",
@@ -205,10 +276,90 @@ def run_pipeline(
         status=LogStatus.OK,
     )
 
+    # Baseline 對照組（可開關，預設關閉）
+    baseline_result: dict | None = None
+    if with_baseline:
+        if dry_run:
+            baseline_result = run_baseline_dry_run(question, coin=coin, coin2=coin2)
+        else:
+            baseline_result = run_baseline(
+                question=question,
+                evidences=evidences,
+                llm_client=llm_client,
+                coin=coin,
+                coin2=coin2,
+            )
+        logger.log(
+            phase=LogPhase.REASON,
+            action="baseline_complete",
+            detail=f"enabled=True, has_error={'error' in baseline_result}",
+            status=LogStatus.OK if "error" not in baseline_result else LogStatus.ERROR,
+        )
+
     report_md = build_report_markdown(coin, question, reasoning_result, evidences, coin2=coin2)
     report_path = out_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
     logger.log(phase=LogPhase.REPORT, action="report_written", detail=str(report_path), status=LogStatus.OK)
+
+    # view_builder：組裝 report_view.json（失敗隔離，不影響三個命題交付檔）
+    try:
+        # 計算 RunMetrics
+        contradictions_count = len(reasoning_result.cross_validation.get("contradictions", []))
+        # 從 log 讀取 L3 noise_removal_rate
+        l3_entries = [e for e in logger.read_all() if e.action == "l3_fact_extraction"]
+        noise_rate = l3_entries[-1].metrics.get("removal_rate", 0.0) if l3_entries else 0.0
+
+        # 讀取 LLM usage
+        total_tokens = 0
+        if not dry_run:
+            usage = getattr(llm_client, "usage", None)
+            if usage:
+                total_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+
+        run_metrics = RunMetrics(
+            confidence=reasoning_result.confidence_score,
+            noise_removal_rate=noise_rate,
+            total_tokens=total_tokens,
+            integrity_status="DEGRADED" if degraded_reasons else "INTACT",
+            raw_evidence_count=len(evidences),
+            kept_fact_count=sum(
+                len(f.get("evidence_ids", [])) for f in reasoning_result.facts
+            ),
+            degraded_reasons=degraded_reasons,
+        )
+
+        view = build_report_view(
+            out_dir=out_dir,
+            evidences=evidences,
+            reasoning_result=reasoning_result,
+            run_metrics=run_metrics,
+            filter_decisions=filter_decisions,
+            baseline_result=baseline_result,
+            coin=coin,
+            coin2=coin2,
+            question=question,
+        )
+        if view:
+            logger.log(
+                phase=LogPhase.REPORT,
+                action="view_written",
+                detail=str(out_dir / "report_view.json"),
+                status=LogStatus.OK,
+            )
+        else:
+            logger.log(
+                phase=LogPhase.REPORT,
+                action="view_build_failed",
+                detail="build_report_view returned None",
+                status=LogStatus.ERROR,
+            )
+    except Exception as exc:
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="view_build_failed",
+            detail=str(exc),
+            status=LogStatus.ERROR,
+        )
 
     total_elapsed = time.monotonic() - start_time
     logger.log(

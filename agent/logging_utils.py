@@ -6,7 +6,7 @@ import json
 import threading
 from pathlib import Path
 
-from agent.schemas import LogEntry, LogPhase, LogStatus, now_iso
+from agent.schemas import LogEntry, LogPhase, LogStatus, PipelineLayer, now_iso
 
 
 class ExecutionLogger:
@@ -19,13 +19,23 @@ class ExecutionLogger:
         # 每次執行覆寫舊檔，確保單次比賽執行的紀錄乾淨
         self.log_path.write_text("", encoding="utf-8")
 
-    def log(self, phase: LogPhase | str, action: str, detail: str = "", status: LogStatus | str = LogStatus.OK) -> None:
+    def log(
+        self,
+        phase: LogPhase | str,
+        action: str,
+        detail: str = "",
+        status: LogStatus | str = LogStatus.OK,
+        layer: PipelineLayer | None = None,
+        metrics: dict | None = None,
+    ) -> None:
         entry = LogEntry(
             ts=now_iso(),
             phase=LogPhase(phase),
             action=action,
             detail=detail,
             status=LogStatus(status),
+            layer=layer,
+            metrics=metrics or {},
         )
         line = entry.model_dump_json()
         with self._lock:
