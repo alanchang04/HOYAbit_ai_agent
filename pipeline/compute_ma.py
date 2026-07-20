@@ -11,6 +11,7 @@ data/ 裡的 CSV 內容一致，只是路徑換成 Ken 自己整理的 raw_data/
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 COINS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
@@ -68,12 +69,38 @@ def build_ma_block(coin: str, ma: dict) -> str:
     return f"[{coin}] " + "，".join(parts)
 
 
+def write_output(coin: str, rows: list[dict], ma: dict, ohlcv_block: str, ma_block: str) -> Path:
+    """Step 4：算好的東西寫回 raw_data/price/{COIN}/ma_20_60_120.json，跟該幣的
+    原始 CSV 放在同一個資料夾，之後每個幣種點進去就同時看得到原始資料跟算出來的指標。
+    """
+    out = {
+        "coin": coin,
+        "as_of_date": rows[-1]["date"],
+        "last_close": ma["last_close"],
+        "ma20": ma["ma20"],
+        "ma20_position": ma["ma20_position"],
+        "ma60": ma["ma60"],
+        "ma60_position": ma["ma60_position"],
+        "ma120": ma["ma120"],
+        "ma120_position": ma["ma120_position"],
+        "ohlcv_summary": ohlcv_block,
+        "ma_summary": ma_block,
+    }
+    out_path = RAW_DATA_DIR / coin / "ma_20_60_120.json"
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
+
+
 def main() -> None:
     for coin in COINS:
         closes, rows = load_closes(coin)
         ma = compute_ma(closes)
-        print(build_ohlcv_block(coin, rows))
-        print(build_ma_block(coin, ma))
+        ohlcv_block = build_ohlcv_block(coin, rows)
+        ma_block = build_ma_block(coin, ma)
+        print(ohlcv_block)
+        print(ma_block)
+        out_path = write_output(coin, rows, ma, ohlcv_block, ma_block)
+        print(f"→ 已寫入 {out_path}")
         print()
 
 
