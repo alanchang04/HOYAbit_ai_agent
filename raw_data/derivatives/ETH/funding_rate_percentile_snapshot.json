@@ -1,0 +1,11 @@
+{
+  "coin": "ETH",
+  "perp": "ETHUSDT",
+  "source": "Binance Futures /fapi/v1/fundingRate",
+  "sample_size": 90,
+  "latest_funding_rate_pct": 0.002124,
+  "latest_funding_time": 1784534400001,
+  "percentile_30d": 32.22222222222222,
+  "crowd_label": "中性區間",
+  "fetched_at": "2026-07-20T15:08:38Z"
+}
