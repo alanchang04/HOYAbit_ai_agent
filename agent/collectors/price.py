@@ -110,6 +110,30 @@ def summarize_technical_indicators(indicators: dict) -> str:
     )
 
 
+def compute_perp_basis(mark_price: float, index_price: float, funding_rate: float) -> dict:
+    """依 Binance premiumIndex 回傳值算永續合約基差（mark 相對 index 的溢價比例）。"""
+    basis_pct = (mark_price - index_price) / index_price * 100 if index_price else 0.0
+    return {
+        "mark_price": mark_price,
+        "index_price": index_price,
+        "basis_pct": basis_pct,
+        "funding_rate_pct": funding_rate * 100,
+    }
+
+
+def summarize_perp_basis(basis: dict) -> str:
+    direction = (
+        "正基差 contango（多頭情緒佐證）"
+        if basis["basis_pct"] >= 0
+        else "負基差 backwardation（空頭情緒佐證）"
+    )
+    return (
+        f"markPrice {basis['mark_price']:.4f} vs indexPrice {basis['index_price']:.4f}，"
+        f"基差 {basis['basis_pct']:+.4f}%（{direction}），"
+        f"最新資金費率 {basis['funding_rate_pct']:+.5f}%"
+    )
+
+
 class PriceCollector(BaseCollector):
     name = "price_collector"
     source_type = "price"
@@ -206,5 +230,34 @@ class PriceCollector(BaseCollector):
                     )
                 except Exception as exc2:  # noqa: BLE001
                     self.log_subsource("cryptocompare", coin, LogStatus.ERROR, f"error={exc2}")
+
+            # --- 永續基差：Binance Futures premiumIndex（免 key），mark/index 價差是多空情緒佐證 ---
+            try:
+                resp = await client.get(
+                    "https://fapi.binance.com/fapi/v1/premiumIndex",
+                    params={"symbol": f"{info.ticker}USDT"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                basis = compute_perp_basis(
+                    mark_price=float(data["markPrice"]),
+                    index_price=float(data["indexPrice"]),
+                    funding_rate=float(data["lastFundingRate"]),
+                )
+                evidences.append(
+                    EvidenceDraft(
+                        coin=coin,
+                        source="Binance Futures /fapi/v1/premiumIndex",
+                        source_url="https://fapi.binance.com/fapi/v1/premiumIndex",
+                        fetched_at=now_iso(),
+                        content_reference=(
+                            f"query: symbol={info.ticker}USDT | " + summarize_perp_basis(basis)
+                        ),
+                        related_claim=f"{coin} 永續合約基差與資金費率（多空情緒佐證）",
+                        source_type="price",
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.log_subsource("perp_basis", coin, LogStatus.ERROR, f"error={exc}")
 
         return evidences

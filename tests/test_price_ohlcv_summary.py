@@ -1,7 +1,9 @@
 from agent.collectors.price import (
+    compute_perp_basis,
     compute_technical_indicators,
     load_ohlcv_tail,
     summarize_ohlcv,
+    summarize_perp_basis,
     summarize_technical_indicators,
 )
 
@@ -56,3 +58,21 @@ def test_summarize_technical_indicators_labels_rsi_zone():
 
 def test_summarize_technical_indicators_handles_empty():
     assert "不足" in summarize_technical_indicators({})
+
+
+def test_compute_perp_basis_positive_is_contango():
+    basis = compute_perp_basis(mark_price=64672.30, index_price=64703.94, funding_rate=0.00008647)
+    assert basis["basis_pct"] < 0  # markPrice < indexPrice 在這組實測數字裡是負基差
+    assert round(basis["funding_rate_pct"], 5) == 0.00865
+
+
+def test_compute_perp_basis_zero_index_price_is_safe():
+    basis = compute_perp_basis(mark_price=100.0, index_price=0.0, funding_rate=0.0)
+    assert basis["basis_pct"] == 0.0
+
+
+def test_summarize_perp_basis_labels_direction():
+    positive = summarize_perp_basis(compute_perp_basis(101.0, 100.0, 0.0001))
+    negative = summarize_perp_basis(compute_perp_basis(99.0, 100.0, -0.0001))
+    assert "contango" in positive
+    assert "backwardation" in negative
