@@ -30,7 +30,6 @@ class Settings:
     gemini_model_id: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash"))
 
     # --- 選用 API keys（缺少時該 collector 會退回免 key 端點或標記 skipped）---
-    cryptopanic_api_key: str | None = field(default_factory=lambda: os.getenv("CRYPTOPANIC_API_KEY"))
     etherscan_api_key: str | None = field(default_factory=lambda: os.getenv("ETHERSCAN_API_KEY"))
     bscscan_api_key: str | None = field(default_factory=lambda: os.getenv("BSCSCAN_API_KEY"))
     fred_api_key: str | None = field(default_factory=lambda: os.getenv("FRED_API_KEY"))
@@ -51,7 +50,6 @@ class Settings:
 
 
 OPTIONAL_KEY_NAMES = {
-    "CRYPTOPANIC_API_KEY": "news_collector 的 CryptoPanic 補充來源（缺少時僅用 RSS 免 key 來源）",
     "ETHERSCAN_API_KEY": "onchain_collector 的 ETH 鏈上資料（缺少時該來源會被跳過並記為 skipped）",
     "BSCSCAN_API_KEY": "onchain_collector 的 BNB 鏈上資料（缺少時該來源會被跳過並記為 skipped）",
     "FRED_API_KEY": "macro_collector 的 FRED 總經加強資料（缺少時僅用 stooq/Fear&Greed 免 key 來源）",

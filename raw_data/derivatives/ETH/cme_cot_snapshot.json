@@ -1,0 +1,84 @@
+{
+  "coin": "ETH",
+  "source": "CFTC TFF Futures Only（ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE）",
+  "contract_units": "(50 Index Points)",
+  "latest_report_date": "2026-07-14",
+  "asset_mgr_net_latest": -1406,
+  "asset_mgr_net_change_latest": 703,
+  "lev_money_net_latest": -7961,
+  "trend_last_12_weeks": [
+    {
+      "report_date": "2026-04-28",
+      "open_interest_all": 27777,
+      "asset_mgr_net": 445,
+      "lev_money_net": -11641
+    },
+    {
+      "report_date": "2026-05-05",
+      "open_interest_all": 30408,
+      "asset_mgr_net": 1360,
+      "lev_money_net": -13593
+    },
+    {
+      "report_date": "2026-05-12",
+      "open_interest_all": 31749,
+      "asset_mgr_net": -536,
+      "lev_money_net": -10404
+    },
+    {
+      "report_date": "2026-05-19",
+      "open_interest_all": 33062,
+      "asset_mgr_net": -1500,
+      "lev_money_net": -8335
+    },
+    {
+      "report_date": "2026-05-26",
+      "open_interest_all": 30856,
+      "asset_mgr_net": -1592,
+      "lev_money_net": -7504
+    },
+    {
+      "report_date": "2026-06-02",
+      "open_interest_all": 25516,
+      "asset_mgr_net": -3303,
+      "lev_money_net": -4321
+    },
+    {
+      "report_date": "2026-06-09",
+      "open_interest_all": 25138,
+      "asset_mgr_net": -3242,
+      "lev_money_net": -4651
+    },
+    {
+      "report_date": "2026-06-16",
+      "open_interest_all": 26110,
+      "asset_mgr_net": -2314,
+      "lev_money_net": -6752
+    },
+    {
+      "report_date": "2026-06-23",
+      "open_interest_all": 26007,
+      "asset_mgr_net": -3016,
+      "lev_money_net": -4977
+    },
+    {
+      "report_date": "2026-06-30",
+      "open_interest_all": 21475,
+      "asset_mgr_net": -3038,
+      "lev_money_net": -4691
+    },
+    {
+      "report_date": "2026-07-07",
+      "open_interest_all": 21746,
+      "asset_mgr_net": -2109,
+      "lev_money_net": -7309
+    },
+    {
+      "report_date": "2026-07-14",
+      "open_interest_all": 22539,
+      "asset_mgr_net": -1406,
+      "lev_money_net": -7961
+    }
+  ],
+  "fetched_at": "2026-07-20T12:17:40Z"
+}

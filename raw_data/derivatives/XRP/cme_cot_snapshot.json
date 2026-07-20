@@ -1,0 +1,84 @@
+{
+  "coin": "XRP",
+  "source": "CFTC TFF Futures Only（XRP - CHICAGO MERCANTILE EXCHANGE）",
+  "contract_units": "(Contracts of 50,000 XRP)",
+  "latest_report_date": "2026-07-14",
+  "asset_mgr_net_latest": 67,
+  "asset_mgr_net_change_latest": 187,
+  "lev_money_net_latest": -1921,
+  "trend_last_12_weeks": [
+    {
+      "report_date": "2026-04-28",
+      "open_interest_all": 7427,
+      "asset_mgr_net": -122,
+      "lev_money_net": -2852
+    },
+    {
+      "report_date": "2026-05-05",
+      "open_interest_all": 7455,
+      "asset_mgr_net": -92,
+      "lev_money_net": -2663
+    },
+    {
+      "report_date": "2026-05-12",
+      "open_interest_all": 7849,
+      "asset_mgr_net": -78,
+      "lev_money_net": -2584
+    },
+    {
+      "report_date": "2026-05-19",
+      "open_interest_all": 7909,
+      "asset_mgr_net": -71,
+      "lev_money_net": -2044
+    },
+    {
+      "report_date": "2026-05-26",
+      "open_interest_all": 8606,
+      "asset_mgr_net": -124,
+      "lev_money_net": -1823
+    },
+    {
+      "report_date": "2026-06-02",
+      "open_interest_all": 7229,
+      "asset_mgr_net": -280,
+      "lev_money_net": -1217
+    },
+    {
+      "report_date": "2026-06-09",
+      "open_interest_all": 7416,
+      "asset_mgr_net": -214,
+      "lev_money_net": -1949
+    },
+    {
+      "report_date": "2026-06-16",
+      "open_interest_all": 7768,
+      "asset_mgr_net": -58,
+      "lev_money_net": -2396
+    },
+    {
+      "report_date": "2026-06-23",
+      "open_interest_all": 7483,
+      "asset_mgr_net": -226,
+      "lev_money_net": -1950
+    },
+    {
+      "report_date": "2026-06-30",
+      "open_interest_all": 6456,
+      "asset_mgr_net": -222,
+      "lev_money_net": -1496
+    },
+    {
+      "report_date": "2026-07-07",
+      "open_interest_all": 6878,
+      "asset_mgr_net": -120,
+      "lev_money_net": -1885
+    },
+    {
+      "report_date": "2026-07-14",
+      "open_interest_all": 6676,
+      "asset_mgr_net": 67,
+      "lev_money_net": -1921
+    }
+  ],
+  "fetched_at": "2026-07-20T12:17:41Z"
+}

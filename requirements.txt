@@ -3,6 +3,7 @@ python-dotenv>=1.0
 boto3>=1.34
 httpx>=0.27
 feedparser>=6.0
+beautifulsoup4>=4.12  # BNB Chain／Ripple Insights 官方源沒有 RSS，退階用 HTML 解析
 fastapi>=0.111
 uvicorn[standard]>=0.30
 jinja2>=3.1

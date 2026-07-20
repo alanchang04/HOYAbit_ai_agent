@@ -23,16 +23,10 @@
   ],
   "news": [
     {
-      "source": "CoinDesk RSS (dry-run fixture)",
-      "source_url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
-      "content_reference": "{coin} 相關新聞標題與摘要（dry-run 假資料）",
-      "related_claim": "{coin} 近期重大新聞事件"
-    },
-    {
-      "source": "Cointelegraph RSS (dry-run fixture)",
-      "source_url": "https://cointelegraph.com/rss",
-      "content_reference": "{coin} 相關新聞標題與摘要（dry-run 假資料）",
-      "related_claim": "{coin} 近期重大新聞事件"
+      "source": "{coin} 官方發布源 (dry-run fixture)",
+      "source_url": null,
+      "content_reference": "{coin} 官方發布源公告標題摘要（dry-run 假資料，非真實查詢結果；正式執行時依幣種讀取對應官方源，見 agent/collectors/news.py 的 OFFICIAL_SOURCES）",
+      "related_claim": "{coin} 官方發布新聞事件"
     }
   ],
   "social": [

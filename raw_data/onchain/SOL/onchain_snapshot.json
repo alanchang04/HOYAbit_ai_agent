@@ -1,0 +1,7 @@
+{
+  "coin": "SOL",
+  "source": "Solana 公開 RPC getRecentPerformanceSamples",
+  "avg_tps": 3215.2666666666664,
+  "sample_count": 5,
+  "fetched_at": "2026-07-20T12:11:23Z"
+}

@@ -1,0 +1,84 @@
+{
+  "coin": "SOL",
+  "source": "CFTC TFF Futures Only（SOL - CHICAGO MERCANTILE EXCHANGE）",
+  "contract_units": "(500 SOL- CME CF Solana - Dollar Reference Rate)",
+  "latest_report_date": "2026-07-14",
+  "asset_mgr_net_latest": -263,
+  "asset_mgr_net_change_latest": 272,
+  "lev_money_net_latest": -3129,
+  "trend_last_12_weeks": [
+    {
+      "report_date": "2026-04-28",
+      "open_interest_all": 12358,
+      "asset_mgr_net": -960,
+      "lev_money_net": -3719
+    },
+    {
+      "report_date": "2026-05-05",
+      "open_interest_all": 12474,
+      "asset_mgr_net": -926,
+      "lev_money_net": -3888
+    },
+    {
+      "report_date": "2026-05-12",
+      "open_interest_all": 12418,
+      "asset_mgr_net": -714,
+      "lev_money_net": -4488
+    },
+    {
+      "report_date": "2026-05-19",
+      "open_interest_all": 12631,
+      "asset_mgr_net": -965,
+      "lev_money_net": -2456
+    },
+    {
+      "report_date": "2026-05-26",
+      "open_interest_all": 14216,
+      "asset_mgr_net": -1005,
+      "lev_money_net": -2429
+    },
+    {
+      "report_date": "2026-06-02",
+      "open_interest_all": 12156,
+      "asset_mgr_net": -981,
+      "lev_money_net": -2222
+    },
+    {
+      "report_date": "2026-06-09",
+      "open_interest_all": 11395,
+      "asset_mgr_net": -615,
+      "lev_money_net": -2243
+    },
+    {
+      "report_date": "2026-06-16",
+      "open_interest_all": 11519,
+      "asset_mgr_net": -654,
+      "lev_money_net": -3142
+    },
+    {
+      "report_date": "2026-06-23",
+      "open_interest_all": 12106,
+      "asset_mgr_net": -561,
+      "lev_money_net": -2641
+    },
+    {
+      "report_date": "2026-06-30",
+      "open_interest_all": 10721,
+      "asset_mgr_net": -466,
+      "lev_money_net": -3043
+    },
+    {
+      "report_date": "2026-07-07",
+      "open_interest_all": 11091,
+      "asset_mgr_net": -535,
+      "lev_money_net": -3669
+    },
+    {
+      "report_date": "2026-07-14",
+      "open_interest_all": 10324,
+      "asset_mgr_net": -263,
+      "lev_money_net": -3129
+    }
+  ],
+  "fetched_at": "2026-07-20T12:17:40Z"
+}

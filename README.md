@@ -91,7 +91,7 @@ docker run --rm --env-file .env hoyabit-agent \
 |---|---|---|---|
 | price | 主辦方 OHLCV CSV（`data/`）＋ 本地技術指標（SMA/RSI/波動率/量能，純 Python 計算）＋ CoinGecko `/simple/price` | CryptoCompare `/data/pricemultifull` | 無（技術指標為決定性運算，不受網路影響） |
 | onchain | BTC: Blockchair／ETH: publicnode EVM RPC／BNB: bsc-dataseed RPC／SOL: Solana 公開 RPC／XRP: XRPL 公開 JSON-RPC | Etherscan/BscScan（需免費 key，補充總供給量） | 免 key 端點僅提供區塊高度、Gas、TPS 等網路層指標，非地址級鏈上活躍度，如需更細緻指標建議申請 Etherscan/BscScan key |
-| news | CoinDesk／Cointelegraph RSS | CryptoPanic（需免費 key） | RSS 為全站新聞，以幣種別名關鍵字過濾，冷門幣種當日相關新聞可能較少 |
+| news | 每幣官方發布源：BTC Bitcoin Optech Newsletter／ETH Ethereum Foundation Blog／SOL Solana Foundation News（皆 RSS）／BNB BNB Chain Blog／XRP Ripple Insights（無 RSS，退階 HTML 解析） | 無 | 2026-07-20 起改為官方源優先，不再用 CoinDesk/Cointelegraph/CryptoPanic 第三方聚合；BNB/XRP 無官方 RSS，HTML 結構若改版會失效；BTC 無單一官方實體，只有 Optech 一條技術公告管道 |
 | social | Reddit `r/<subreddit>/search.json` | 無 | **已知限制：Reddit 會封鎖部分雲端/機房 IP（回傳 403），與 User-Agent 無關。** 若比賽現場網路環境被封鎖，此來源會被標記 skipped，報告中需揭露社群資料缺失 |
 | macro | Fear & Greed Index（alternative.me）＋ Frankfurter 匯率（USD 強弱代理） | FRED 10年期美債殖利率（需免費 key） | 無 |
 
