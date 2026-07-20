@@ -11,7 +11,6 @@ data/ 裡的 CSV 內容一致，只是路徑換成 Ken 自己整理的 raw_data/
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 COINS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
@@ -91,9 +90,8 @@ def compute_ma_series(rows: list[dict]) -> list[dict]:
 
 
 def write_series_output(coin: str, series: list[dict]) -> Path:
-    """Step 5：完整歷史序列（每天一筆 MA20/60/120）寫成 CSV，跟單日快照的
-    ma_20_60_120.json 分開放——快照給「現在站在哪」，序列給「整段走勢/回測用」。
-    """
+    """Step 4：完整歷史序列（每天一筆 MA20/60/120）寫成 CSV。單日快照版本
+    （ma_20_60_120.json）已經刪掉，只留這份序列。"""
     fieldnames = ["date", "close", "ma20", "ma20_position", "ma60", "ma60_position", "ma120", "ma120_position"]
     out_path = RAW_DATA_DIR / coin / "ma_20_60_120_series.csv"
     with out_path.open("w", encoding="utf-8", newline="") as f:
@@ -103,38 +101,12 @@ def write_series_output(coin: str, series: list[dict]) -> Path:
     return out_path
 
 
-def write_output(coin: str, rows: list[dict], ma: dict, ohlcv_block: str, ma_block: str) -> Path:
-    """Step 4：算好的東西寫回 raw_data/price/{COIN}/ma_20_60_120.json，跟該幣的
-    原始 CSV 放在同一個資料夾，之後每個幣種點進去就同時看得到原始資料跟算出來的指標。
-    """
-    out = {
-        "coin": coin,
-        "as_of_date": rows[-1]["date"],
-        "last_close": ma["last_close"],
-        "ma20": ma["ma20"],
-        "ma20_position": ma["ma20_position"],
-        "ma60": ma["ma60"],
-        "ma60_position": ma["ma60_position"],
-        "ma120": ma["ma120"],
-        "ma120_position": ma["ma120_position"],
-        "ohlcv_summary": ohlcv_block,
-        "ma_summary": ma_block,
-    }
-    out_path = RAW_DATA_DIR / coin / "ma_20_60_120.json"
-    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out_path
-
-
 def main() -> None:
     for coin in COINS:
         closes, rows = load_closes(coin)
         ma = compute_ma(closes)
-        ohlcv_block = build_ohlcv_block(coin, rows)
-        ma_block = build_ma_block(coin, ma)
-        print(ohlcv_block)
-        print(ma_block)
-        out_path = write_output(coin, rows, ma, ohlcv_block, ma_block)
-        print(f"→ 已寫入快照 {out_path}")
+        print(build_ohlcv_block(coin, rows))
+        print(build_ma_block(coin, ma))
 
         series = compute_ma_series(rows)
         series_path = write_series_output(coin, series)
