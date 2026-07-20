@@ -24,6 +24,7 @@ class BedrockClient:
         self.max_retries = max_retries
         self.base_backoff_seconds = base_backoff_seconds
         self._client = None
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
     @property
     def client(self):
@@ -42,6 +43,11 @@ class BedrockClient:
                     messages=[{"role": "user", "content": [{"text": user_prompt}]}],
                     inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
                 )
+                # 累計 token usage
+                usage = response.get("usage", {})
+                self.usage["input_tokens"] += usage.get("inputTokens", 0)
+                self.usage["output_tokens"] += usage.get("outputTokens", 0)
+                self.usage["calls"] += 1
                 return response["output"]["message"]["content"][0]["text"]
             except (ClientError, BotoCoreError) as exc:
                 last_exc = exc

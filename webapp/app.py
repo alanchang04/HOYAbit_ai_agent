@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -22,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent
 RUNS_DIR = Path("output") / "webapp_runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_DOWNLOAD_FILENAMES = {"report.md", "evidence.json", "execution_log.jsonl"}
+ALLOWED_DOWNLOAD_FILENAMES = {"report.md", "evidence.json", "execution_log.jsonl", "report_view.json"}
 
 app = FastAPI(title="HOYA BIT 加密市場分析 AI Agent")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -46,6 +47,7 @@ def analyze(
     question: str = Form(...),
     coin2: str = Form(""),
     dry_run: bool = Form(False),
+    with_baseline: bool = Form(False),
 ):
     run_id = uuid.uuid4().hex[:8]
     out_dir = RUNS_DIR / run_id
@@ -59,11 +61,29 @@ def analyze(
             dry_run=dry_run,
             output_dir=str(out_dir),
             coin2=coin2.upper() if coin2 else None,
+            with_baseline=with_baseline,
         )
     except Exception as exc:  # noqa: BLE001
         # Web UI 是展示用途，任何未預期例外都應顯示錯誤頁面而非讓伺服器 500，
         # 真正的失敗容錯（collector/LLM 步驟）已經在 orchestrator 內處理。
         error = f"{type(exc).__name__}: {exc}"
+
+    # Read execution log entries and view metrics for template tabs
+    log_entries: list[dict] = []
+    view_metrics: dict = {}
+    raw_log: str = ""
+
+    log_path = out_dir / "execution_log.jsonl"
+    if log_path.exists():
+        raw_log = log_path.read_text(encoding="utf-8")
+        for line in raw_log.strip().split("\n"):
+            if line.strip():
+                log_entries.append(json.loads(line))
+
+    view_path = out_dir / "report_view.json"
+    if view_path.exists():
+        view_data = json.loads(view_path.read_text(encoding="utf-8"))
+        view_metrics = view_data.get("meta", {}).get("metrics", {})
 
     return templates.TemplateResponse(
         request,
@@ -75,8 +95,21 @@ def analyze(
             "question": question,
             "result": result,
             "error": error,
+            "log_entries": log_entries,
+            "view_metrics": view_metrics,
+            "raw_log": raw_log,
         },
     )
+
+
+@app.get("/view/{run_id}", response_class=HTMLResponse)
+def view_panel(request: Request, run_id: str):
+    safe_run_id = "".join(c for c in run_id if c.isalnum())
+    view_path = RUNS_DIR / safe_run_id / "report_view.json"
+    if not view_path.exists():
+        return HTMLResponse("Report view not found", status_code=404)
+    view_data = json.loads(view_path.read_text(encoding="utf-8"))
+    return templates.TemplateResponse(request, "view.html", {"run_id": run_id, "view": view_data})
 
 
 @app.get("/download/{run_id}/{filename}")

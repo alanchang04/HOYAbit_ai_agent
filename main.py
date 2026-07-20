@@ -34,6 +34,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="使用 cached fixtures 跑完整流程，不打真實 API 或 Bedrock（賽前排練用）",
     )
     parser.add_argument("--output-dir", default=None, help="輸出目錄，預設 output/")
+    parser.add_argument(
+        "--with-baseline",
+        action="store_true",
+        help="啟用未過濾對照組分析（同一 LLM 對全量證據做一次呼叫，作為信任提煉對比基準）",
+    )
     return parser.parse_args(argv)
 
 
@@ -63,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     result = run_pipeline(
-        coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir, coin2=coin2
+        coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir, coin2=coin2,
+        with_baseline=args.with_baseline,
     )
 
     print(f"執行完成，耗時 {result.elapsed_seconds:.2f} 秒（degraded_mode={result.degraded_mode}）")

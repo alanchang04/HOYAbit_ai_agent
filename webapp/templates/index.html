@@ -37,6 +37,11 @@
         Dry-run（不打真實 API/LLM，僅供流程排練）
       </label>
 
+      <label class="checkbox-row">
+        <input type="checkbox" name="with_baseline" value="true">
+        啟用對照組（未過濾證據直接 LLM 分析，作為信任提煉對比基準）
+      </label>
+
       <button type="submit">開始分析</button>
     </form>
 

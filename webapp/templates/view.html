@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>四面板檢視 - HOYA BIT 加密市場分析 AI Agent</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container container-wide">
+    <p><a href="/">&larr; 回到首頁</a></p>
+    <h1>信任提煉四面板檢視</h1>
+    <p class="meta">
+      幣種：{{ view.meta.coin }}{% if view.meta.coin2 %} vs {{ view.meta.coin2 }}{% endif %}
+      ｜題型：{{ view.meta.question_type }}
+      ｜生成時間：{{ view.meta.generated_at }}
+    </p>
+    <p class="question">題目：{{ view.meta.question }}</p>
+
+    {# Run metrics summary #}
+    <div class="run-summary">
+      <span>信心：{{ view.meta.metrics.confidence }}%</span>
+      <span>雜訊剔除率：{{ "%.1f"|format(view.meta.metrics.noise_removal_rate * 100) }}%</span>
+      <span>完整性：{{ view.meta.metrics.integrity_status }}</span>
+      <span>Tokens：{{ view.meta.metrics.total_tokens }}</span>
+    </div>
+
+    {# Four-panel grid #}
+    <div class="four-panel">
+
+      {# Panel 1: 原始證據流 #}
+      <div class="panel">
+        <div class="panel-header">① 原始證據流（{{ view.panel1_raw_feed.count }} 筆）</div>
+        {% if view.panel1_raw_feed.items %}
+          {% for item in view.panel1_raw_feed.items %}
+          <div class="evidence-item">
+            <span class="fingerprint-badge">{{ item.fingerprint }}</span>
+            <span class="source-type-badge">{{ item.source_type }}</span>
+            <span class="weight-badge">{{ "%.2f"|format(item.source_weight) }}</span>
+            <div class="evidence-source">{{ item.source }}</div>
+            <div class="evidence-content">{{ item.content_reference[:120] }}{% if item.content_reference|length > 120 %}…{% endif %}</div>
+            {% if item.filter_decisions %}
+              <div class="filter-decisions">
+                {% for fd in item.filter_decisions %}
+                <span class="filter-tag filter-{{ fd.verdict }}">{{ fd.check_code }}: {{ fd.verdict }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="data-missing">資料缺失：無原始證據資料</p>
+        {% endif %}
+      </div>
+
+      {# Panel 2: 未過濾基準對照 #}
+      <div class="panel">
+        <div class="panel-header">② 未過濾基準對照</div>
+        {% if not view.panel2_naive_baseline.enabled %}
+          <p class="data-missing">本次未啟用</p>
+          <p class="note">可於分析表單勾選「啟用 Baseline 對照」來啟用此面板。</p>
+        {% elif view.panel2_naive_baseline.get("error") %}
+          <p class="data-missing">執行失敗：{{ view.panel2_naive_baseline.error }}</p>
+        {% elif view.panel2_naive_baseline.naive_output %}
+          <div class="baseline-steps">
+            {% for step in view.panel2_naive_baseline.steps %}
+            <div class="baseline-step">
+              <span class="step-num">{{ step.step }}</span>
+              <strong>{{ step.label }}</strong>：{{ step.desc }}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="baseline-output">
+            <div class="baseline-analysis">{{ view.panel2_naive_baseline.naive_output.analysis }}</div>
+            <div class="baseline-caveat">⚠️ {{ view.panel2_naive_baseline.naive_output.caveat }}</div>
+          </div>
+        {% else %}
+          <p class="data-missing">資料缺失：基準對照未產生輸出</p>
+        {% endif %}
+      </div>
+
+      {# Panel 3: 信任提煉流水線 #}
+      <div class="panel">
+        <div class="panel-header">③ 信任提煉流水線</div>
+        <p class="note">雜訊剔除率：{{ "%.1f"|format(view.panel3_refinement.noise_removal_rate * 100) }}%</p>
+
+        {% if view.panel3_refinement.skipped_layers %}
+          <div class="skipped-warning">
+            ⚠️ 部分層因錯誤被跳過（integrity: DEGRADED）：
+            {% for s in view.panel3_refinement.skipped_layers %}
+              {{ s.layer }}（{{ s.reason }}）{% if not loop.last %}、{% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% for layer in view.panel3_refinement.layers %}
+        <details class="layer-details">
+          <summary class="layer-summary">
+            <span class="layer-badge">{{ layer.layer }}</span>
+            {% if layer.get("skipped") %}
+              <span class="status-dot status-skipped"></span> 已跳過
+            {% else %}
+              {% if layer.layer == "L1_source" %}
+                權威 {{ layer.summary.authoritative }} / 一般 {{ layer.summary.normal }} / 低信度 {{ layer.summary.low }}
+              {% elif layer.layer == "L2_content" %}
+                PR 命中 {{ layer.checks[0].hits|length }} 筆，相似度配對 {{ layer.checks[1].pairs|length }} 筆
+              {% elif layer.layer == "L3_fact" %}
+                輸入 {{ layer.input }} → 保留 {{ layer.kept }}（剔除率 {{ "%.1f"|format(layer.removal_rate * 100) }}%）
+              {% elif layer.layer == "L4_cross" %}
+                一致 {{ layer.consistent|length }} / 矛盾 {{ layer.contradictions|length }}
+              {% elif layer.layer == "L5_conclusion" %}
+                信心 {{ layer.confidence_breakdown.final }}%
+              {% endif %}
+            {% endif %}
+          </summary>
+
+          <div class="layer-content">
+            {% if layer.layer == "L1_source" %}
+              <p>{{ layer.note }}</p>
+
+            {% elif layer.layer == "L2_content" %}
+              {% for check in layer.checks %}
+                {% if check.code == "PR" %}
+                  <p><strong>PR 話術偵測</strong>：{{ check.hits|length }} 筆命中</p>
+                  {% for hit in check.hits %}
+                    <div class="filter-hit">{{ hit.fingerprint }} — {{ hit.reason }}</div>
+                  {% endfor %}
+                {% elif check.code == "F10" %}
+                  <p><strong>模板相似度</strong>：{{ check.pairs|length }} 筆配對</p>
+                  {% for pair in check.pairs %}
+                    <div class="filter-hit">{{ pair.fingerprint }} — {{ pair.reason }}</div>
+                  {% endfor %}
+                {% elif check.code == "F9" %}
+                  {% if not check.get("enabled", True) %}
+                    <p class="data-missing">F9 情緒分布：未啟用（同伴 RAG 介面）</p>
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+
+            {% elif layer.layer == "L3_fact" %}
+              <p>事實提取：{{ layer.input }} 筆輸入 → {{ layer.kept }} 筆保留，{{ layer.removed }} 筆剔除</p>
+              {% if layer.removed_items %}
+                <p>被剔除項目：</p>
+                {% for item in layer.removed_items %}
+                  <div class="filter-hit">{{ item.fingerprint }} — {{ item.reason }}</div>
+                {% endfor %}
+              {% endif %}
+
+            {% elif layer.layer == "L4_cross" %}
+              {% if layer.consistent %}
+                <p><strong>一致訊號：</strong></p>
+                {% for sig in layer.consistent %}
+                  <div class="cross-item">{{ sig }}</div>
+                {% endfor %}
+              {% endif %}
+              {% if layer.contradictions %}
+                <p><strong>矛盾訊號：</strong></p>
+                {% for sig in layer.contradictions %}
+                  <div class="cross-item cross-contradiction">{{ sig }}</div>
+                {% endfor %}
+              {% endif %}
+              {% if not layer.consistent and not layer.contradictions %}
+                <p class="data-missing">資料缺失：無交叉驗證資料</p>
+              {% endif %}
+
+            {% elif layer.layer == "L5_conclusion" %}
+              <div class="confidence-breakdown">
+                <p>基礎值：{{ layer.confidence_breakdown.base }}</p>
+                <p>權威加成：+{{ layer.confidence_breakdown.auth_bonus }}</p>
+                <p>矛盾扣減：-{{ layer.confidence_breakdown.contradiction_penalty }}</p>
+                <p>缺口扣減：-{{ layer.confidence_breakdown.gap_penalty }}</p>
+                <p><strong>最終信心：{{ layer.confidence_breakdown.final }}%</strong></p>
+              </div>
+              {% if layer.debate.bull %}
+                <details class="debate-details">
+                  <summary>多空辯論</summary>
+                  <p><strong>多方論點：</strong>{{ layer.debate.bull }}</p>
+                  <p><strong>空方批評：</strong>{{ layer.debate.bear_critique }}</p>
+                  <p><strong>空方論點：</strong>{{ layer.debate.bear }}</p>
+                </details>
+              {% endif %}
+            {% endif %}
+
+            {# Log events for this layer #}
+            {% set layer_key = layer.layer %}
+            {% if view.panel3_refinement.log_events_by_layer.get(layer_key) %}
+              <details class="log-events-details">
+                <summary>Log 事件（{{ view.panel3_refinement.log_events_by_layer[layer_key]|length }} 筆）</summary>
+                {% for event in view.panel3_refinement.log_events_by_layer[layer_key] %}
+                <div class="timeline-item">
+                  <span class="timeline-ts">{{ event.ts }}</span>
+                  <span class="timeline-action">{{ event.action }}</span>
+                  <span class="status-dot status-{{ event.status }}"></span>
+                  {% if event.metrics %}
+                    <span class="timeline-metrics">{{ event.metrics }}</span>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </details>
+            {% endif %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+
+      {# Panel 4: 分析報告 #}
+      <div class="panel">
+        <div class="panel-header">④ 分析報告</div>
+
+        {% if view.panel4_report.integrity_status == "DEGRADED" %}
+          <div class="skipped-warning">
+            ⚠️ 完整性：DEGRADED
+            {% if view.panel4_report.degraded_reasons %}
+              — {{ view.panel4_report.degraded_reasons|join("；") }}
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <div class="report-section">
+          <strong>市場判斷：</strong>
+          {% if view.panel4_report.market_judgment %}
+            {{ view.panel4_report.market_judgment }}
+          {% else %}
+            <span class="data-missing">資料缺失</span>
+          {% endif %}
+        </div>
+
+        <div class="report-section">
+          <strong>信心：</strong> {{ view.panel4_report.confidence }}%
+        </div>
+
+        {% if view.panel4_report.core_facts %}
+        <div class="report-section">
+          <strong>核心事實：</strong>
+          <ul class="fact-list">
+            {% for fact in view.panel4_report.core_facts %}
+            <li><span class="fingerprint-badge">{{ fact.fingerprint }}</span> {{ fact.text }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if view.panel4_report.bullish_evidence %}
+        <div class="report-section">
+          <strong>利好證據：</strong>
+          <ul class="fact-list">
+            {% for ev in view.panel4_report.bullish_evidence %}
+            <li><span class="fingerprint-badge">{{ ev.fingerprint }}</span> {{ ev.evidence_id }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if view.panel4_report.risk_evidence %}
+        <div class="report-section">
+          <strong>風險證據：</strong>
+          <ul class="fact-list">
+            {% for ev in view.panel4_report.risk_evidence %}
+            <li><span class="fingerprint-badge">{{ ev.fingerprint }}</span> {{ ev.evidence_id }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if view.panel4_report.limitations %}
+        <div class="report-section">
+          <strong>限制：</strong>
+          <ul class="fact-list">
+            {% for lim in view.panel4_report.limitations %}
+            <li>{{ lim }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if view.panel4_report.invalidation_conditions %}
+        <div class="report-section">
+          <strong>可推翻條件：</strong>
+          <ul class="fact-list">
+            {% for cond in view.panel4_report.invalidation_conditions %}
+            <li>{{ cond }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if view.panel4_report.follow_up_watchpoints %}
+        <div class="report-section">
+          <strong>觀察重點：</strong>
+          <ul class="fact-list">
+            {% for wp in view.panel4_report.follow_up_watchpoints %}
+            <li>{{ wp }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if not view.panel4_report.market_judgment and not view.panel4_report.core_facts %}
+          <p class="data-missing">資料缺失：分析報告無內容</p>
+        {% endif %}
+      </div>
+
+    </div>{# /.four-panel #}
+  </div>{# /.container #}
+</body>
+</html>
