@@ -35,7 +35,7 @@ import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-RAW_DATA_DIR = Path(__file__).resolve().parent.parent / "raw_data" / "supply_calendar"
+RAW_DATA_DIR = Path(__file__).resolve().parent.parent / "raw_data" / "macro"
 RESEARCHED_AT = "2026-07-21"
 NEXT_HALVING_ESTIMATED_DATE = date(2028, 4, 17)
 

@@ -33,7 +33,7 @@ from pathlib import Path
 
 from fetch_supply_calendar import SUPPLY_CALENDAR
 
-RAW_DATA_DIR = Path(__file__).resolve().parent.parent / "raw_data" / "event_calendar"
+RAW_DATA_DIR = Path(__file__).resolve().parent.parent / "raw_data" / "macro"
 RESEARCHED_AT = "2026-07-21"
 
 COINS = ["BTC", "ETH", "SOL", "BNB", "XRP"]

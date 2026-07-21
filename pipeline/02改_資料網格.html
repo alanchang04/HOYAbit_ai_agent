@@ -586,7 +586,7 @@ const SPECS = {
     where: '同一份 OHLCV CSV，不連外部網路。',
     how: '本地 Python 純計算：MA20＝近20日收盤均、MA60＝近60日收盤均、MA120＝近120日收盤均；RSI14 用近15日收盤漲跌算平均漲幅/平均跌幅比值換算；波動率＝近14日日報酬的母體標準差×100；量能趨勢＝近7日均量 vs 前7日均量的變化%。已在 <code>compute_technical_indicators()</code> 實作，資料不足15筆會回傳空值，MA 欄位資料不足對應天數時回傳 <code>None</code>。2026-07-21 已把 <code>INDICATOR_WINDOW</code> 拉大到 121 列並把 MA20/60/120 併回這個函式（見上方「近兩週 OHLCV」）。',
     read: '現價站上 MA20＝短期動能偏多，跌破＝偏空；站上/跌破 MA60、MA120 則分別代表中期／長期趨勢方向，三條同向（例如全站上）＝多頭排列，訊號一致性高，出現交叉（如 MA20 跌破 MA60）可當轉折訊號；RSI14 ≥70 超買、≤30 超賣、中間中性；波動率數字要跟該幣「自己的」歷史比才有意義，不同幣種基準不同，不能拿 BTC 的波動率直接跟 SOL 比大小；量能趨勢正值＝近期關注度上升。',
-    caveat: '2026-07-21 已修：<code>INDICATOR_WINDOW</code> 從 30 拉大到 121，MA120 算得出來了。⚠️ 這個窗口常數改動是 Ken 直接指示先做，還沒跟 alanchang 對過，之後要補講一聲。',
+    caveat: '2026-07-21 已修：<code>INDICATOR_WINDOW</code> 從 30 拉大到 121，MA120 算得出來了。⚠️ 這個窗口常數改動是 Ken 直接指示先做，還沒跟 alanchang 對過，之後要補講一聲。⚠️ 波動率仍是缺口：<code>volatility_pct</code> 目前只回傳近14日標準差原始數字，不是百分位，跟這欄 read 說的「要跟自己歷史比」還沒兌現；<code>pipeline/compute_historical_volatility_percentile.py</code> 已完成 prototype（全歷史擴張視窗百分位），還沒併回這個 collector，見 <code>pipeline/流程紀錄.md</code> Step 24。',
   },
   'realtime-price': {
     title: '即時報價', status: 'done',
@@ -1004,6 +1004,36 @@ document.addEventListener('keydown', (e) => {
     ];
     DEFAULT_DONE_5.forEach((key) => { state[key] = true; });
     localStorage.setItem(SEEDED_KEY_5, '1');
+    save();
+  }
+
+  // 2026-07-21f：補打勾 News 官方發布源——五批 SEEDED_KEY 都漏了這格，流程紀錄
+  // 早已記載 2026-07-21 五幣官方源實測完成，這次才發現漏勾補上。
+  // news-coin-keywords（特有題材關鍵字）沒有獨立實測記錄，先不勾。
+  const SEEDED_KEY_6 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21f';
+  if (!localStorage.getItem(SEEDED_KEY_6)) {
+    const DEFAULT_DONE_6 = [
+      'BTC|btc-optech-newsletter|1', 'ETH|eth-foundation-blog|1', 'SOL|sol-foundation-news|1',
+      'BNB|bnbchain-blog|1', 'XRP|ripple-insights|1',
+    ];
+    DEFAULT_DONE_6.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_6, '1');
+    save();
+  }
+
+  // 2026-07-21g：5 Macro 總經裡恐懼貪婪指數／美元強弱／美債 10Y 三格已在
+  // agent/collectors/macro.py 實作確認可跑，之前六批都漏勾，這次補上。
+  // 美股（unverified，macro.py 未實作）、穩定幣總供給／BTC dominance（public，
+  // 未實作）先不勾，維持現狀待賽前驗證。
+  const SEEDED_KEY_7 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21g';
+  if (!localStorage.getItem(SEEDED_KEY_7)) {
+    const DEFAULT_DONE_7 = [
+      'BTC|fear-greed|1', 'ETH|fear-greed|1', 'SOL|fear-greed|1', 'BNB|fear-greed|1', 'XRP|fear-greed|1',
+      'BTC|usd-fx|1', 'ETH|usd-fx|1', 'SOL|usd-fx|1', 'BNB|usd-fx|1', 'XRP|usd-fx|1',
+      'BTC|us-treasury-10y|1', 'ETH|us-treasury-10y|1', 'SOL|us-treasury-10y|1', 'BNB|us-treasury-10y|1', 'XRP|us-treasury-10y|1',
+    ];
+    DEFAULT_DONE_7.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_7, '1');
     save();
   }
 
