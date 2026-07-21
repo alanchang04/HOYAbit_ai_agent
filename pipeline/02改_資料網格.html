@@ -231,7 +231,7 @@
 <div class="wrap">
 
   <h1>資料抓取網格總表 — 方向 × 幣種 × 三層用途</h1>
-  <p class="meta">衍生自 <code>02_資料來源設計筆記.md</code>（02 原檔未動）・點任一色塊看「去哪抓／怎麼抓／怎麼讀」・左邊打勾記錄「這項我做完了」（存在瀏覽器本機，重開頁面還在）・更新 2026-07-20</p>
+  <p class="meta">衍生自 <code>02_資料來源設計筆記.md</code>（02 原檔未動）・點任一色塊看「去哪抓／怎麼抓／怎麼讀」・左邊打勾記錄「這項我做完了」（存在瀏覽器本機，重開頁面還在）・更新 2026-07-21</p>
   <p class="progress" id="checklistProgress"></p>
 
   <div class="legend">
@@ -373,36 +373,31 @@
       <th class="dir"><span class="zh">4&nbsp;Social 社群</span><span class="col">social</span><span class="note">X 大老＋YT 逐字稿＝Ken 7/19 新增</span></th>
       <td><div class="chips">
         <button type="button" class="chip l1" data-spec="reddit-search" data-coin="BTC"><span class="t">層1</span><span>r/Bitcoin 熱度：score／留言數 <span class="src">Reddit search.json</span></span></button>
-        <button type="button" class="chip l1" data-spec="x-mention-count" data-coin="BTC"><span class="t">層1</span><span>X 大老提及 BTC 次數統計 <span class="src">X</span></span></button>
-        <button type="button" class="chip l2" data-spec="x-mention-count" data-coin="BTC"><span class="t">層2</span><span>X 大老對 BTC 的觀點立場 <span class="src">X</span></span></button>
+        <button type="button" class="chip l1 l2" data-spec="x-mention-count" data-coin="BTC"><span class="t">層1+2</span><span>X 大老提及次數＋觀點立場 <span class="src">X</span></span></button>
         <button type="button" class="chip l1" data-spec="yt-transcript" data-coin="BTC"><span class="t">層1</span><span>YT 逐字稿（cakebaba 等）提及 BTC 次數 <span class="src">YT</span></span></button>
         <button type="button" class="chip l2" data-spec="yt-transcript" data-coin="BTC"><span class="t">層2</span><span>YT 對 BTC 的看法摘要 <span class="src">YT</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l1" data-spec="reddit-search" data-coin="ETH"><span class="t">層1</span><span>r/ethereum 熱度：score／留言數 <span class="src">Reddit search.json</span></span></button>
-        <button type="button" class="chip l1" data-spec="x-mention-count" data-coin="ETH"><span class="t">層1</span><span>X 大老提及 ETH 次數統計 <span class="src">X</span></span></button>
-        <button type="button" class="chip l2" data-spec="x-mention-count" data-coin="ETH"><span class="t">層2</span><span>X 大老對 ETH 的觀點立場 <span class="src">X</span></span></button>
+        <button type="button" class="chip l1 l2" data-spec="x-mention-count" data-coin="ETH"><span class="t">層1+2</span><span>X 大老提及次數＋觀點立場 <span class="src">X</span></span></button>
         <button type="button" class="chip l1" data-spec="yt-transcript" data-coin="ETH"><span class="t">層1</span><span>YT 逐字稿提及 ETH 次數 <span class="src">YT</span></span></button>
         <button type="button" class="chip l2" data-spec="yt-transcript" data-coin="ETH"><span class="t">層2</span><span>YT 對 ETH 的看法摘要 <span class="src">YT</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l1" data-spec="reddit-search" data-coin="SOL"><span class="t">層1</span><span>r/solana 熱度：score／留言數 <span class="src">Reddit search.json</span></span></button>
-        <button type="button" class="chip l1" data-spec="x-mention-count" data-coin="SOL"><span class="t">層1</span><span>X 大老提及 SOL 次數統計 <span class="src">X</span></span></button>
-        <button type="button" class="chip l2" data-spec="x-mention-count" data-coin="SOL"><span class="t">層2</span><span>X 大老對 SOL 的觀點立場 <span class="src">X</span></span></button>
+        <button type="button" class="chip l1 l2" data-spec="x-mention-count" data-coin="SOL"><span class="t">層1+2</span><span>X 大老提及次數＋觀點立場 <span class="src">X</span></span></button>
         <button type="button" class="chip l1" data-spec="yt-transcript" data-coin="SOL"><span class="t">層1</span><span>YT 逐字稿提及 SOL 次數 <span class="src">YT</span></span></button>
         <button type="button" class="chip l2" data-spec="yt-transcript" data-coin="SOL"><span class="t">層2</span><span>YT 對 SOL 的看法摘要 <span class="src">YT</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l1" data-spec="reddit-search" data-coin="BNB"><span class="t">層1</span><span>r/binance 熱度：score／留言數 <span class="src">Reddit search.json</span></span></button>
-        <button type="button" class="chip l1" data-spec="x-mention-count" data-coin="BNB"><span class="t">層1</span><span>X 大老提及 BNB 次數統計 <span class="src">X</span></span></button>
-        <button type="button" class="chip l2" data-spec="x-mention-count" data-coin="BNB"><span class="t">層2</span><span>X 大老對 BNB 的觀點立場 <span class="src">X</span></span></button>
+        <button type="button" class="chip l1 l2" data-spec="x-mention-count" data-coin="BNB"><span class="t">層1+2</span><span>X 大老提及次數＋觀點立場 <span class="src">X</span></span></button>
         <button type="button" class="chip l1" data-spec="yt-transcript" data-coin="BNB"><span class="t">層1</span><span>YT 逐字稿提及 BNB 次數 <span class="src">YT</span></span></button>
         <button type="button" class="chip l2" data-spec="yt-transcript" data-coin="BNB"><span class="t">層2</span><span>YT 對 BNB 的看法摘要 <span class="src">YT</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l1" data-spec="reddit-search" data-coin="XRP"><span class="t">層1</span><span>r/XRP・r/Ripple 熱度：score／留言數 <span class="src">Reddit search.json</span></span></button>
-        <button type="button" class="chip l1" data-spec="x-mention-count" data-coin="XRP"><span class="t">層1</span><span>X 大老提及 XRP 次數統計 <span class="src">X</span></span></button>
-        <button type="button" class="chip l2" data-spec="x-mention-count" data-coin="XRP"><span class="t">層2</span><span>X 大老對 XRP 的觀點立場 <span class="src">X</span></span></button>
+        <button type="button" class="chip l1 l2" data-spec="x-mention-count" data-coin="XRP"><span class="t">層1+2</span><span>X 大老提及次數＋觀點立場 <span class="src">X</span></span></button>
         <button type="button" class="chip l1" data-spec="yt-transcript" data-coin="XRP"><span class="t">層1</span><span>YT 逐字稿提及 XRP 次數 <span class="src">YT</span></span></button>
         <button type="button" class="chip l2" data-spec="yt-transcript" data-coin="XRP"><span class="t">層2</span><span>YT 對 XRP 的看法摘要 <span class="src">YT</span></span></button>
       </div></td>
@@ -419,7 +414,8 @@
         <button type="button" class="chip l3" data-spec="stablecoin-supply" data-coin="BTC"><span class="t">層3</span><span>穩定幣總供給／佔比＝場內彈藥 <span class="src">DefiLlama</span></span></button>
         <button type="button" class="chip l3" data-spec="btc-dominance" data-coin="BTC"><span class="t">層3</span><span>BTC dominance／總市值 regime <span class="src">CoinGecko</span></span></button>
         <button type="button" class="chip l3" data-spec="event-calendar" data-coin="BTC"><span class="t">層3</span><span>事件日曆：FOMC／CPI →「距下次 X 天」 <span class="src">賽前靜態 JSON</span></span></button>
-        <button type="button" class="chip l1" data-spec="macro-sensitivity-beta" data-coin="BTC"><span class="t">層1</span><span>BTC 宏觀敏感度 β <span class="src">Frankfurter＋CSV</span></span></button>
+        <button type="button" class="chip l1 hold" data-spec="macro-sensitivity-beta" data-coin="BTC"><span class="t">層1</span><span>BTC 宏觀敏感度 β <span class="src">Frankfurter＋CSV・⏸先不做</span></span></button>
+        <button type="button" class="chip l2" data-spec="coin-unlock-calendar" data-coin="BTC"><span class="t">層2</span><span>減半倒數（供給衝擊，數年一次） <span class="src">賽前整理</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l3" data-spec="fear-greed" data-coin="ETH"><span class="t">層3</span><span>恐懼貪婪指數近 30 天百分位 <span class="src">alternative.me</span></span></button>
@@ -429,7 +425,7 @@
         <button type="button" class="chip l3" data-spec="stablecoin-supply" data-coin="ETH"><span class="t">層3</span><span>穩定幣總供給／佔比 <span class="src">DefiLlama</span></span></button>
         <button type="button" class="chip l3" data-spec="btc-dominance" data-coin="ETH"><span class="t">層3</span><span>BTC dominance／總市值 regime <span class="src">CoinGecko</span></span></button>
         <button type="button" class="chip l3" data-spec="event-calendar" data-coin="ETH"><span class="t">層3</span><span>事件日曆：FOMC／CPI <span class="src">靜態 JSON</span></span></button>
-        <button type="button" class="chip l1" data-spec="macro-sensitivity-beta" data-coin="ETH"><span class="t">層1</span><span>ETH 宏觀敏感度 β <span class="src">Frankfurter＋CSV</span></span></button>
+        <button type="button" class="chip l1 hold" data-spec="macro-sensitivity-beta" data-coin="ETH"><span class="t">層1</span><span>ETH 宏觀敏感度 β <span class="src">Frankfurter＋CSV・⏸先不做</span></span></button>
       </div></td>
       <td><div class="chips">
         <button type="button" class="chip l3" data-spec="fear-greed" data-coin="SOL"><span class="t">層3</span><span>恐懼貪婪指數近 30 天百分位 <span class="src">alternative.me</span></span></button>
@@ -439,7 +435,7 @@
         <button type="button" class="chip l3" data-spec="stablecoin-supply" data-coin="SOL"><span class="t">層3</span><span>穩定幣總供給／佔比 <span class="src">DefiLlama</span></span></button>
         <button type="button" class="chip l3" data-spec="btc-dominance" data-coin="SOL"><span class="t">層3</span><span>BTC dominance／總市值 regime <span class="src">CoinGecko</span></span></button>
         <button type="button" class="chip l3" data-spec="event-calendar" data-coin="SOL"><span class="t">層3</span><span>事件日曆：FOMC／CPI＋SOL 解鎖日 <span class="src">靜態 JSON</span></span></button>
-        <button type="button" class="chip l1" data-spec="macro-sensitivity-beta" data-coin="SOL"><span class="t">層1</span><span>SOL 宏觀敏感度 β <span class="src">Frankfurter＋CSV</span></span></button>
+        <button type="button" class="chip l1 hold" data-spec="macro-sensitivity-beta" data-coin="SOL"><span class="t">層1</span><span>SOL 宏觀敏感度 β <span class="src">Frankfurter＋CSV・⏸先不做</span></span></button>
         <button type="button" class="chip l2" data-spec="coin-unlock-calendar" data-coin="SOL"><span class="t">層2</span><span>大額代幣解鎖日曆（供給衝擊） <span class="src">賽前整理</span></span></button>
       </div></td>
       <td><div class="chips">
@@ -450,7 +446,7 @@
         <button type="button" class="chip l3" data-spec="stablecoin-supply" data-coin="BNB"><span class="t">層3</span><span>穩定幣總供給／佔比 <span class="src">DefiLlama</span></span></button>
         <button type="button" class="chip l3" data-spec="btc-dominance" data-coin="BNB"><span class="t">層3</span><span>BTC dominance／總市值 regime <span class="src">CoinGecko</span></span></button>
         <button type="button" class="chip l3" data-spec="event-calendar" data-coin="BNB"><span class="t">層3</span><span>事件日曆：FOMC／CPI <span class="src">靜態 JSON</span></span></button>
-        <button type="button" class="chip l1" data-spec="macro-sensitivity-beta" data-coin="BNB"><span class="t">層1</span><span>BNB 宏觀敏感度 β <span class="src">Frankfurter＋CSV</span></span></button>
+        <button type="button" class="chip l1 hold" data-spec="macro-sensitivity-beta" data-coin="BNB"><span class="t">層1</span><span>BNB 宏觀敏感度 β <span class="src">Frankfurter＋CSV・⏸先不做</span></span></button>
         <button type="button" class="chip l2" data-spec="coin-unlock-calendar" data-coin="BNB"><span class="t">層2</span><span>季度銷毀日程（供給收縮） <span class="src">賽前整理</span></span></button>
       </div></td>
       <td><div class="chips">
@@ -461,7 +457,7 @@
         <button type="button" class="chip l3" data-spec="stablecoin-supply" data-coin="XRP"><span class="t">層3</span><span>穩定幣總供給／佔比 <span class="src">DefiLlama</span></span></button>
         <button type="button" class="chip l3" data-spec="btc-dominance" data-coin="XRP"><span class="t">層3</span><span>BTC dominance／總市值 regime <span class="src">CoinGecko</span></span></button>
         <button type="button" class="chip l3" data-spec="event-calendar" data-coin="XRP"><span class="t">層3</span><span>事件日曆：FOMC／CPI＋escrow 釋出日 <span class="src">靜態 JSON</span></span></button>
-        <button type="button" class="chip l1" data-spec="macro-sensitivity-beta" data-coin="XRP"><span class="t">層1</span><span>XRP 宏觀敏感度 β <span class="src">Frankfurter＋CSV</span></span></button>
+        <button type="button" class="chip l1 hold" data-spec="macro-sensitivity-beta" data-coin="XRP"><span class="t">層1</span><span>XRP 宏觀敏感度 β <span class="src">Frankfurter＋CSV・⏸先不做</span></span></button>
         <button type="button" class="chip l2" data-spec="coin-unlock-calendar" data-coin="XRP"><span class="t">層2</span><span>每月 escrow 釋出 10 億枚（供給節奏） <span class="src">賽前整理</span></span></button>
       </div></td>
     </tr>
@@ -506,7 +502,7 @@
         <button type="button" class="chip l1" data-spec="cex-dex-funding-diff" data-coin="SOL"><span class="t">層1</span><span>CEX vs DEX 費率差 <span class="src">Binance vs HL</span></span></button>
         <button type="button" class="chip l1" data-spec="liquidation-flow-hl" data-coin="SOL"><span class="t">層1</span><span>清算流 <span class="src">Hyperliquid</span></span></button>
         <button type="button" class="chip l2" data-spec="options-deribit" data-coin="SOL"><span class="t">層2</span><span>選擇權 IV・Put/Call・25Δ skew <span class="src">Binance Options</span></span></button>
-        <button type="button" class="chip l1" data-spec="futures-term-structure" data-coin="SOL"><span class="t">層1</span><span>到期結構（視 COIN-M 上市） <span class="src">Binance</span></span></button>
+        <button type="button" class="chip l1" data-spec="futures-term-structure" data-coin="SOL"><span class="t">層1</span><span>期貨到期結構曲線（COIN-M） <span class="src">Binance 季度約</span></span></button>
         <button type="button" class="chip l2" data-spec="cme-cot" data-coin="SOL"><span class="t">層2</span><span>CME COT（2025 起有 SOL 期貨） <span class="src">CFTC 週報</span></span></button>
         <button type="button" class="chip l1" data-spec="orderbook-depth-spread" data-coin="SOL"><span class="t">層1</span><span>top-of-book 價差（bps） <span class="src">Kraken／Coinbase</span></span></button>
         <button type="button" class="chip l1" data-spec="orderbook-depth-spread" data-coin="SOL"><span class="t">層1</span><span>±1% 訂單簿深度（USD） <span class="src">Kraken／Coinbase</span></span></button>
@@ -520,6 +516,7 @@
         <button type="button" class="chip l1" data-spec="cex-dex-funding-diff" data-coin="BNB"><span class="t">層1</span><span>CEX vs DEX 費率差 <span class="src">Binance vs HL</span></span></button>
         <button type="button" class="chip l1" data-spec="liquidation-flow-hl" data-coin="BNB"><span class="t">層1</span><span>清算流 <span class="src">Hyperliquid</span></span></button>
         <button type="button" class="chip l2" data-spec="options-deribit" data-coin="BNB"><span class="t">層2</span><span>選擇權 IV・Put/Call・25Δ skew・無 CME <span class="src">Binance Options</span></span></button>
+        <button type="button" class="chip l1" data-spec="futures-term-structure" data-coin="BNB"><span class="t">層1</span><span>期貨到期結構曲線（COIN-M） <span class="src">Binance 季度約</span></span></button>
         <button type="button" class="chip l1" data-spec="hyperliquid-l2book" data-coin="BNB"><span class="t">層1</span><span>top-of-book 價差（bps） <span class="src">HL l2Book（美系不上 BNB）</span></span></button>
         <button type="button" class="chip l1" data-spec="hyperliquid-l2book" data-coin="BNB"><span class="t">層1</span><span>±1% 訂單簿深度（USD） <span class="src">HL l2Book</span></span></button>
         <button type="button" class="chip l2" data-spec="orderbook-depth-spread" data-coin="BNB"><span class="t">層2</span><span>美系交易所深度缺席＝風險特徵</span></button>
@@ -533,7 +530,7 @@
         <button type="button" class="chip l1" data-spec="cex-dex-funding-diff" data-coin="XRP"><span class="t">層1</span><span>CEX vs DEX 費率差 <span class="src">Binance vs HL</span></span></button>
         <button type="button" class="chip l1" data-spec="liquidation-flow-hl" data-coin="XRP"><span class="t">層1</span><span>清算流 <span class="src">Hyperliquid</span></span></button>
         <button type="button" class="chip l2" data-spec="options-deribit" data-coin="XRP"><span class="t">層2</span><span>選擇權 IV・Put/Call・25Δ skew <span class="src">Binance Options</span></span></button>
-        <button type="button" class="chip l1" data-spec="futures-term-structure" data-coin="XRP"><span class="t">層1</span><span>到期結構（視上市） <span class="src">Binance</span></span></button>
+        <button type="button" class="chip l1" data-spec="futures-term-structure" data-coin="XRP"><span class="t">層1</span><span>期貨到期結構曲線（COIN-M） <span class="src">Binance 季度約</span></span></button>
         <button type="button" class="chip l2" data-spec="cme-cot" data-coin="XRP"><span class="t">層2</span><span>CME COT（2025 起有 XRP 期貨） <span class="src">CFTC 週報</span></span></button>
         <button type="button" class="chip l1" data-spec="orderbook-depth-spread" data-coin="XRP"><span class="t">層1</span><span>top-of-book 價差（bps） <span class="src">Kraken／Coinbase</span></span></button>
         <button type="button" class="chip l1" data-spec="orderbook-depth-spread" data-coin="XRP"><span class="t">層1</span><span>±1% 訂單簿深度（USD） <span class="src">Kraken／Coinbase</span></span></button>
@@ -753,15 +750,16 @@ const SPECS = {
   },
   'macro-sensitivity-beta': {
     title: '宏觀敏感度 β', status: 'local',
-    where: '複用已抓到的 Frankfurter 匯率歷史＋該幣 CSV，不新增外部來源。',
-    how: '抓 30 天美元匯率序列（需改用 Frankfurter 的時間區間查詢，每天各存一次），跟該幣日報酬序列做滾動相關係數/回歸 β。',
+    where: '⏸ 先不做——評估後跟 correlation-beta 一樣 hold（2026-07-21）。複用已抓到的 Frankfurter 匯率歷史＋該幣 CSV，不新增外部來源。',
+    how: '抓 30 天美元匯率序列（實測發現 Frankfurter 支援區間查詢，一次 call 拿整段，不用像原本設想的迴圈打），跟該幣日報酬序列做滾動相關係數/回歸 β。',
     read: 'β 數字越大＝這個幣對總經環境（美元強弱）越敏感，可直接拿來回答「當前宏觀環境下誰的宏觀敞口大」這種比較題。',
+    caveat: '不做的理由：30 天樣本對美元匯率（日波動遠比幣小、雜訊比例高）做迴歸，β 數字容易不穩定；層3 的 usd-fx 已經有「美元強不強」可以直接搭配各幣走勢講故事，β 只是多包一層「誰對美元比較敏感」，五幣多半同漲同跌（都是風險資產），差異有限，效益不成比例。',
   },
   'coin-unlock-calendar': {
     title: '幣種供給節奏日曆', status: 'local',
-    where: p => `依 ${p.ticker} 個別狀況人工整理：${p.ticker==='SOL' ? 'SOL 查生態基金/團隊解鎖排程' : p.ticker==='BNB' ? 'BNB 查季度銷毀公告' : 'XRP 查 Ripple escrow 月度釋出排程（每月 10 億枚，多數會被重新鎖回）'}。`,
-    how: '賽前手動查好下一次事件日期跟金額規模，做成本地靜態資料，執行時零連線風險。',
-    read: '大額解鎖/銷毀是供給面衝擊——解鎖前市場常有拋壓預期、銷毀則是通縮敘事，這是該幣特有（層2）的供給結構訊號，不同幣種之間不能直接比大小。',
+    where: p => `依 ${p.ticker} 個別狀況人工整理：${p.ticker==='BTC' ? 'BTC 查減半（halving）區塊高度與預估日期' : p.ticker==='SOL' ? 'SOL 原本設想查生態基金/團隊解鎖排程，但 2026-07-21 查證後發現對不上——目前實際最大供給壓力來源是 FTX/Alameda 破產遺產清算，不是團隊 vesting，沒有固定日期規則，依法院/受託人清算進度決定' : p.ticker==='BNB' ? 'BNB 查季度銷毀公告' : 'XRP 查 Ripple escrow 月度釋出排程（每月 10 億枚，多數會被重新鎖回）'}。`,
+    how: '賽前手動查好下一次事件日期跟金額規模，做成本地靜態資料，執行時零連線風險。2026-07-21 已完成一次人工研究，見 pipeline/流程紀錄.md：BTC 下次減半預估 2028-04-17（區塊高度 1,050,000）；BNB 下次季度銷毀約 2026-10；XRP 下次 escrow 釋出 2026-08-01；SOL 無固定日期，estate 仍有約 418 萬 SOL 陸續解鎖中。',
+    read: '大額解鎖/銷毀是供給面衝擊——解鎖前市場常有拋壓預期、銷毀則是通縮敘事，這是該幣特有（層2）的供給結構訊號，不同幣種之間不能直接比大小；BTC 減半時間尺度是數年一次，跟其他三幣季度/月度的節奏不是同一口徑，讀報告時不能直接比「下次事件還有幾天」。SOL 這格語氣要保守，不能講「下次解鎖是 X 天後」這種確定性用詞，因為驅動事件是清算進度不是排程。ETH 仍不掛這格——查證過沒有等價的「固定日期＋供給數字」事件。',
   },
   'funding-rate-percentile': {
     title: '費率擁擠度', status: 'public',
@@ -795,9 +793,9 @@ const SPECS = {
   },
   'cex-dex-funding-diff': {
     title: 'CEX vs DEX 費率差', status: 'public',
-    where: p => `複用 ${p.perp} 在 Binance 的費率，加上 Hyperliquid 同幣種的費率。`,
-    how: 'Hyperliquid：POST <code>https://api.hyperliquid.xyz/info</code>，body <code>{"type":"metaAndAssetCtxs"}</code>，回傳 <code>[meta, assetCtxs]</code> 兩個陣列，用 <code>meta.universe</code> 找到該幣在陣列中的 index，取 <code>assetCtxs</code> 同 index 的 <code>funding</code> 欄位；跟 Binance <code>premiumIndex</code> 的 <code>lastFundingRate</code> 相減。',
-    read: 'CEX 費率明顯高於 DEX（或反過來）＝槓桿集中在特定場地，可能代表該場地參與者結構（散戶 vs 鏈上原生玩家）方向不一致，是產生器第2招「背離」的具體應用。',
+    where: p => `複用 ${p.perp} 在 Binance 的費率，加上 Hyperliquid 同幣種的費率。已於 2026-07-21 對 BTC/ETH/SOL/BNB/XRP 五幣實測，皆在 Hyperliquid universe 中找得到，prototype 見 pipeline/流程紀錄.md。`,
+    how: 'Hyperliquid：POST <code>https://api.hyperliquid.xyz/info</code>，body <code>{"type":"metaAndAssetCtxs"}</code>，回傳 <code>[meta, assetCtxs]</code> 兩個陣列，用 <code>meta.universe</code> 找到該幣在陣列中的 index，取 <code>assetCtxs</code> 同 index 的 <code>funding</code> 欄位；跟 Binance <code>premiumIndex</code> 的 <code>lastFundingRate</code> 比較。⚠️ 實測發現兩邊結算週期不同（Binance 8 小時／HL 1 小時），不能直接相減，要先各自換算成年化（Binance ×3×365、HL ×24×365）再比較，原始未年化數字也保留供對照。',
+    read: 'CEX 年化費率明顯高於 DEX（或反過來）＝槓桿集中在特定場地，可能代表該場地參與者結構（散戶 vs 鏈上原生玩家）方向不一致，是產生器第2招「背離」的具體應用；差距 ≥5%（年化）才算明顯背離，避免雜訊誤讀。HL 費率貼近 +10.95%（每小時 0.00125%）時，那是 HL funding 公式的基礎利率地板，不是頂格上限，代表該幣多空力道接近平衡。',
   },
   'liquidation-flow-hl': {
     title: '清算流', status: 'unverified',
@@ -815,12 +813,12 @@ const SPECS = {
   },
   'futures-term-structure': {
     title: '期貨到期結構曲線', status: 'public',
-    where: 'Binance 公開 API，季度合約集中在 USDⓈ-M（BTC/ETH 為主），COIN-M（<code>dapi.binance.com</code>）覆蓋種類較多。',
-    how: p => `先 GET <code>https://fapi.binance.com/fapi/v1/exchangeInfo</code> 動態查目前有哪些 ${p.ticker} 的季度合約在掛牌（欄位 <code>contractType=CURRENT_QUARTER/NEXT_QUARTER</code>，symbol 格式如 <code>BTCUSDT_240628</code>，代碼每季會換不能寫死）；找到代碼後用 <code>premiumIndex</code> 或 <code>ticker/price</code> 分別拿永續、近月、次月現價，換算年化基差畫成一條曲線。`,
-    read: '曲線正向上揚（遠月價 > 近月價 > 現貨，contango）＝正常市場，反映資金成本；曲線倒掛（backwardation，近月反而比遠月貴）＝短期拋壓/擠倉壓力大，是偏空的期限結構訊號。跨幣比較時，誰的曲線更貼水，誰的短期壓力就更大。',
+    where: '02 筆記原本假設「季度合約集中在 USDⓈ-M（BTC/ETH 為主），COIN-M 覆蓋種類較多」——已於 2026-07-20 實測 <code>exchangeInfo</code> 核對：USDⓈ-M（<code>fapi.binance.com</code>）確實只有 BTCUSDT／ETHUSDT 掛季度合約，但 COIN-M（<code>dapi.binance.com</code>）BTC/ETH/SOL/BNB/XRP 五幣全部都有當季＋次季合約在掛牌（<code>CURRENT_QUARTER</code>＋<code>NEXT_QUARTER</code>，皆 <code>contractStatus=TRADING</code>），包含 BNB——這是原本筆記沒查到、這次補上的，改用 COIN-M 當五幣統一資料源。prototype 見 pipeline/流程紀錄.md。',
+    how: p => `先 GET <code>https://dapi.binance.com/dapi/v1/exchangeInfo</code> 動態查目前有哪些 ${p.ticker} 的季度合約在掛牌（欄位 <code>contractType=CURRENT_QUARTER/NEXT_QUARTER</code>，symbol 格式如 <code>${p.ticker}USD_240628</code>，代碼每季會換不能寫死）；找到代碼後用 <code>/dapi/v1/premiumIndex</code> 分別拿永續、當季、次季的 <code>markPrice</code>／<code>indexPrice</code>，永續基差不年化、當季次季年化後換算成一條曲線。`,
+    read: '曲線正向上揚（遠月價 > 近月價 > 現貨，contango）＝正常市場，反映資金成本；曲線倒掛（backwardation，近月反而比遠月貴）＝短期拋壓/擠倉壓力大，是偏空的期限結構訊號。2026-07-20 實測結果：BTC/ETH/BNB/XRP 四幣維持 contango；SOL 次季轉負、曲線不是單調（mixed），是五幣中唯一出現期限結構背離的案例，可當短期不確定性偏高的量化佐證。跨幣比較時，誰的曲線更貼水，誰的短期壓力就更大。',
   },
   'cme-cot': {
-    title: 'CME COT 機構淨倉位', status: 'local',
+    title: 'CME COT 機構淨倉位', status: 'public',
     where: 'CFTC（美國商品期貨交易委員會）公開 Socrata Open Data API，免 key，週報。',
     how: '端點已實測核對：<code>https://publicreporting.cftc.gov/resource/gpe5-46if.json</code>（dataset「Traders in Financial Futures - Futures Only」，resource id <code>gpe5-46if</code>）。用 <code>market_and_exchange_names</code> 精確比對（不是模糊 like，避免混進 MICRO／NANO 等其他規格合約）：BTC=<code>BITCOIN - CHICAGO MERCANTILE EXCHANGE</code>、ETH=<code>ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE</code>、SOL=<code>SOL - CHICAGO MERCANTILE EXCHANGE</code>、XRP=<code>XRP - CHICAGO MERCANTILE EXCHANGE</code>。淨倉位＝ <code>asset_mgr_positions_long - asset_mgr_positions_short</code>（Leveraged Funds 同理）。資料是週頻（每週五公布，數據落後到週二），不是即時。Prototype：<code>pipeline/fetch_cme_cot.py</code>。',
     read: 'asset managers/leveraged funds 的週度淨多空倉位變化，是字面意義上的「華爾街怎麼佈局」；連續增加淨多單通常解讀為機構轉趨樂觀，但因為週頻更新，不適合當即時訊號，是層2 敘事的背景佐證。',
@@ -949,6 +947,39 @@ document.addEventListener('keydown', (e) => {
     ];
     DEFAULT_DONE.forEach((key) => { state[key] = true; });
     localStorage.setItem(SEEDED_KEY, '1');
+    save();
+  }
+
+  // 2026-07-21：對照 pipeline/流程紀錄.md 補打勾——費率擁擠度／OI×價格四象限／
+  // 選擇權 IV（統一 Binance Options）／期貨到期結構（COIN-M，含新補的 BNB）／
+  // 永續基差（已核對併進 price.py 原始碼）五幣皆實測完成；供給節奏日曆補
+  // BTC/SOL/BNB/XRP（ETH 仍不掛，查證後確認沒有等價事件）；YT 逐字稿只勾 BTC
+  // 兩塊（cakebaba 頻道），其他四幣還沒頻道名單不勾。獨立一個 SEEDED_KEY，
+  // 不重跑前一批，避免蓋掉 Ken 手動改過的狀態。
+  const SEEDED_KEY_2 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21b';
+  if (!localStorage.getItem(SEEDED_KEY_2)) {
+    const DEFAULT_DONE_2 = [
+      'BTC|funding-rate-percentile|1', 'ETH|funding-rate-percentile|1', 'SOL|funding-rate-percentile|1', 'BNB|funding-rate-percentile|1', 'XRP|funding-rate-percentile|1',
+      'BTC|futures-term-structure|1', 'ETH|futures-term-structure|1', 'SOL|futures-term-structure|1', 'BNB|futures-term-structure|1', 'XRP|futures-term-structure|1',
+      'BTC|perp-basis|1', 'ETH|perp-basis|1', 'SOL|perp-basis|1', 'BNB|perp-basis|1', 'XRP|perp-basis|1',
+      'BTC|options-deribit|1', 'ETH|options-deribit|1', 'SOL|options-deribit|1', 'BNB|options-deribit|1', 'XRP|options-deribit|1',
+      'BTC|oi-price-quadrant|1', 'ETH|oi-price-quadrant|1', 'SOL|oi-price-quadrant|1', 'BNB|oi-price-quadrant|1', 'XRP|oi-price-quadrant|1',
+      'BTC|coin-unlock-calendar|1', 'SOL|coin-unlock-calendar|1', 'BNB|coin-unlock-calendar|1', 'XRP|coin-unlock-calendar|1',
+      'BTC|yt-transcript|1', 'BTC|yt-transcript|2',
+    ];
+    DEFAULT_DONE_2.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_2, '1');
+    save();
+  }
+
+  // 2026-07-21c：CEX vs DEX 費率差（Binance vs Hyperliquid）五幣實測完成，補打勾。
+  const SEEDED_KEY_3 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21c';
+  if (!localStorage.getItem(SEEDED_KEY_3)) {
+    const DEFAULT_DONE_3 = [
+      'BTC|cex-dex-funding-diff|1', 'ETH|cex-dex-funding-diff|1', 'SOL|cex-dex-funding-diff|1', 'BNB|cex-dex-funding-diff|1', 'XRP|cex-dex-funding-diff|1',
+    ];
+    DEFAULT_DONE_3.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_3, '1');
     save();
   }
 
