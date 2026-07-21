@@ -983,6 +983,18 @@ document.addEventListener('keydown', (e) => {
     save();
   }
 
+  // 2026-07-21d：跨幣費率差（複用費率擁擠度百分位本地相減，零外部 API）五幣
+  // 實測完成，5x4=20 個方向組合全算出存檔，補打勾。
+  const SEEDED_KEY_4 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21d';
+  if (!localStorage.getItem(SEEDED_KEY_4)) {
+    const DEFAULT_DONE_4 = [
+      'BTC|cross-coin-funding-diff|1', 'ETH|cross-coin-funding-diff|1', 'SOL|cross-coin-funding-diff|1', 'BNB|cross-coin-funding-diff|1', 'XRP|cross-coin-funding-diff|1',
+    ];
+    DEFAULT_DONE_4.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_4, '1');
+    save();
+  }
+
   function updateProgress() {
     const total = document.querySelectorAll('.chip-check').length;
     const done = document.querySelectorAll('.chip-check:checked').length;
