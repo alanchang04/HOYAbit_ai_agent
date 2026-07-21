@@ -76,7 +76,7 @@ SUPPORTED_COINS: tuple[str, ...] = tuple(COIN_INFO.keys())
 
 # 只用「不易與一般文字/單字混淆」的全名別名做大小寫不敏感比對；
 # ticker 本身用大小寫敏感比對（避免 "sol"、"eth" 等短別名誤判成一般英文單字的一部分）。
-_FULL_NAME_ALIASES: dict[str, tuple[str, ...]] = {
+FULL_NAME_ALIASES: dict[str, tuple[str, ...]] = {
     "BTC": ("bitcoin",),
     "ETH": ("ethereum",),
     "SOL": ("solana",),
@@ -100,7 +100,7 @@ def detect_coins_in_text(text: str) -> list[str]:
         idx = text.find(ticker)
         if idx != -1:
             positions.append((idx, ticker))
-        for alias in _FULL_NAME_ALIASES.get(ticker, ()):
+        for alias in FULL_NAME_ALIASES.get(ticker, ()):
             idx2 = text_lower.find(alias)
             if idx2 != -1:
                 positions.append((idx2, ticker))

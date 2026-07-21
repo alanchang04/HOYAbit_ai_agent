@@ -17,18 +17,79 @@
         <strong>執行失敗：</strong> {{ error }}
       </div>
     {% else %}
+      {# Header summary from RunMetrics #}
+      <div class="run-summary">
+        <span>生成時間：{{ view_metrics.get("generated_at", "N/A") }}</span>
+        <span>信心：{{ view_metrics.get("confidence_score", "N/A") }}%</span>
+        <span>雜訊剔除率：{{ "%.1f"|format(view_metrics.get("noise_removal_rate", 0) * 100) }}%</span>
+        <span>Tokens：{{ view_metrics.get("total_tokens", "N/A") }}</span>
+      </div>
+
       <p class="meta">
         耗時 {{ "%.2f"|format(result.elapsed_seconds) }} 秒
         （degraded_mode={{ result.degraded_mode }}） ｜
         證據筆數：{{ result.evidences|length }}
       </p>
       <p class="downloads">
+        <a href="/view/{{ run_id }}"><strong>四面板檢視</strong></a> ｜
         <a href="/download/{{ run_id }}/report.md">下載 report.md</a> ｜
         <a href="/download/{{ run_id }}/evidence.json">下載 evidence.json</a> ｜
-        <a href="/download/{{ run_id }}/execution_log.jsonl">下載 execution_log.jsonl</a>
+        <a href="/download/{{ run_id }}/execution_log.jsonl">下載 execution_log.jsonl</a> ｜
+        <a href="/download/{{ run_id }}/report_view.json">下載 report_view.json</a>
       </p>
-      <pre class="report">{{ result.report_markdown }}</pre>
+
+      {# Tab navigation #}
+      <div class="tabs">
+        <nav class="tab-nav">
+          <button class="tab-btn active" data-tab="report">報告</button>
+          <button class="tab-btn" data-tab="timeline">執行時間線</button>
+          <button class="tab-btn" data-tab="rawlog">Raw Log</button>
+        </nav>
+
+        {# Tab 1: 報告 (existing report content) #}
+        <div class="tab-panel active" id="tab-report">
+          <pre class="report">{{ result.report_markdown }}</pre>
+        </div>
+
+        {# Tab 2: 執行時間線 #}
+        <div class="tab-panel" id="tab-timeline">
+          {% if log_entries %}
+          <div class="timeline">
+            {% for entry in log_entries %}
+            <div class="timeline-item">
+              <span class="timeline-ts">{{ entry.get("ts", "") }}</span>
+              <span class="phase-badge">{{ entry.get("phase", "") }}</span>
+              <span class="timeline-action">{{ entry.get("action", "") }}</span>
+              <span class="status-dot status-{{ entry.get('status', 'ok') }}"></span>
+              <span class="timeline-detail">{{ entry.get("detail", "") }}</span>
+              {% if entry.get("metrics") %}
+              <span class="timeline-metrics">{{ entry["metrics"] }}</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="note">無執行紀錄。</p>
+          {% endif %}
+        </div>
+
+        {# Tab 3: Raw Log #}
+        <div class="tab-panel" id="tab-rawlog">
+          <pre class="report">{{ raw_log or "（無 log 資料）" }}</pre>
+        </div>
+      </div>
     {% endif %}
   </div>
+
+  <script>
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+  </script>
 </body>
 </html>

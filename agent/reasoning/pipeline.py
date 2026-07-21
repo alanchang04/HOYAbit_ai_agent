@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from agent.logging_utils import ExecutionLogger
 from agent.reasoning.llm_client import LLMClient
 from agent.reasoning.prompts import (
     SYSTEM_PROMPT,
@@ -23,7 +24,8 @@ from agent.reasoning.prompts import (
     classify_question_type,
     extract_json,
 )
-from agent.schemas import Evidence, QuestionType
+from agent.reasoning.confidence import compute_confidence_score
+from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
 
 
 @dataclass
@@ -36,6 +38,7 @@ class ReasoningResult:
     follow_up_watchpoints: list[str] = field(default_factory=list)
     debate: dict = field(default_factory=dict)
     coin2: str | None = None
+    confidence_score: int = 0
 
 
 class ReasoningStepError(RuntimeError):
@@ -43,7 +46,12 @@ class ReasoningStepError(RuntimeError):
 
 
 def _dry_run_reasoning(
-    coin: str, question: str, question_type: QuestionType, evidences: list[Evidence], coin2: str | None = None
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    evidences: list[Evidence],
+    coin2: str | None = None,
+    logger: ExecutionLogger | None = None,
 ) -> ReasoningResult:
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
@@ -57,16 +65,77 @@ def _dry_run_reasoning(
         for stype, evs in by_type.items()
     ]
 
+    # L3 metrics：事實提取層量化
+    if logger:
+        input_count = len(evidences)
+        kept_ids: set[str] = set()
+        for f in facts:
+            kept_ids.update(f.get("evidence_ids", []))
+        kept_count = len(kept_ids)
+        removed_count = input_count - kept_count
+        removal_rate = removed_count / input_count if input_count > 0 else 0.0
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l3_fact_extraction",
+            detail=f"input={input_count}, kept={kept_count}, removed={removed_count}, rate={removal_rate:.3f}",
+            status=LogStatus.OK,
+            layer=PipelineLayer.FACT,
+            metrics={"input": input_count, "kept": kept_count, "removed": removed_count, "removal_rate": round(removal_rate, 4)},
+        )
+
     all_ids = [e.id for e in evidences]
     coin_label = f"{coin} 與 {coin2}" if coin2 else coin
+
+    cross_validation = {
+        "consistent_signals": ["（dry-run 假資料）各來源皆無法判斷實際一致性，僅為流程驗證"],
+        "contradictions": [],
+    }
+
+    # L4 metrics：交叉驗證層量化
+    if logger:
+        consistent_count = len(cross_validation.get("consistent_signals", []))
+        contradiction_count = len(cross_validation.get("contradictions", []))
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l4_cross_validation",
+            detail=f"consistent={consistent_count}, contradictions={contradiction_count}",
+            status=LogStatus.OK,
+            layer=PipelineLayer.CROSS,
+            metrics={"consistent": consistent_count, "contradictions": contradiction_count},
+        )
+
+    conclusion = {
+        "market_judgment": f"（dry-run 假資料，非真實分析）針對「{question}」，{coin_label} 的市場判斷待正式資料與 Bedrock 推理補上。",
+        "confidence": "低",
+        "limitations": ["本次為 --dry-run 假資料流程，未使用真實市場資料與 LLM 推理"],
+        "invalidation_conditions": ["正式執行並取得真實資料後，本假結論應被取代"],
+        "evidence_ids": all_ids,
+    }
+
+    # L5：數值信心分數
+    contradictions_count = len(cross_validation.get("contradictions", []))
+    score, breakdown = compute_confidence_score(
+        conclusion.get("confidence", "低"),
+        evidences,
+        contradictions_count,
+    )
+    if logger:
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l5_confidence_score",
+            detail=(
+                f"score={score}, base={breakdown['base']}, auth_bonus={breakdown['auth_bonus']}, "
+                f"contradiction_penalty={breakdown['contradiction_penalty']}, gap_penalty={breakdown['gap_penalty']}"
+            ),
+            status=LogStatus.OK,
+            layer=PipelineLayer.CONCLUSION,
+            metrics=breakdown,
+        )
 
     return ReasoningResult(
         question_type=question_type,
         facts=facts,
-        cross_validation={
-            "consistent_signals": ["（dry-run 假資料）各來源皆無法判斷實際一致性，僅為流程驗證"],
-            "contradictions": [],
-        },
+        cross_validation=cross_validation,
         inference=[
             {
                 "hypothesis": f"（dry-run 假資料）{coin_label} 市場狀態假設",
@@ -74,15 +143,10 @@ def _dry_run_reasoning(
                 "opposing_evidence_ids": [],
             }
         ],
-        conclusion={
-            "market_judgment": f"（dry-run 假資料，非真實分析）針對「{question}」，{coin_label} 的市場判斷待正式資料與 Bedrock 推理補上。",
-            "confidence": "低",
-            "limitations": ["本次為 --dry-run 假資料流程，未使用真實市場資料與 LLM 推理"],
-            "invalidation_conditions": ["正式執行並取得真實資料後，本假結論應被取代"],
-            "evidence_ids": all_ids,
-        },
+        conclusion=conclusion,
         follow_up_watchpoints=["（dry-run 假資料）此為流程驗證用，非真實觀察重點"],
         coin2=coin2,
+        confidence_score=score,
     )
 
 
@@ -166,6 +230,7 @@ def _real_reasoning(
     llm_client: LLMClient,
     log_step=None,
     coin2: str | None = None,
+    logger: ExecutionLogger | None = None,
 ) -> ReasoningResult:
     known_ids = {e.id for e in evidences}
 
@@ -180,6 +245,24 @@ def _real_reasoning(
     facts = _sanitize_facts(step_a_raw.get("facts", []), known_ids)
     _log("step_a_facts", "ok", f"facts_count={len(facts)}")
 
+    # L3 metrics：事實提取層量化
+    if logger:
+        input_count = len(evidences)
+        kept_ids: set[str] = set()
+        for f in facts:
+            kept_ids.update(f.get("evidence_ids", []))
+        kept_count = len(kept_ids)
+        removed_count = input_count - kept_count
+        removal_rate = removed_count / input_count if input_count > 0 else 0.0
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l3_fact_extraction",
+            detail=f"input={input_count}, kept={kept_count}, removed={removed_count}, rate={removal_rate:.3f}",
+            status=LogStatus.OK,
+            layer=PipelineLayer.FACT,
+            metrics={"input": input_count, "kept": kept_count, "removed": removed_count, "removal_rate": round(removal_rate, 4)},
+        )
+
     # Step B：交叉驗證層
     step_b_raw = _call_json_step(
         llm_client, build_step_b_prompt(coin, question, evidences, facts, coin2=coin2), "step_b_cross_validation"
@@ -193,6 +276,19 @@ def _real_reasoning(
         "ok",
         f"consistent={len(cross_validation['consistent_signals'])}, contradictions={len(cross_validation['contradictions'])}",
     )
+
+    # L4 metrics：交叉驗證層量化
+    if logger:
+        consistent_count = len(cross_validation.get("consistent_signals", []))
+        contradiction_count = len(cross_validation.get("contradictions", []))
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l4_cross_validation",
+            detail=f"consistent={consistent_count}, contradictions={contradiction_count}",
+            status=LogStatus.OK,
+            layer=PipelineLayer.CROSS,
+            metrics={"consistent": consistent_count, "contradictions": contradiction_count},
+        )
 
     # Step C：推論層，改為正方 vs 反方辯論（提升對抗性，避免單一模型自問自答式的假辯論）。
     # 辯論任一步（C1 正方 / C2 反方）失敗，都會退回單模型一次產出多假設的舊版 Step C，
@@ -271,6 +367,26 @@ def _real_reasoning(
     )
     _log("step_d_conclusion", "ok", f"confidence={conclusion['confidence']}")
 
+    # L5：數值信心分數
+    contradictions_count = len(cross_validation.get("contradictions", []))
+    score, breakdown = compute_confidence_score(
+        conclusion.get("confidence", "低"),
+        evidences,
+        contradictions_count,
+    )
+    if logger:
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l5_confidence_score",
+            detail=(
+                f"score={score}, base={breakdown['base']}, auth_bonus={breakdown['auth_bonus']}, "
+                f"contradiction_penalty={breakdown['contradiction_penalty']}, gap_penalty={breakdown['gap_penalty']}"
+            ),
+            status=LogStatus.OK,
+            layer=PipelineLayer.CONCLUSION,
+            metrics=breakdown,
+        )
+
     return ReasoningResult(
         question_type=question_type,
         facts=facts,
@@ -280,6 +396,7 @@ def _real_reasoning(
         follow_up_watchpoints=follow_up_watchpoints,
         debate=debate,
         coin2=coin2,
+        confidence_score=score,
     )
 
 
@@ -291,13 +408,16 @@ def run_reasoning(
     llm_client: LLMClient | None = None,
     log_step=None,
     coin2: str | None = None,
+    logger: ExecutionLogger | None = None,
 ) -> ReasoningResult:
     question_type = classify_question_type(question)
 
     if dry_run:
-        return _dry_run_reasoning(coin, question, question_type, evidences, coin2=coin2)
+        return _dry_run_reasoning(coin, question, question_type, evidences, coin2=coin2, logger=logger)
 
     if llm_client is None:
         raise RuntimeError("非 dry-run 模式需要傳入 llm_client。")
 
-    return _real_reasoning(coin, question, question_type, evidences, llm_client, log_step=log_step, coin2=coin2)
+    return _real_reasoning(
+        coin, question, question_type, evidences, llm_client, log_step=log_step, coin2=coin2, logger=logger
+    )

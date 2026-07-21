@@ -77,8 +77,28 @@ def test_dry_run_comparison_auto_detects_second_coin_and_collects_both(tmp_path)
     )
 
     coins_in_evidence = {e.coin for e in result.evidences}
-    assert coins_in_evidence == {"BTC", "ETH"}
+    assert {"BTC", "ETH"}.issubset(coins_in_evidence)
+    # 比較題型現在還會產出雙幣相對指標（BTC/ETH）
+    assert "BTC/ETH" in coins_in_evidence
     assert "BTC vs ETH" in result.report_markdown
+
+
+def test_dry_run_comparison_no_duplicate_macro_evidence(tmp_path):
+    """R1-3 回歸測試：比較題型 macro 證據不得重複。"""
+    result = run_pipeline(
+        coin="BTC",
+        question="比較 BTC 與 ETH 在流動性與風險敞口上的差異",
+        dry_run=True,
+        output_dir=str(tmp_path),
+    )
+
+    # 過濾出 macro 類型證據
+    macro_evidences = [e for e in result.evidences if e.source_type == "macro"]
+    # 用 content_reference 判定是否重複：同 source_type==macro 下不得有兩筆 content_reference 相同
+    content_refs = [e.content_reference for e in macro_evidences]
+    assert len(content_refs) == len(set(content_refs)), (
+        f"macro 證據出現重複 content_reference: {content_refs}"
+    )
 
 
 def test_dry_run_comparison_with_explicit_coin2_override(tmp_path):

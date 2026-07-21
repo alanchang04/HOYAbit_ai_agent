@@ -47,7 +47,8 @@ class MacroCollector(BaseCollector):
                         fetched_at=now_iso(),
                         content_reference=(
                             f"value={item.get('value')}, classification={item.get('value_classification')}, "
-                            f"timestamp={item.get('timestamp')}, 近{len(values)}天百分位={percentile:.1f}%"
+                            f"timestamp={item.get('timestamp')}, 近{len(values)}天百分位={percentile:.1f}%, "
+                            f"近{len(values)}天範圍={min(values)}-{max(values)}"
                         ),
                         related_claim="整體加密市場情緒指標（近 30 天百分位）",
                         source_type="macro",

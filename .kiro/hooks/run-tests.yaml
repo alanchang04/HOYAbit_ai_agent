@@ -1,0 +1,12 @@
+# Kiro Agent Hook：儲存 Python 原始碼時自動跑測試
+# 對應 R11-3：SHALL 設定至少一個 agent hook
+
+name: Auto-run tests on save
+description: 當 agent 或 tests 目錄下的 Python 檔案被儲存時，自動執行 pytest -q 確保測試全綠
+
+trigger:
+  onSave:
+    - "agent/**/*.py"
+    - "tests/**/*.py"
+
+command: pytest -q

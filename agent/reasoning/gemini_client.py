@@ -29,6 +29,7 @@ class GeminiClient:
         self.model_id = settings.gemini_model_id
         self.max_retries = max_retries
         self.base_backoff_seconds = base_backoff_seconds
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
     def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
         last_exc: Exception | None = None
@@ -50,6 +51,11 @@ class GeminiClient:
                 )
                 if not response.text:
                     raise GeminiClientError(f"模型回應為空（finish_reason={response.candidates[0].finish_reason if response.candidates else '未知'}）")
+                # 累計 token usage
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    self.usage["input_tokens"] += getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+                    self.usage["output_tokens"] += getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+                self.usage["calls"] += 1
                 return response.text
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc

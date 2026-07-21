@@ -1,7 +1,7 @@
 {
   "price": [
     {
-      "source": "本地共同基準資料集 (data/{coin}_daily_ohlcv.csv)",
+      "source": "HOYA BIT 共同基準資料集 (data/{coin}_daily_ohlcv.csv)",
       "source_url": null,
       "content_reference": "近 14 日收盤價與成交量摘要（dry-run 假資料，非真實查詢結果）",
       "related_claim": "{coin} 近期價格走勢與成交量變化"
@@ -41,8 +41,8 @@
     {
       "source": "Fear & Greed Index (dry-run fixture)",
       "source_url": "https://api.alternative.me/fng/",
-      "content_reference": "當前恐懼貪婪指數數值（dry-run 假資料）",
-      "related_claim": "整體市場情緒指標"
+      "content_reference": "value=45, classification=Fear, 30日百分位=60.0%, 30日範圍=25-72",
+      "related_claim": "整體加密市場情緒指標"
     }
   ]
 }

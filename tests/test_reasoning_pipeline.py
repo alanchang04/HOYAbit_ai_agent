@@ -12,9 +12,13 @@ class FakeLLMClient:
     def __init__(self, responses: list):
         self._responses = list(responses)
         self.call_count = 0
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
     def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
         self.call_count += 1
+        self.usage["calls"] += 1
+        self.usage["input_tokens"] += 100  # 假 token 數
+        self.usage["output_tokens"] += 200
         if not self._responses:
             raise AssertionError("FakeLLMClient 的回應腳本用完了，呼叫次數超出預期")
         item = self._responses.pop(0)
@@ -140,3 +144,22 @@ def test_debate_happy_path_works_for_every_supported_coin(coin):
     assert result.conclusion["market_judgment"] == "mj"
     assert result.debate["bull_argument"] == "bull arg"
     assert client.call_count == 5
+
+
+def test_fake_llm_client_accumulates_usage():
+    """驗證 FakeLLMClient 累計 usage token 數（模擬真實 client 行為）。"""
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',
+        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert client.usage["calls"] == 5
+    assert client.usage["input_tokens"] == 500  # 5 calls × 100
+    assert client.usage["output_tokens"] == 1000  # 5 calls × 200
+    assert client.usage["calls"] == client.call_count
