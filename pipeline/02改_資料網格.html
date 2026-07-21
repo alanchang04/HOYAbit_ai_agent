@@ -578,15 +578,15 @@ const SPECS = {
   'ohlcv-csv': {
     title: '近兩週 OHLCV', status: 'done',
     where: '主辦方共同基準資料集，本地檔案 <code>data/{TICKER}_daily_ohlcv.csv</code>；不是網路 API，零連線風險，比賽現場一定拿得到。',
-    how: '用 Python <code>csv.DictReader</code> 讀檔，取最後 30 列（程式碼常數 <code>INDICATOR_WINDOW=30</code>），欄位含 <code>date, open, high, low, close, volume</code>。已在 <code>agent/collectors/price.py</code> 的 <code>load_ohlcv_tail()</code> 實作。',
+    how: '用 Python <code>csv.DictReader</code> 讀檔，取最後 121 列（程式碼常數 <code>INDICATOR_WINDOW=121</code>，2026-07-21 為了算 MA120 從 30 拉大），欄位含 <code>date, open, high, low, close, volume</code>。已在 <code>agent/collectors/price.py</code> 的 <code>load_ohlcv_tail()</code> 實作。',
     read: '看最近 14 天窗口：收盤價從期初到期末的漲跌百分比、期間最高／最低、總成交量。這是最穩的一筆證據——完全不靠外部連線。',
   },
   'tech-indicators': {
     title: '技術指標（SMA／RSI／波動率／量能趨勢）', status: 'done',
     where: '同一份 OHLCV CSV，不連外部網路。',
-    how: '本地 Python 純計算：MA20＝近20日收盤均、MA60＝近60日收盤均、MA120＝近120日收盤均；RSI14 用近15日收盤漲跌算平均漲幅/平均跌幅比值換算；波動率＝近14日日報酬的母體標準差×100；量能趨勢＝近7日均量 vs 前7日均量的變化%。已在 <code>compute_technical_indicators()</code> 實作，資料不足15筆會回傳空值。⚠️ 改成 MA120 後取樣窗口需求變大：現有 <code>load_ohlcv_tail()</code> 只取最後 <code>INDICATOR_WINDOW=30</code> 列（見上方「近兩週 OHLCV」），不夠算 MA120，實作端需同步把窗口拉大到至少 121 列，這是文件改完後留給程式碼的必改項目，尚未動 <code>price.py</code>。',
+    how: '本地 Python 純計算：MA20＝近20日收盤均、MA60＝近60日收盤均、MA120＝近120日收盤均；RSI14 用近15日收盤漲跌算平均漲幅/平均跌幅比值換算；波動率＝近14日日報酬的母體標準差×100；量能趨勢＝近7日均量 vs 前7日均量的變化%。已在 <code>compute_technical_indicators()</code> 實作，資料不足15筆會回傳空值，MA 欄位資料不足對應天數時回傳 <code>None</code>。2026-07-21 已把 <code>INDICATOR_WINDOW</code> 拉大到 121 列並把 MA20/60/120 併回這個函式（見上方「近兩週 OHLCV」）。',
     read: '現價站上 MA20＝短期動能偏多，跌破＝偏空；站上/跌破 MA60、MA120 則分別代表中期／長期趨勢方向，三條同向（例如全站上）＝多頭排列，訊號一致性高，出現交叉（如 MA20 跌破 MA60）可當轉折訊號；RSI14 ≥70 超買、≤30 超賣、中間中性；波動率數字要跟該幣「自己的」歷史比才有意義，不同幣種基準不同，不能拿 BTC 的波動率直接跟 SOL 比大小；量能趨勢正值＝近期關注度上升。',
-    caveat: '目前 <code>price.py</code> 的 <code>load_ohlcv_tail()</code> 只抓最後 30 列，改成算 MA120 後理論上要至少 121 列才夠——這是文件先寫、程式碼還沒跟上的落差，抓取前記得先把窗口拉大。',
+    caveat: '2026-07-21 已修：<code>INDICATOR_WINDOW</code> 從 30 拉大到 121，MA120 算得出來了。⚠️ 這個窗口常數改動是 Ken 直接指示先做，還沒跟 alanchang 對過，之後要補講一聲。',
   },
   'realtime-price': {
     title: '即時報價', status: 'done',

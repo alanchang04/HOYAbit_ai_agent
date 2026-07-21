@@ -1,0 +1,37 @@
+{
+  "coin": "BTC",
+  "items": [
+    {
+      "source": "Bitcoin Optech Newsletter（官方源）",
+      "url": "https://bitcoinops.org/en/newsletters/2026/07/17/",
+      "title": "Bitcoin Optech Newsletter #414",
+      "published": "2026-07-17T00:00:00+00:00"
+    },
+    {
+      "source": "Bitcoin Optech Newsletter（官方源）",
+      "url": "https://bitcoinops.org/en/podcast/2026/07/14/",
+      "title": "Bitcoin Optech Newsletter #413 Recap Podcast",
+      "published": "2026-07-14T00:00:00+00:00"
+    },
+    {
+      "source": "Bitcoin Optech Newsletter（官方源）",
+      "url": "https://bitcoinops.org/en/newsletters/2026/07/10/",
+      "title": "Bitcoin Optech Newsletter #413",
+      "published": "2026-07-10T00:00:00+00:00"
+    },
+    {
+      "source": "Bitcoin Optech Newsletter（官方源）",
+      "url": "https://bitcoinops.org/en/podcast/2026/07/07/",
+      "title": "Bitcoin Optech Newsletter #412 Recap Podcast",
+      "published": "2026-07-07T00:00:00+00:00"
+    },
+    {
+      "source": "Bitcoin Optech Newsletter（官方源）",
+      "url": "https://bitcoinops.org/en/newsletters/2026/07/03/",
+      "title": "Bitcoin Optech Newsletter #412",
+      "published": "2026-07-03T00:00:00+00:00"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-21T08:14:16Z"
+}
