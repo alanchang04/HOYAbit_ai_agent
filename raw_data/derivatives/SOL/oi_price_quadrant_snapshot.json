@@ -1,0 +1,258 @@
+{
+  "coin": "SOL",
+  "perp": "SOLUSDT",
+  "source": "Binance Futures /fapi/v1/openInterest + /futures/data/openInterestHist + /fapi/v1/klines",
+  "oi_current": 8833397.56,
+  "oi_current_time": 1784565053779,
+  "aligned_hours": 30,
+  "unmatched_oi_points": 0,
+  "unmatched_price_points": 0,
+  "latest_oi": 8872634.53,
+  "latest_price": 77.54,
+  "oi_direction": "up",
+  "price_direction": "down",
+  "quadrant": "空頭增倉（順勢，新空頭進場）",
+  "trend_last_30h": [
+    {
+      "hour_bucket": 495683,
+      "oi": 8936791.89,
+      "price": 76.04,
+      "oi_direction": null,
+      "price_direction": null,
+      "quadrant": null
+    },
+    {
+      "hour_bucket": 495684,
+      "oi": 8925592.99,
+      "price": 75.99,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495685,
+      "oi": 8935200.5,
+      "price": 76.07,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495686,
+      "oi": 8940376.09,
+      "price": 76.38,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495687,
+      "oi": 8956814.81,
+      "price": 76.18,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495688,
+      "oi": 8953295.66,
+      "price": 75.87,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495689,
+      "oi": 8954106.97,
+      "price": 75.92,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495690,
+      "oi": 8943256.54,
+      "price": 75.72,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495691,
+      "oi": 8910498.48,
+      "price": 75.84,
+      "oi_direction": "down",
+      "price_direction": "up",
+      "quadrant": "空頭回補（可能追高風險）"
+    },
+    {
+      "hour_bucket": 495692,
+      "oi": 8914148.74,
+      "price": 76.11,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495693,
+      "oi": 8921857.6,
+      "price": 75.74,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495694,
+      "oi": 8890421.2,
+      "price": 76.05,
+      "oi_direction": "down",
+      "price_direction": "up",
+      "quadrant": "空頭回補（可能追高風險）"
+    },
+    {
+      "hour_bucket": 495695,
+      "oi": 8882049.29,
+      "price": 76.34,
+      "oi_direction": "down",
+      "price_direction": "up",
+      "quadrant": "空頭回補（可能追高風險）"
+    },
+    {
+      "hour_bucket": 495696,
+      "oi": 8882234.46,
+      "price": 76.52,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495697,
+      "oi": 8833665.8,
+      "price": 76.35,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495698,
+      "oi": 8860441.0,
+      "price": 76.94,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495699,
+      "oi": 8845357.51,
+      "price": 76.71,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495700,
+      "oi": 8849504.11,
+      "price": 76.41,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495701,
+      "oi": 8852132.61,
+      "price": 75.88,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495702,
+      "oi": 8820134.34,
+      "price": 75.6,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495703,
+      "oi": 8812552.38,
+      "price": 76.18,
+      "oi_direction": "down",
+      "price_direction": "up",
+      "quadrant": "空頭回補（可能追高風險）"
+    },
+    {
+      "hour_bucket": 495704,
+      "oi": 8806222.73,
+      "price": 76.11,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495705,
+      "oi": 8826768.2,
+      "price": 76.43,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495706,
+      "oi": 8849294.24,
+      "price": 76.3,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495707,
+      "oi": 8852739.49,
+      "price": 77.1,
+      "oi_direction": "up",
+      "price_direction": "up",
+      "quadrant": "多頭增倉（順勢，新多頭進場）"
+    },
+    {
+      "hour_bucket": 495708,
+      "oi": 8881363.64,
+      "price": 76.7,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    },
+    {
+      "hour_bucket": 495709,
+      "oi": 8872795.68,
+      "price": 76.25,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495710,
+      "oi": 8826527.4,
+      "price": 76.11,
+      "oi_direction": "down",
+      "price_direction": "down",
+      "quadrant": "多頭停損離場（可能止跌）"
+    },
+    {
+      "hour_bucket": 495711,
+      "oi": 8819263.49,
+      "price": 77.73,
+      "oi_direction": "down",
+      "price_direction": "up",
+      "quadrant": "空頭回補（可能追高風險）"
+    },
+    {
+      "hour_bucket": 495712,
+      "oi": 8872634.53,
+      "price": 77.54,
+      "oi_direction": "up",
+      "price_direction": "down",
+      "quadrant": "空頭增倉（順勢，新空頭進場）"
+    }
+  ],
+  "fetched_at": "2026-07-20T16:31:02Z"
+}

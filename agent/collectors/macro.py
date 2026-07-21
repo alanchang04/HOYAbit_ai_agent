@@ -11,6 +11,15 @@ from agent.collectors.base import BaseCollector
 from agent.schemas import EvidenceDraft, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
+FNG_WINDOW = 30
+
+
+def compute_fng_percentile(values: list[int], current: int) -> float:
+    """回傳 current 在近 N 天序列（含當天）中的百分位：當天值贏過幾成樣本。"""
+    if not values:
+        return 0.0
+    count_le = sum(1 for v in values if v <= current)
+    return count_le / len(values) * 100
 
 
 class MacroCollector(BaseCollector):
@@ -22,26 +31,26 @@ class MacroCollector(BaseCollector):
 
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
             try:
-                resp = await client.get("https://api.alternative.me/fng/", params={"limit": 30})
+                resp = await client.get(
+                    "https://api.alternative.me/fng/", params={"limit": FNG_WINDOW}
+                )
                 resp.raise_for_status()
                 data = resp.json()["data"]
-                # data[0] is latest, data[-1] is oldest
-                current_value = int(data[0].get("value", 0))
-                classification = data[0].get("value_classification", "")
-
-                # Calculate 30-day percentile
-                values = [int(d.get("value", 0)) for d in data]
-                count_below = sum(1 for v in values if v <= current_value)
-                percentile = round(100 * count_below / len(values), 1)
-
+                item = data[0]
+                values = [int(d["value"]) for d in data]
+                percentile = compute_fng_percentile(values, int(item["value"]))
                 evidences.append(
                     EvidenceDraft(
                         coin=coin,
                         source="Fear & Greed Index (alternative.me)",
                         source_url="https://api.alternative.me/fng/",
                         fetched_at=now_iso(),
-                        content_reference=f"value={current_value}, classification={classification}, 30日百分位={percentile}%, 30日範圍={min(values)}-{max(values)}",
-                        related_claim="整體加密市場情緒指標",
+                        content_reference=(
+                            f"value={item.get('value')}, classification={item.get('value_classification')}, "
+                            f"timestamp={item.get('timestamp')}, 近{len(values)}天百分位={percentile:.1f}%, "
+                            f"近{len(values)}天範圍={min(values)}-{max(values)}"
+                        ),
+                        related_claim="整體加密市場情緒指標（近 30 天百分位）",
                         source_type="macro",
                     )
                 )

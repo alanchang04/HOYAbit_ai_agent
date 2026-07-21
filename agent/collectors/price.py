@@ -18,7 +18,11 @@ from agent.collectors.coin_map import get_coin_info
 from agent.schemas import EvidenceDraft, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
-INDICATOR_WINDOW = 30
+# MA120 需要至少 120 天收盤價才算得出來，抓 121 列留一天緩衝（見
+# pipeline/流程紀錄.md 的落差記錄）。2026-07-21 由 Ken 直接指示先改，
+# 尚未跟 alanchang 對過這個窗口常數，之後要補講一聲。
+INDICATOR_WINDOW = 121
+MA_WINDOWS = (20, 60, 120)
 
 
 def load_ohlcv_tail(coin: str, data_dir: str, n: int = 14) -> list[dict]:
@@ -85,7 +89,7 @@ def compute_technical_indicators(rows: list[dict]) -> dict:
     else:
         volume_trend_pct = 0.0
 
-    return {
+    result = {
         "sma7": sma7,
         "sma14": sma14,
         "rsi14": rsi14,
@@ -93,6 +97,18 @@ def compute_technical_indicators(rows: list[dict]) -> dict:
         "volume_trend_pct": volume_trend_pct,
         "last_close": closes[-1],
     }
+
+    # MA20/60/120 位置判讀：資料不足對應天數的窗口留 None（不是 0，避免誤讀）。
+    for window_size in MA_WINDOWS:
+        if len(closes) >= window_size:
+            ma = sum(closes[-window_size:]) / window_size
+            result[f"ma{window_size}"] = ma
+            result[f"ma{window_size}_position"] = "站上" if closes[-1] >= ma else "跌破"
+        else:
+            result[f"ma{window_size}"] = None
+            result[f"ma{window_size}_position"] = "資料不足"
+
+    return result
 
 
 def summarize_technical_indicators(indicators: dict) -> str:
@@ -102,11 +118,42 @@ def summarize_technical_indicators(indicators: dict) -> str:
     rsi_zone = (
         "超買" if indicators["rsi14"] >= 70 else "超賣" if indicators["rsi14"] <= 30 else "中性"
     )
+    ma_parts = []
+    for window_size in MA_WINDOWS:
+        val = indicators.get(f"ma{window_size}")
+        pos = indicators.get(f"ma{window_size}_position", "資料不足")
+        ma_parts.append(f"MA{window_size}={val:.2f}（{pos}）" if val is not None else f"MA{window_size}=資料不足")
+
     return (
         f"SMA7={indicators['sma7']:.2f}, SMA14={indicators['sma14']:.2f}"
         f"（現價{trend} SMA7）, RSI14={indicators['rsi14']:.1f}（{rsi_zone}區間）, "
         f"近14日日報酬波動率={indicators['volatility_pct']:.2f}%, "
-        f"近7日量能較前7日變化={indicators['volume_trend_pct']:+.2f}%"
+        f"近7日量能較前7日變化={indicators['volume_trend_pct']:+.2f}%, "
+        + "，".join(ma_parts)
+    )
+
+
+def compute_perp_basis(mark_price: float, index_price: float, funding_rate: float) -> dict:
+    """依 Binance premiumIndex 回傳值算永續合約基差（mark 相對 index 的溢價比例）。"""
+    basis_pct = (mark_price - index_price) / index_price * 100 if index_price else 0.0
+    return {
+        "mark_price": mark_price,
+        "index_price": index_price,
+        "basis_pct": basis_pct,
+        "funding_rate_pct": funding_rate * 100,
+    }
+
+
+def summarize_perp_basis(basis: dict) -> str:
+    direction = (
+        "正基差 contango（多頭情緒佐證）"
+        if basis["basis_pct"] >= 0
+        else "負基差 backwardation（空頭情緒佐證）"
+    )
+    return (
+        f"markPrice {basis['mark_price']:.4f} vs indexPrice {basis['index_price']:.4f}，"
+        f"基差 {basis['basis_pct']:+.4f}%（{direction}），"
+        f"最新資金費率 {basis['funding_rate_pct']:+.5f}%"
     )
 
 
@@ -206,5 +253,34 @@ class PriceCollector(BaseCollector):
                     )
                 except Exception as exc2:  # noqa: BLE001
                     self.log_subsource("cryptocompare", coin, LogStatus.ERROR, f"error={exc2}")
+
+            # --- 永續基差：Binance Futures premiumIndex（免 key），mark/index 價差是多空情緒佐證 ---
+            try:
+                resp = await client.get(
+                    "https://fapi.binance.com/fapi/v1/premiumIndex",
+                    params={"symbol": f"{info.ticker}USDT"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                basis = compute_perp_basis(
+                    mark_price=float(data["markPrice"]),
+                    index_price=float(data["indexPrice"]),
+                    funding_rate=float(data["lastFundingRate"]),
+                )
+                evidences.append(
+                    EvidenceDraft(
+                        coin=coin,
+                        source="Binance Futures /fapi/v1/premiumIndex",
+                        source_url="https://fapi.binance.com/fapi/v1/premiumIndex",
+                        fetched_at=now_iso(),
+                        content_reference=(
+                            f"query: symbol={info.ticker}USDT | " + summarize_perp_basis(basis)
+                        ),
+                        related_claim=f"{coin} 永續合約基差與資金費率（多空情緒佐證）",
+                        source_type="price",
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.log_subsource("perp_basis", coin, LogStatus.ERROR, f"error={exc}")
 
         return evidences

@@ -1,0 +1,31 @@
+{
+  "coin": "SOL",
+  "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key）",
+  "pair": "SOLUSD",
+  "index_price": 76.40453764,
+  "curve": [
+    {
+      "label": "perp",
+      "symbol": "SOLUSD_PERP",
+      "days_to_expiry": null,
+      "mark_price": 76.36,
+      "basis_pct": -0.05829187817332558
+    },
+    {
+      "label": "current_quarter",
+      "symbol": "SOLUSD_260925",
+      "days_to_expiry": 66.7,
+      "mark_price": 76.50794009,
+      "annualized_basis_pct": 0.7405364551743432
+    },
+    {
+      "label": "next_quarter",
+      "symbol": "SOLUSD_261225",
+      "days_to_expiry": 157.7,
+      "mark_price": 76.39067542,
+      "annualized_basis_pct": -0.04199147784091073
+    }
+  ],
+  "shape": "mixed",
+  "fetched_at": "2026-07-20T15:04:51Z"
+}

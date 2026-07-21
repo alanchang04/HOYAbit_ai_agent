@@ -87,7 +87,7 @@ main.py --coin BTC [--coin2 ETH] --question "..." [--dry-run]
 
 | # | 要求 | 狀態 | 現有證據 | 缺口/風險 | 優先級 | 驗收方式 |
 |---|---|---|---|---|---|---|
-| 1 | 多源資料整合（5 類） | 🟡 | 5 collectors 實測可跑 | social 受 Reddit 403 地理封鎖（雲端 IP 大概率也被擋）；news 僅 2 個 RSS 且 SOL/BNB 有「當日零命中」實例；**news 誤匹配 bug** | P0(bug)/P1(來源) | 修 bug 後以 5 幣種重跑 collectors 檢查證據相關性 |
+| 1 | 多源資料整合（5 類） | 🟡 | 5 collectors 實測可跑 | social 受 Reddit 403 地理封鎖（雲端 IP 大概率也被擋）；news 改版為每幣官方源（2026-07-20），**原誤匹配 bug 隨舊 RSS+別名過濾邏輯一併移除**，BNB/XRP 兩個官方源無 RSS 靠 HTML 解析，站方改版會失效，賽前需重跑確認 | P1（來源穩定性） | 以 5 幣種重跑 collectors 檢查證據相關性 |
 | 2 | 分層推理（事實→推論→結論） | ✅ | 四步鏈＋辯論，3 題型真實驗證過 | 僅 Gemini 驗證，Claude 格式遵從度未驗 | P0 | Bedrock 上重跑 3 題型 |
 | 3 | 不確定性與限制說明 | ✅ | 信心等級＋限制＋可推翻條件，實測輸出具體 | — | — | 抽查報告 |
 | 4 | 證據可回溯 | 🟡 | schema 含全必要欄位＋query 參數；報告 id 強制檢查 | 無原文快照/雜湊；比較題 macro 重複證據損害「來源獨立性」 | P1(重複)/P2(快照) | 修重複後檢查 evidence.json 無重複；快照屬 UPGRADE_SPEC |
@@ -102,10 +102,10 @@ main.py --coin BTC [--coin2 ETH] --question "..." [--dry-run]
 | 13 | 現場執行錄影 | ❌ | — | 未錄 | P0（賽前） | 影片連結 |
 | 14 | 簡報＋AWS 架構圖（圖檔） | 🟡 | PITCH_REFERENCE.md 素材＋ASCII 圖 | 需畫正式圖、做簡報 | P0（賽前） | 簡報成品 |
 | 15 | AWS Kiro（+10%） | ❌ | 未使用 | **白放棄的 10%**——需團隊決策 | 決策點 | 簡報展示 Kiro 使用證據 |
-| 16 | 付費資料揭露 | ✅ | 全免費來源；CryptoPanic 選用且標註揭露 | — | — | — |
+| 16 | 付費資料揭露 | ✅ | 全免費來源，無任何付費 API | — | — | — |
 | 17 | 報告語言（繁中） | ✅ | 實測輸出繁中、引用保留英文原文 | — | — | — |
 
-**比賽必要缺口總結（P0）**：Bedrock 實測（#11，阻塞 #2/#9）、實際部署（#12）、news 誤匹配 bug（#1，會污染證據品質）、錄影/簡報（#13/#14，賽前完成即可）。
+**比賽必要缺口總結（P0）**：Bedrock 實測（#11，阻塞 #2/#9）、實際部署（#12）、錄影/簡報（#13/#14，賽前完成即可）；news 誤匹配 bug 已隨改版移除，降為 P1（見 #1，BNB/XRP 官方源 HTML 解析穩定性待賽前重跑確認）。
 **展示/加分（P1/P2）**：execution log 四面板、macro 重複修正、雙幣相對指標、Kiro 決策、其餘 Ken 構想。
 
 ---
@@ -180,7 +180,7 @@ main.py --coin BTC [--coin2 ETH] --question "..." [--dry-run]
 | 主辦方 CSV＋本地技術指標 | 官方提供 | 無（本地） | ✅ 穩定 | 零（最可靠證據源）；注意資料止於 2026-05-31，與執行日有時間差，推理已能正確處理並揭露 |
 | CoinGecko `/simple/price` | 免費層 | ~10-30 req/min | ✅ | 中；備援 CryptoCompare 已接 |
 | Blockchair／EVM RPC／Solana RPC／XRPL | 公開免 key | 各自寬鬆 | ✅ 5 鏈全通 | 中；EVM/XRPL 已多端點備援 |
-| CoinDesk/Cointelegraph RSS | 公開 | 無明確 | ✅（曾修 308 redirect） | 中；單日命中數不穩（SOL/BNB 有零命中日）→ Ken 建議把「命中則數」本身輸出為關注度證據 |
+| 每幣官方源（BTC Optech／ETH Foundation Blog／SOL Foundation News／BNB Chain Blog／XRP Ripple Insights） | 公開 | 無明確 | ✅ 2026-07-20 五幣皆實測抓到真實資料 | 中；BNB／XRP 無官方 RSS，退階 HTML 解析，站方改版會直接失效，賽前建議重跑一次確認 |
 | Reddit 公開 JSON | 公開 | — | ❌ 本機/機房 IP 403 | **高**；App Runner IP 大概率同樣被擋。對策：接受並誠實揭露（現行），或改官方 OAuth API（免費 app 憑證，P1 可選） |
 | alternative.me F&G／Frankfurter | 公開免 key | 寬鬆 | ✅ | 低；Ken 提議 `limit=30` 升級成百分位（一行改動，P1） |
 

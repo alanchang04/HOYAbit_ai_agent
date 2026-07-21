@@ -1,0 +1,31 @@
+{
+  "coin": "XRP",
+  "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key）",
+  "pair": "XRPUSD",
+  "index_price": 1.09742705,
+  "curve": [
+    {
+      "label": "perp",
+      "symbol": "XRPUSD_PERP",
+      "days_to_expiry": null,
+      "mark_price": 1.097,
+      "basis_pct": -0.03891374829881361
+    },
+    {
+      "label": "current_quarter",
+      "symbol": "XRPUSD_260925",
+      "days_to_expiry": 66.7,
+      "mark_price": 1.09992698,
+      "annualized_basis_pct": 1.2464847770713423
+    },
+    {
+      "label": "next_quarter",
+      "symbol": "XRPUSD_261225",
+      "days_to_expiry": 157.7,
+      "mark_price": 1.10581942,
+      "annualized_basis_pct": 1.7699316567546475
+    }
+  ],
+  "shape": "contango",
+  "fetched_at": "2026-07-20T15:04:52Z"
+}

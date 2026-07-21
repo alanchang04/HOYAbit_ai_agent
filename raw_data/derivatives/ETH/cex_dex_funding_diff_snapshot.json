@@ -1,0 +1,13 @@
+{
+  "coin": "ETH",
+  "source": "Binance /fapi/v1/premiumIndex (CEX) vs Hyperliquid metaAndAssetCtxs (DEX)",
+  "cex_last_funding_rate_pct": 0.002276,
+  "cex_funding_interval_hours": 8,
+  "cex_annualized_pct": 2.4922199999999997,
+  "dex_last_funding_rate_pct": 0.00125,
+  "dex_funding_interval_hours": 1,
+  "dex_annualized_pct": 10.95,
+  "annualized_diff_pct": -8.45778,
+  "divergence_label": "DEX 費率明顯較高（槓桿集中 DEX）",
+  "fetched_at": "2026-07-21T02:40:28Z"
+}

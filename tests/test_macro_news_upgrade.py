@@ -1,14 +1,17 @@
-"""測試 R2-2（macro F&G limit=30 百分位）與 R2-3（news 命中則數量化證據）。"""
+"""測試 R2-2（macro F&G limit=30 百分位）。
+
+R2-3（news 命中則數量化證據）已隨 news.py 改版移除——news collector 2026-07-20
+起改為每幣官方發布源，不再有 CoinDesk/Cointelegraph 通用 feed 可量化命中則數，
+原本這裡的對應測試已刪除。
+"""
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from agent.collectors.macro import MacroCollector
-from agent.collectors.news import NewsCollector
 from agent.logging_utils import ExecutionLogger
 
 
@@ -67,14 +70,14 @@ async def test_macro_fng_limit_30_and_percentile(mock_logger):
     assert len(fng_evidences) == 1
 
     content = fng_evidences[0].content_reference
-    assert "30日百分位" in content
-    assert "30日範圍" in content
+    assert "近30天百分位" in content
+    assert "近30天範圍" in content
     assert "value=60" in content
 
     # 驗算百分位：60 在 [60, 30, 31, ..., 58] 中 <= 60 的有 30 個（全部）
     # count_below = 30, percentile = 100 * 30 / 30 = 100.0
-    assert "30日百分位=100.0%" in content
-    assert f"30日範圍={min(values)}-{max(values)}" in content
+    assert "近30天百分位=100.0%" in content
+    assert f"近30天範圍={min(values)}-{max(values)}" in content
 
 
 @pytest.mark.asyncio
@@ -114,106 +117,4 @@ async def test_macro_fng_percentile_calculation(mock_logger):
     # 當前值 50，values 中 <= 50 的個數
     count_below = sum(1 for v in values if v <= 50)
     expected_percentile = round(100 * count_below / len(values), 1)
-    assert f"30日百分位={expected_percentile}%" in content
-
-
-# --- R2-3: news 命中則數量化證據 ---
-
-
-def _make_rss_xml(entries: list[dict]) -> str:
-    """建構簡化 RSS XML 內容。"""
-    items = ""
-    for e in entries:
-        items += f"""
-        <item>
-            <title>{e.get('title', '')}</title>
-            <link>{e.get('link', 'https://example.com')}</link>
-            <description>{e.get('summary', '')}</description>
-            <pubDate>Mon, 01 Jul 2025 00:00:00 GMT</pubDate>
-        </item>"""
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-<channel>
-    <title>Test Feed</title>
-    {items}
-</channel>
-</rss>"""
-
-
-@pytest.mark.asyncio
-async def test_news_hit_count_quantified_evidence(mock_logger):
-    """news collector 完成過濾後應額外輸出命中則數量化證據。"""
-    # CoinDesk feed: 2 articles match BTC
-    coindesk_xml = _make_rss_xml([
-        {"title": "BTC hits new high", "summary": "Bitcoin surges"},
-        {"title": "BTC adoption grows", "summary": "Bitcoin in Asia"},
-        {"title": "Unrelated news", "summary": "No crypto here"},
-    ])
-    # Cointelegraph feed: 1 article matches BTC
-    cointelegraph_xml = _make_rss_xml([
-        {"title": "BTC ETF approved", "summary": "Bitcoin ETF news"},
-        {"title": "Unrelated article", "summary": "Nothing about coins"},
-    ])
-
-    async def mock_get(url, **kwargs):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        if "coindesk" in url:
-            mock_resp.text = coindesk_xml
-        else:
-            mock_resp.text = cointelegraph_xml
-        return mock_resp
-
-    collector = NewsCollector(mock_logger)
-
-    with patch("agent.collectors.news.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.get = mock_get
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        evidences = await collector.fetch("BTC")
-
-    # 找到量化統計證據
-    quantified = [e for e in evidences if e.source == "新聞命中則數量化統計"]
-    assert len(quantified) == 1
-
-    content = quantified[0].content_reference
-    assert "總命中" in content
-    assert "市場關注度代理指標" in content
-    assert "CoinDesk=2" in content
-    assert "Cointelegraph=1" in content
-    assert quantified[0].coin == "BTC"
-    assert quantified[0].source_type == "news"
-    assert quantified[0].related_claim == "BTC 新聞市場關注度"
-
-
-@pytest.mark.asyncio
-async def test_news_no_hit_count_when_no_matches(mock_logger):
-    """若無任何命中則，不應產生量化統計證據。"""
-    # 所有文章都不相關
-    empty_xml = _make_rss_xml([
-        {"title": "Unrelated news", "summary": "No crypto mentions"},
-    ])
-
-    async def mock_get(url, **kwargs):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.text = empty_xml
-        return mock_resp
-
-    collector = NewsCollector(mock_logger)
-
-    with patch("agent.collectors.news.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.get = mock_get
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        evidences = await collector.fetch("BTC")
-
-    # 不應有量化統計證據
-    quantified = [e for e in evidences if e.source == "新聞命中則數量化統計"]
-    assert len(quantified) == 0
+    assert f"近30天百分位={expected_percentile}%" in content

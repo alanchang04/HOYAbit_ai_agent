@@ -1,0 +1,14 @@
+{
+  "coin_a": "SOL",
+  "coin_b": "BTC",
+  "percentile_30d_a": 7.777777777777778,
+  "percentile_30d_b": 50.0,
+  "percentile_diff": -42.22,
+  "gap_label": "SOL 多頭倉位比 BTC 寬鬆得多、風險敞口較小",
+  "sentence": "[SOL 費率 7.8 百分位 vs BTC 費率 50.0 百分位] 差 -42.2 點 → SOL 多頭倉位比 BTC 寬鬆得多、風險敞口較小",
+  "source_fetched_at": {
+    "SOL": "2026-07-20T15:08:38Z",
+    "BTC": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

@@ -1,0 +1,11 @@
+{
+  "coin": "SOL",
+  "perp": "SOLUSDT",
+  "source": "Binance Futures /fapi/v1/fundingRate",
+  "sample_size": 90,
+  "latest_funding_rate_pct": -0.005079,
+  "latest_funding_time": 1784534400001,
+  "percentile_30d": 7.777777777777778,
+  "crowd_label": "極度寬鬆",
+  "fetched_at": "2026-07-20T15:08:38Z"
+}

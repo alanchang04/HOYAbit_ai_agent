@@ -1,0 +1,14 @@
+{
+  "coin_a": "BNB",
+  "coin_b": "SOL",
+  "percentile_30d_a": 34.44444444444444,
+  "percentile_30d_b": 7.777777777777778,
+  "percentile_diff": 26.67,
+  "gap_label": "BNB 與 SOL 擁擠度接近，無明顯落差",
+  "sentence": "[BNB 費率 34.4 百分位 vs SOL 費率 7.8 百分位] 差 +26.7 點 → BNB 與 SOL 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "BNB": "2026-07-20T15:08:38Z",
+    "SOL": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

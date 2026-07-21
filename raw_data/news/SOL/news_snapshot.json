@@ -1,0 +1,37 @@
+{
+  "coin": "SOL",
+  "items": [
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/solana-changelog-july-16-2026",
+      "title": "Solana Changelog: July 16, 2026",
+      "published": "Thu, 16 Jul 2026 14:33:00 GMT"
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/skhy-is-now-live",
+      "title": "The Sun Rises in Seoul and Trades on Solana: $SKHY is Now Live",
+      "published": "Fri, 10 Jul 2026 12:00:00 GMT"
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/solana-changelog-july-9-2026",
+      "title": "Solana Changelog: July 9, 2026",
+      "published": "Thu, 09 Jul 2026 12:05:00 GMT"
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/solana-ecosystem-roundup-june-2026",
+      "title": "Solana Ecosystem Roundup: June 2026",
+      "published": "Mon, 06 Jul 2026 06:00:00 GMT"
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/solana-changelog-agave-v4-1-0-rpc-2-0-and-alpenglow",
+      "title": "Solana Changelog: Agave v4.1.0, RPC 2.0, and Alpenglow",
+      "published": "Thu, 02 Jul 2026 21:21:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-21T08:14:17Z"
+}
