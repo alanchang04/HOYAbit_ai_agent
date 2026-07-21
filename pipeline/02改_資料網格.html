@@ -995,6 +995,18 @@ document.addEventListener('keydown', (e) => {
     save();
   }
 
+  // 2026-07-21e：事件日曆 FOMC/CPI（SOL/XRP 額外事件 import 供給節奏日曆資料）
+  // 五幣實測完成，補打勾。
+  const SEEDED_KEY_5 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21e';
+  if (!localStorage.getItem(SEEDED_KEY_5)) {
+    const DEFAULT_DONE_5 = [
+      'BTC|event-calendar|1', 'ETH|event-calendar|1', 'SOL|event-calendar|1', 'BNB|event-calendar|1', 'XRP|event-calendar|1',
+    ];
+    DEFAULT_DONE_5.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_5, '1');
+    save();
+  }
+
   function updateProgress() {
     const total = document.querySelectorAll('.chip-check').length;
     const done = document.querySelectorAll('.chip-check:checked').length;
