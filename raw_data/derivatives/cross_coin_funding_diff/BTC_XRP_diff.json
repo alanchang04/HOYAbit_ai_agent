@@ -1,0 +1,14 @@
+{
+  "coin_a": "BTC",
+  "coin_b": "XRP",
+  "percentile_30d_a": 50.0,
+  "percentile_30d_b": 21.11111111111111,
+  "percentile_diff": 28.89,
+  "gap_label": "BTC 與 XRP 擁擠度接近，無明顯落差",
+  "sentence": "[BTC 費率 50.0 百分位 vs XRP 費率 21.1 百分位] 差 +28.9 點 → BTC 與 XRP 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "BTC": "2026-07-20T15:08:38Z",
+    "XRP": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

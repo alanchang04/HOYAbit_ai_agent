@@ -1,0 +1,14 @@
+{
+  "coin_a": "XRP",
+  "coin_b": "BNB",
+  "percentile_30d_a": 21.11111111111111,
+  "percentile_30d_b": 34.44444444444444,
+  "percentile_diff": -13.33,
+  "gap_label": "XRP 與 BNB 擁擠度接近，無明顯落差",
+  "sentence": "[XRP 費率 21.1 百分位 vs BNB 費率 34.4 百分位] 差 -13.3 點 → XRP 與 BNB 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "XRP": "2026-07-20T15:08:38Z",
+    "BNB": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

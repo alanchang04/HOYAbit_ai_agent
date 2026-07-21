@@ -1,0 +1,14 @@
+{
+  "coin_a": "SOL",
+  "coin_b": "ETH",
+  "percentile_30d_a": 7.777777777777778,
+  "percentile_30d_b": 32.22222222222222,
+  "percentile_diff": -24.44,
+  "gap_label": "SOL 與 ETH 擁擠度接近，無明顯落差",
+  "sentence": "[SOL 費率 7.8 百分位 vs ETH 費率 32.2 百分位] 差 -24.4 點 → SOL 與 ETH 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "SOL": "2026-07-20T15:08:38Z",
+    "ETH": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

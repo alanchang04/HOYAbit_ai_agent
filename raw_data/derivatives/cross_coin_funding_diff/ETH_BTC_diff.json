@@ -1,0 +1,14 @@
+{
+  "coin_a": "ETH",
+  "coin_b": "BTC",
+  "percentile_30d_a": 32.22222222222222,
+  "percentile_30d_b": 50.0,
+  "percentile_diff": -17.78,
+  "gap_label": "ETH 與 BTC 擁擠度接近，無明顯落差",
+  "sentence": "[ETH 費率 32.2 百分位 vs BTC 費率 50.0 百分位] 差 -17.8 點 → ETH 與 BTC 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "ETH": "2026-07-20T15:08:38Z",
+    "BTC": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}
