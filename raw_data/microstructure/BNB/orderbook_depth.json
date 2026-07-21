@@ -1,0 +1,12 @@
+{
+  "coin": "BNB",
+  "source": "Hyperliquid l2Book（BNB 補位，鏈上 DEX 深度，非 CEX、不代表 BNB 全市場流動性）",
+  "fetched_at": "2026-07-20T12:28:31Z",
+  "best_bid": 569.44,
+  "best_ask": 569.45,
+  "mid_price": 569.445,
+  "spread_bps": 0.17560958477097707,
+  "bid_depth_usd_1pct": 158527.33799,
+  "ask_depth_usd_1pct": 54240.87549,
+  "depth_usd_1pct_total": 212768.21348
+}

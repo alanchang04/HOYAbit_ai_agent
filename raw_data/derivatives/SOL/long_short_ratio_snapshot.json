@@ -1,0 +1,165 @@
+{
+  "coin": "SOL",
+  "perp": "SOLUSDT",
+  "source": "Binance Futures /futures/data/globalLongShortAccountRatio + topLongShortPositionRatio",
+  "retail_ratio_latest": 2.6258,
+  "retail_ratio_change": 0.07089999999999996,
+  "retail_direction": "偏多",
+  "smart_money_ratio_latest": 1.6256,
+  "smart_money_ratio_change": 0.015599999999999836,
+  "smart_money_direction": "偏多",
+  "diverged": false,
+  "trend_last_30h": [
+    {
+      "timestamp": 1784451600000,
+      "retail_ratio": 2.6603,
+      "smart_money_ratio": 1.5891
+    },
+    {
+      "timestamp": 1784455200000,
+      "retail_ratio": 2.6324,
+      "smart_money_ratio": 1.5915
+    },
+    {
+      "timestamp": 1784458800000,
+      "retail_ratio": 2.6232,
+      "smart_money_ratio": 1.5851
+    },
+    {
+      "timestamp": 1784462400000,
+      "retail_ratio": 2.5984,
+      "smart_money_ratio": 1.5811
+    },
+    {
+      "timestamp": 1784466000000,
+      "retail_ratio": 2.5791,
+      "smart_money_ratio": 1.5746
+    },
+    {
+      "timestamp": 1784469600000,
+      "retail_ratio": 2.5791,
+      "smart_money_ratio": 1.5801
+    },
+    {
+      "timestamp": 1784473200000,
+      "retail_ratio": 2.5804,
+      "smart_money_ratio": 1.6047
+    },
+    {
+      "timestamp": 1784476800000,
+      "retail_ratio": 2.5804,
+      "smart_money_ratio": 1.6122
+    },
+    {
+      "timestamp": 1784480400000,
+      "retail_ratio": 2.5868,
+      "smart_money_ratio": 1.6225
+    },
+    {
+      "timestamp": 1784484000000,
+      "retail_ratio": 2.5932,
+      "smart_money_ratio": 1.6136
+    },
+    {
+      "timestamp": 1784487600000,
+      "retail_ratio": 2.6101,
+      "smart_money_ratio": 1.628
+    },
+    {
+      "timestamp": 1784491200000,
+      "retail_ratio": 2.6036,
+      "smart_money_ratio": 1.629
+    },
+    {
+      "timestamp": 1784494800000,
+      "retail_ratio": 2.601,
+      "smart_money_ratio": 1.6231
+    },
+    {
+      "timestamp": 1784498400000,
+      "retail_ratio": 2.5881,
+      "smart_money_ratio": 1.618
+    },
+    {
+      "timestamp": 1784502000000,
+      "retail_ratio": 2.5894,
+      "smart_money_ratio": 1.6216
+    },
+    {
+      "timestamp": 1784505600000,
+      "retail_ratio": 2.5689,
+      "smart_money_ratio": 1.6231
+    },
+    {
+      "timestamp": 1784509200000,
+      "retail_ratio": 2.5868,
+      "smart_money_ratio": 1.6213
+    },
+    {
+      "timestamp": 1784512800000,
+      "retail_ratio": 2.5714,
+      "smart_money_ratio": 1.6294
+    },
+    {
+      "timestamp": 1784516400000,
+      "retail_ratio": 2.5587,
+      "smart_money_ratio": 1.6546
+    },
+    {
+      "timestamp": 1784520000000,
+      "retail_ratio": 2.5804,
+      "smart_money_ratio": 1.6468
+    },
+    {
+      "timestamp": 1784523600000,
+      "retail_ratio": 2.5842,
+      "smart_money_ratio": 1.643
+    },
+    {
+      "timestamp": 1784527200000,
+      "retail_ratio": 2.6206,
+      "smart_money_ratio": 1.6546
+    },
+    {
+      "timestamp": 1784530800000,
+      "retail_ratio": 2.6284,
+      "smart_money_ratio": 1.642
+    },
+    {
+      "timestamp": 1784534400000,
+      "retail_ratio": 2.6101,
+      "smart_money_ratio": 1.6348
+    },
+    {
+      "timestamp": 1784538000000,
+      "retail_ratio": 2.5613,
+      "smart_money_ratio": 1.6313
+    },
+    {
+      "timestamp": 1784541600000,
+      "retail_ratio": 2.6114,
+      "smart_money_ratio": 1.6282
+    },
+    {
+      "timestamp": 1784545200000,
+      "retail_ratio": 2.5984,
+      "smart_money_ratio": 1.6229
+    },
+    {
+      "timestamp": 1784548800000,
+      "retail_ratio": 2.5249,
+      "smart_money_ratio": 1.6005
+    },
+    {
+      "timestamp": 1784552400000,
+      "retail_ratio": 2.5549,
+      "smart_money_ratio": 1.61
+    },
+    {
+      "timestamp": 1784556000000,
+      "retail_ratio": 2.6258,
+      "smart_money_ratio": 1.6256
+    }
+  ],
+  "fetched_at": "2026-07-20T14:33:41Z"
+}

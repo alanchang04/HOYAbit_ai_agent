@@ -1,0 +1,12 @@
+{
+  "coin": "BTC",
+  "source": "Kraken /0/public/Depth (pair=XBTUSD)",
+  "fetched_at": "2026-07-20T12:28:30Z",
+  "best_bid": 64681.7,
+  "best_ask": 64681.8,
+  "mid_price": 64681.75,
+  "spread_bps": 0.015460311448874027,
+  "bid_depth_usd_1pct": 16546447.481,
+  "ask_depth_usd_1pct": 16783431.6425,
+  "depth_usd_1pct_total": 33329879.123499997
+}

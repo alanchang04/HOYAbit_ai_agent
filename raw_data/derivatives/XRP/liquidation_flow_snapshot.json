@@ -1,0 +1,11 @@
+{
+  "coin": "XRP",
+  "source": "Binance USDⓈ-M 合約公開 WebSocket !forceOrder@arr（免 key，market-wide）",
+  "note": "這是固定時間窗口內的即時監聽樣本，不是歷史統計；observed_count=0 代表這段窗口沒觀測到清算，不代表市場沒有清算發生，報告只能講「推論」不能講「觀測到」以外的窗口。",
+  "window_start": "2026-07-20T14:30:29Z",
+  "window_end": "2026-07-20T14:31:17Z",
+  "window_seconds": 40,
+  "observed_count": 0,
+  "events": [],
+  "fetched_at": "2026-07-20T14:31:17Z"
+}

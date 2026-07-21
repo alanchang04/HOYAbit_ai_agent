@@ -1,0 +1,12 @@
+{
+  "coin": "XRP",
+  "source": "Kraken /0/public/Depth (pair=XRPUSD)",
+  "fetched_at": "2026-07-20T12:28:31Z",
+  "best_bid": 1.10067,
+  "best_ask": 1.10075,
+  "mid_price": 1.1007099999999999,
+  "spread_bps": 0.7268036085786262,
+  "bid_depth_usd_1pct": 3311434.27787616,
+  "ask_depth_usd_1pct": 2951353.35974267,
+  "depth_usd_1pct_total": 6262787.63761883
+}

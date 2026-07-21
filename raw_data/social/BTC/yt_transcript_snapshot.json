@@ -1,0 +1,168 @@
+{
+  "coin": "BTC",
+  "source": "YouTube cakebaba（channel_id=UCcMyv5UQ9dCVN2UbLhXiLWw）",
+  "videos_checked": 5,
+  "videos_with_transcript": 5,
+  "total_mention_count": 68,
+  "overall_direction": "偏多",
+  "videos": [
+    {
+      "video_id": "Jh9jC7qkjKA",
+      "title": "美股重挫！比特幣竟然漲了？",
+      "published": "2026-07-17T00:19:54+00:00",
+      "url": "https://www.youtube.com/watch?v=Jh9jC7qkjKA",
+      "transcript_available": true,
+      "transcript_language": "zh",
+      "transcript_char_count": 4019,
+      "coin_mention_count": 14,
+      "coin_mention_hits": {
+        "比特幣": 14
+      },
+      "bullish_hits": {
+        "看漲": 1,
+        "上漲": 2,
+        "突破": 8,
+        "反彈": 12,
+        "牛市": 1,
+        "利多": 1
+      },
+      "bearish_hits": {
+        "看跌": 4,
+        "做空": 1,
+        "下跌": 2,
+        "跌破": 11,
+        "熊市": 5,
+        "下殺": 7,
+        "砸盤": 1,
+        "M頭": 2
+      },
+      "direction": -1
+    },
+    {
+      "video_id": "-ih3ZaxKpP8",
+      "title": "BTC下跌，不怪戰爭！真正殺手是?",
+      "published": "2026-07-14T00:26:08+00:00",
+      "url": "https://www.youtube.com/watch?v=-ih3ZaxKpP8",
+      "transcript_available": true,
+      "transcript_language": "zh",
+      "transcript_char_count": 4077,
+      "coin_mention_count": 18,
+      "coin_mention_hits": {
+        "比特幣": 18
+      },
+      "bullish_hits": {
+        "看漲": 8,
+        "看多": 1,
+        "走強": 1,
+        "上漲": 4,
+        "突破": 7,
+        "止跌": 1,
+        "反彈": 6,
+        "抄底": 2,
+        "追漲": 1,
+        "利多": 1,
+        "看好": 1
+      },
+      "bearish_hits": {
+        "看跌": 1,
+        "看空": 1,
+        "做空": 1,
+        "下跌": 4,
+        "跌破": 7,
+        "失守": 1,
+        "追空": 2,
+        "熊市": 5,
+        "利空": 1,
+        "下殺": 1,
+        "砸盤": 1,
+        "M頭": 2
+      },
+      "direction": 1
+    },
+    {
+      "video_id": "oztA5k5VSnE",
+      "title": "加密貨幣最好的日子，還沒來！？",
+      "published": "2026-07-12T03:20:00+00:00",
+      "url": "https://www.youtube.com/watch?v=oztA5k5VSnE",
+      "transcript_available": true,
+      "transcript_language": "zh",
+      "transcript_char_count": 3641,
+      "coin_mention_count": 9,
+      "coin_mention_hits": {
+        "比特幣": 8,
+        "Bitcoin": 1
+      },
+      "bullish_hits": {
+        "看多": 2,
+        "上漲": 2,
+        "牛市": 3
+      },
+      "bearish_hits": {
+        "悲觀": 3
+      },
+      "direction": 1
+    },
+    {
+      "video_id": "XVtMYseiwtg",
+      "title": "比特幣趨勢線保衛戰！空頭最後防線？石油突然拉漲",
+      "published": "2026-07-08T04:20:43+00:00",
+      "url": "https://www.youtube.com/watch?v=XVtMYseiwtg",
+      "transcript_available": true,
+      "transcript_language": "zh",
+      "transcript_char_count": 2619,
+      "coin_mention_count": 11,
+      "coin_mention_hits": {
+        "比特幣": 11
+      },
+      "bullish_hits": {
+        "看漲": 5,
+        "做多": 1,
+        "上漲": 2,
+        "突破": 6,
+        "反彈": 9,
+        "抄底": 6,
+        "牛市": 2
+      },
+      "bearish_hits": {
+        "看跌": 1,
+        "下跌": 5,
+        "暴跌": 1,
+        "熊市": 4,
+        "下殺": 4,
+        "砸盤": 2
+      },
+      "direction": 1
+    },
+    {
+      "video_id": "6GUQSS_NX6k",
+      "title": "比特幣反彈不是牛市開始，而是「逼空行情」？",
+      "published": "2026-07-06T03:30:48+00:00",
+      "url": "https://www.youtube.com/watch?v=6GUQSS_NX6k",
+      "transcript_available": true,
+      "transcript_language": "zh",
+      "transcript_char_count": 3019,
+      "coin_mention_count": 16,
+      "coin_mention_hits": {
+        "比特幣": 16
+      },
+      "bullish_hits": {
+        "做多": 6,
+        "上漲": 1,
+        "突破": 11,
+        "反彈": 16,
+        "牛市": 1,
+        "上攻": 1
+      },
+      "bearish_hits": {
+        "做空": 1,
+        "下跌": 4,
+        "跌破": 1,
+        "追空": 1,
+        "熊市": 3,
+        "下殺": 1
+      },
+      "direction": 1
+    }
+  ],
+  "fetched_at": "2026-07-20T16:41:38Z"
+}

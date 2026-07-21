@@ -1,0 +1,25 @@
+{
+  "coin": "BTC",
+  "researched_at": "2026-07-21",
+  "written_at": "2026-07-20T16:27:47Z",
+  "schedule_type": "halving",
+  "cycle": "每 210,000 區塊（約 4 年）一次，區塊獎勵腰斬",
+  "last_event": {
+    "date": "2024-04-20",
+    "label": "第 4 次減半，區塊高度 840,000",
+    "reward_before_btc": 6.25,
+    "reward_after_btc": 3.125
+  },
+  "next_event": {
+    "date_estimated": "2028-04-17",
+    "block_height": 1050000,
+    "label": "第 5 次減半（預估日期隨平均出塊時間微調，會逐漸收斂）",
+    "reward_before_btc": 3.125,
+    "reward_after_btc": 1.5625,
+    "days_until_estimated": 636
+  },
+  "read": "減半＝區塊獎勵腰斬，是供給面最確定的長期通縮敘事，但下次減半通常還有數年，執行當下多半只能講「距下次減半還有 X 天，發行速度尚未變動」這種背景鋪陳，不是近期催化劑，跟 SOL/BNB/XRP 的「近期」事件時間尺度不同，報告裡不要跟其他三幣的迫切性並列。",
+  "sources": [
+    "https://bitbo.io/halving/"
+  ]
+}

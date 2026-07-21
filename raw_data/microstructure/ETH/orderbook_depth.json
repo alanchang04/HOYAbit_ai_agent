@@ -1,0 +1,12 @@
+{
+  "coin": "ETH",
+  "source": "Kraken /0/public/Depth (pair=ETHUSD)",
+  "fetched_at": "2026-07-20T12:28:31Z",
+  "best_bid": 1876.76,
+  "best_ask": 1876.77,
+  "mid_price": 1876.7649999999999,
+  "spread_bps": 0.05328317610351273,
+  "bid_depth_usd_1pct": 10295834.70499,
+  "ask_depth_usd_1pct": 10701491.09702,
+  "depth_usd_1pct_total": 20997325.80201
+}
