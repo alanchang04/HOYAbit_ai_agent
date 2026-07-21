@@ -1,0 +1,16 @@
+{
+  "coin": "SOL",
+  "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源）；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推",
+  "underlying_price": 77.89288364,
+  "contract_count_total": 132,
+  "target_expiry": "260731",
+  "days_to_expiry": 10.2,
+  "atm_iv_pct": 48.28,
+  "call_25d_iv_pct": 49.94,
+  "put_25d_iv_pct": 50.84,
+  "skew_25d_pct": 0.9,
+  "put_open_interest_total": 22423.02,
+  "call_open_interest_total": 54605.62,
+  "put_call_oi_ratio": 0.4106,
+  "fetched_at": "2026-07-21T02:33:47Z"
+}

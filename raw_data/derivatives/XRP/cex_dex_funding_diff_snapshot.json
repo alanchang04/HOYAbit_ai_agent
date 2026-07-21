@@ -1,0 +1,13 @@
+{
+  "coin": "XRP",
+  "source": "Binance /fapi/v1/premiumIndex (CEX) vs Hyperliquid metaAndAssetCtxs (DEX)",
+  "cex_last_funding_rate_pct": 0.008225,
+  "cex_funding_interval_hours": 8,
+  "cex_annualized_pct": 9.006375,
+  "dex_last_funding_rate_pct": 0.00125,
+  "dex_funding_interval_hours": 1,
+  "dex_annualized_pct": 10.95,
+  "annualized_diff_pct": -1.943624999999999,
+  "divergence_label": "兩邊費率接近，無明顯場地背離",
+  "fetched_at": "2026-07-21T02:40:28Z"
+}

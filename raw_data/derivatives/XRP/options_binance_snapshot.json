@@ -1,0 +1,16 @@
+{
+  "coin": "XRP",
+  "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源）；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推",
+  "underlying_price": 1.11506725,
+  "contract_count_total": 56,
+  "target_expiry": "260731",
+  "days_to_expiry": 10.2,
+  "atm_iv_pct": 50.25,
+  "call_25d_iv_pct": 51.29,
+  "put_25d_iv_pct": 53.56,
+  "skew_25d_pct": 2.26,
+  "put_open_interest_total": 11928.0,
+  "call_open_interest_total": 2591993.0,
+  "put_call_oi_ratio": 0.0046,
+  "fetched_at": "2026-07-21T02:33:47Z"
+}
