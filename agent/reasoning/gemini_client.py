@@ -19,6 +19,25 @@ class GeminiClientError(RuntimeError):
     pass
 
 
+# 重試無法解決的錯誤特徵。額度耗盡與 rate limit 同樣是 429 RESOURCE_EXHAUSTED，
+# 但前者退避再久也不會成功——一律重試只是讓每次呼叫白等指數退避的時間。
+_FATAL_ERROR_MARKERS = (
+    "credits are depleted",
+    "billing",
+    "api key not valid",
+    "api_key_invalid",
+    "permission_denied",
+    "unauthenticated",
+    "invalid_argument",
+    "not_found",
+)
+
+
+def _is_fatal(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _FATAL_ERROR_MARKERS)
+
+
 class GeminiClient:
     def __init__(self, settings: Settings, max_retries: int = 3, base_backoff_seconds: float = 1.5):
         if not settings.gemini_api_key:
@@ -59,6 +78,10 @@ class GeminiClient:
                 return response.text
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
+                if _is_fatal(exc):
+                    raise GeminiClientError(
+                        f"Gemini 呼叫失敗（額度、金鑰或權限問題，重試無用，直接放棄）: {exc}"
+                    ) from exc
                 if attempt < self.max_retries:
                     time.sleep(self.base_backoff_seconds * (2 ** (attempt - 1)))
         raise GeminiClientError(f"Gemini 呼叫失敗，已重試 {self.max_retries} 次: {last_exc}")
