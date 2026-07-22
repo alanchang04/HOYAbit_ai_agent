@@ -85,8 +85,10 @@ class RunMetrics(BaseModel):
 
 | 元件 | 介面 | 說明 |
 |---|---|---|
-| `agent/filters/source_weights.py`（§3.1，待改版見 §3.9） | `apply_source_weights(evidences, logger) -> None`（原地補 `source_weight`/`weight_reason`） | L1 信源層 |
-| `agent/filters/content.py`（§3.2，待改版見 §3.9） | `apply_content_filters(evidences, logger) -> list[FilterDecision]` | L2 內容層 |
+| `agent/filters/dedup.py`（§3.9，2026-07-21 新增） | `apply_dedup(evidences, logger, min_sample=None) -> DedupResult`（原地標 `duplicate_of`/dedup 統計欄位） | Phase 2 去重（R12-1），news/social 限定 |
+| `agent/filters/trust_config.py`（§3.9，2026-07-21 新增） | `load_reputation_config() -> dict \| None`（失敗回 None → 呼叫端 fallback） | 載入 `static/source_reputation.json` |
+| `agent/filters/source_weights.py`（§3.9 四因子版，舊制表保留為 fallback） | `apply_source_weights(evidences, logger, dedup_result=None, pr_demotions=None) -> dict[str, WeightBreakdown]`（原地補 `source_weight`/`weight_reason`，回傳四因子分解供 L2 對帳） | L1 信源層（R12-3/4/5） |
+| `agent/filters/content.py`（§3.9 版：話術掃描＋F9 詞典法；模板相似度由 dedup 取代） | `scan_pr_terms(evidences) -> dict`；`apply_content_filters(evidences, logger, pr_hits=None, breakdowns=None) -> list[FilterDecision]` | L2 內容層 |
 | `agent/reasoning/pipeline.py`（不變） | `run_reasoning(...) -> ReasoningResult`；內部 Step A-D 補寫 L3-L5 metrics | 推理鏈＋辯論＋L3-L5 metrics |
 | `agent/reasoning/confidence.py`（不變） | 內嵌於 pipeline Step D 後，純函式輸出 `(score, breakdown)` | L5 數值信心公式 |
 | `agent/reasoning/baseline.py`（§4） | `run_baseline(question, evidences, llm_client) -> dict` | 未過濾對照組，同一 `LLMClient` |
@@ -185,8 +187,11 @@ ticker 大小寫敏感（`"ETH" in text`）＋全名別名小寫比對（`"ether
 ### 3.9 資料層目標設計：採用 Ken 的信任評分公式（R12，取代 3.1/3.2a/3.2b）
 
 > 設計權威為 Ken（`07_流程圖迭代定案.md`），本節只是把它轉寫成與本文件其他章節
-> 一致的格式，實作歸屬未定（見 `team-division.md`）。**本節只影響 L1/L2 的評分/去重
-> 邏輯，不影響 §3.3-3.8、§4 之後任何章節**——結論仍由辯論鏈產生（Property 6）。
+> 一致的格式。**2026-07-21 已由 Alan 實作完成 filters 層**（`dedup.py`／
+> `trust_config.py`／`source_weights.py`／`content.py`／`static/source_reputation.json`，
+> 見 tasks.md Phase 7；R12-2 的 collector 側計數仍待 Kevin/Ken）。**本節只影響
+> L1/L2 的評分/去重邏輯，不影響 §3.3-3.8、§4 之後任何章節**——結論仍由辯論鏈
+> 產生（Property 6）。
 
 **Phase 2（證據化）新增去重步驟**：標題相似度去重（本地字串級，不經 LLM），
 與去重同步算出並隨證據傳遞：

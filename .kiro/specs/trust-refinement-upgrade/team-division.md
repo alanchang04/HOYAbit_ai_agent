@@ -48,14 +48,14 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 - 失敗隔離機制完整：每個 collector 獨立 timeout（75 秒）＋ try/except，單一來源失敗不拖垮全流程
 
 ### 還缺什麼
-- **依 `07_流程圖迭代定案.md` 的 Phase 1-2 設計實作資料層**（已裁定採用 Ken 方案，見上方「架構分歧」）：
-  - `news.py` 的命中則數計算要**搬到去重之後**（目前是在 collector 內直接計數，未去重，需改）
-  - 標題相似度去重（本地字串級，不用 LLM）＋同步算出 `raw_count`／`deduped_count`／`dedup_rate`，隨證據一起往下傳
-  - 來源等級表 `static/source_reputation.json`（賽前信譽表＋分級理由，取代/整合 Alan 現有 `source_weights.py` 的規則表）
-  - `w = 新鮮度 × 來源等級 × 覆蓋度 × dedup_penalty` 四因子權重公式（`dedup_penalty` 需獨立於覆蓋度計算，理由見 Ken 文件「新問題 A」）
-  - 拉盤話術詞庫比對（Ken 設計是命中則來源等級降一級；Alan 現有 `content.py` 的 PR_TERMS 是類似構想但做法不同，這塊要跟 Ken 對一次以確定最終比對詞庫與降級方式由誰維護）
-  - 最小樣本門檻防呆（去重前則數 <5 時 dedup_penalty 固定為 1，避免除零/小樣本誤判）
-- 這塊的**實作歸屬（Kevin 寫 or Alan 寫）還沒定案**，只確定了設計依 Ken 的文件為準——建議 Kevin 看過 `07_流程圖迭代定案.md` 全文後跟 Alan 談一次分工
+- **`news.py` 命中則數搬到去重之後**（tasks.md 7.2，R12-2）——資料層改版其餘部分
+  已由 Alan 於 2026-07-21 在 `agent/filters/` 完成（見下方 Alan 段落），**只剩這一項
+  在 collector 側**。Alan 已在 evidence 上備妥 `dedup_deduped_count` 欄位可直接讀取。
+  ⚠️ 注意：`origin/ken` 分支對 `news.py` 有 197 行未合併改動（另有 `price.py`／
+  `macro.py`／`config.py`／fixtures 與整套 `pipeline/` prototype、`raw_data/` 快照，
+  共 14 個 commit），建議先合併 Ken 的分支再做這條，避免衝突
+- 拉盤話術**詞庫內容**要跟 Ken 對一次（Alan 已把「命中→來源等級降一級」機制做好，
+  詞庫目前沿用 `content.py` 的 PR_TERMS，最終詞庫與維護者待定）
 - Ken 筆記（`DATA_SOURCES.md`）中列的延伸資料源（衍生品/微結構流動性/穩定幣供給等，`07` 文件也把 derivatives／liquidity 列為新 collector）若要做，屬於這裡；優先序與風險評估已在 `AUDIT.md` §7.2、§8 列出（衍生品有地理封鎖風險，需先在部署環境實測）
 - Reddit 403 的替代方案（例如改官方 OAuth API）——目前是接受並在報告誠實揭露，非必要但可選
 
@@ -64,8 +64,10 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 ## 2. Alan（你）：資料整理／權重／情緒分析／合規／UI／部署
 
 ### 現在有什麼
-- **L1 信源權重**（⚠️ 待改版，見上方「架構分歧」）：`agent/filters/source_weights.py`，目前是靜態規則表（官方基準 0.95／鏈上 0.85／CoinGecko 0.80／總經 0.65／新聞 0.60／社群 0.30），已實測、但**設計上已被 Ken 的四因子公式取代**，尚未照新設計改寫。**「權重要不要做成可訓練模型」這個結論不受本次架構分歧影響、維持不變**：不建議訓練——沒有可靠標籤、且會犧牲「每個數字可解釋」這個核心賣點；Ken 的四因子公式一樣是規則式、可解釋，符合同樣的原則，只是規則更細緻
-- **L2 內容層過濾**（⚠️ 待改版，見上方「架構分歧」）：`agent/filters/content.py`，目前是 PR 話術英文詞典偵測（降權）＋模板相似度（Jaccard，標記非獨立來源），純本地零 LLM 成本，已測效能 <100ms；**模板相似度這塊的角色被 Ken 的「Phase 2 去重＋dedup_penalty」取代**，PR 詞典則要跟 Ken 的拉盤話術詞庫合併成同一份
+- **L1 信源權重（✅ 已依 Ken 四因子公式改版，2026-07-21）**：`agent/filters/source_weights.py` 實作 `w = 新鮮度 × 來源等級 × 覆蓋度 × dedup_penalty`，來源等級查 `static/source_reputation.json`（賽前信譽表＋分級理由，並印進 report.md 附錄）；所有係數資料驅動、weight_reason 逐筆可對帳；信譽表載入失敗自動退回舊制規則表（R12-5 fallback）。**「權重要不要做成可訓練模型」結論維持不變**：不訓練——四因子公式是規則式、可解釋，符合「每個數字可解釋」的核心賣點
+- **Phase 2 去重（✅ 新增，2026-07-21）**：`agent/filters/dedup.py`——news/social 依 (coin, source_type) 群組做字串級近重複偵測，算出 `raw_count`／`deduped_count`／`dedup_rate` 隨證據進 evidence.json；被剔除者標 `duplicate_of` 保留可回溯（不刪除）；<5 則小樣本不觸發 dedup_penalty（R12-3d）
+- **L2 內容層過濾（✅ 已改版，2026-07-21）**：`agent/filters/content.py`——拉盤話術命中改為「來源等級降一級」（取代 ×0.5，可與 dedup_penalty 疊加、非重複扣分）；模板相似度（F10）功成身退，由 Phase 2 去重取代；PR 詞典內容仍待跟 Ken 的話術詞庫合併
+- **F9 情緒分布分析（✅ 詞典法 MVP 上線，2026-07-21）**：正/負面英文詞典 word-boundary 統計，樣本取去重後敘事類證據；單向占比 ≥80% 且樣本 ≥5 標羊群/帶風向警示；觀察性指標不動權重，輸出到面板③ L2 與 execution log；之後要升級 RAG／模型法時介面已就位
 - **L5 數值信心公式**：`agent/reasoning/confidence.py`，`base(高/中/低) + 權威源占比加成 − 矛盾訊號懲罰 − 資料缺口懲罰`，公式每項都寫進 log 可對帳
 - **view_builder**：`agent/report/view_builder.py`，組裝 `report_view.json` 四面板契約；今天剛修好一個缺口——L3 面板的 `removed_items` 原本永遠是空陣列，現在會正確反推「哪些證據沒被事實層引用、為什麼」（有 L2 判定就沿用該理由，沒有就標記「事實層未引用」）
 - **Web UI 四面板前端**（新認領）：`webapp/templates/result.html`（報告／執行時間線／Raw Log 分頁）、`webapp/templates/view.html`（四面板：原始證據流／未過濾基準對照／信任提煉流水線／分析報告），`/view/{run_id}` 路由已接上，已用真實 dry-run 資料驗證版面正確
@@ -73,11 +75,11 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 - **Kiro 使用證據**（+10% 加分項）：`.kiro/specs/trust-refinement-upgrade/`（本規格三件套）、`.kiro/steering/`、`.kiro/hooks/run-tests.yaml`
 
 ### 還缺什麼
-- **L1/L2 依 Ken 的四因子公式改版**（設計已定案，見上方「架構分歧」，程式尚未動）：`source_weights.py` 要改成吃來源等級表＋覆蓋度；`content.py` 的模板相似度邏輯要讓位給 Phase 2 去重＋`dedup_penalty`，PR 詞典要跟 Ken 的話術詞庫合併
-- **F9 情緒分布分析（你說的「敏感分析」）**：目前是空佔位（`content.py` 的 `F9_STATUS = {"enabled": False}`），規格原本預留給 RAG 同伴，現在你要接手——需決定用詞典法（VADER/Loughran-McDonald 起步，純本地免 LLM）還是走 RAG／模型
-- **L1/L2 實作與 Kevin「清理」的分工**：設計已依 Ken 的文件定案，但**誰寫程式**還沒定案，待跟 Kevin 對齊（見上方 Kevin 段落）
+- **跟 Ken 校準兩個暫定值**：`static/source_reputation.json` 裡的 dedup_penalty
+  分級曲線與 min_sample=5 門檻（Ken 未收斂項目），校準後只需改 JSON 不改程式
+- **拉盤話術詞庫與 Ken 合併**：機制已完成（降一級），詞庫內容與維護者待對齊
 - **AWS 實際部署**（新認領）：README 已有完整 ECR push／App Runner 建立步驟，但還沒真的執行，需要 AWS CLI 存取確認
-- **Bedrock 最終驗證**（新認領，`tasks.md` Phase 6，標記 blocked）：`scripts/check_llm.py` 煙測 → 3 題型端到端 → 四面板／usage 核對
+- **Bedrock 最終驗證**（新認領，`tasks.md` Phase 6，標記 blocked）：`scripts/check_llm.py` 煙測 → 3 題型端到端 → 四面板／usage 核對（含 tasks.md 7.8 的四面板數字對帳）
 - **簡報／錄影素材整理成品**：`PITCH_REFERENCE.md` 已有素材庫，但還沒做成正式簡報與錄影
 
 ---
@@ -116,11 +118,12 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 2. ~~LLM 是否只負責敘事~~——**否決**：維持四步辯論鏈產生市場判斷與信心，Ken 的量化訊號若要用，只能當額外證據餵給 LLM，不取代裁判角色
 
 ### 仍待對齊
-1. **L1/L2 資料層改版的實作歸屬**：Kevin 寫還是 Alan 寫，或拆開寫（Kevin 做去重／信源等級表，Alan 做套用在證據上的公式與 view_builder 呈現）——建議 Kevin 看過 `07_流程圖迭代定案.md` 全文後跟 Alan 談
-2. **雙幣相對指標歸屬**：`agent/collectors/relative.py`（相關係數/beta/最大回撤，純本地 CSV 運算）目前掛在 orchestrator 由 Alan 這邊維護，但概念上屬於「資料」，可視 Kevin 意願轉手或維持現狀；Ken 的 07 文件也把「CSV 再榨」列在 Phase 1 本地層，可以一併討論
+1. ~~L1/L2 資料層改版的實作歸屬~~——**已定（2026-07-21）**：filters 層由 Alan 實作完成；collector 側的 7.2（news 命中則數用去重後數量）歸 Kevin／Ken，建議等 `origin/ken` 分支合併後再做
+2. **雙幣相對指標歸屬**：`agent/collectors/relative.py`（相關係數/beta/最大回撤，純本地 CSV 運算）目前掛在 orchestrator 由 Alan 這邊維護，但概念上屬於「資料」，可視 Kevin 意願轉手或維持現狀；Ken 的 07 文件也把「CSV 再榨」列在 Phase 1 本地層、且 `origin/ken` 分支的 `pipeline/compute_relative_strength.py` 有類似功能，**需要跟 Ken 對一次避免重工**
 3. **多輪辯論 vs Best-of-N 最終選哪個**：隊友 3 看完上表分析後決定，若選多輪辯論建議順便定輪數上限
-4. **F9 情緒分析用詞典法還是 RAG**：Alan 待定，若隊友 3 或 Kevin 有 RAG 資源也可以認領走
-5. **Ken 文件中「未完全收斂項目」**（`static/weights_backtest.json` 檔名統一、dedup 最小樣本門檻、dedup_penalty 分級曲線）：這些是 Ken 自己也還沒定案的細節，實作者遇到時需要跟 Ken 對一次，不要自己拍板
+4. ~~F9 情緒分析用詞典法還是 RAG~~——**已定（2026-07-21）**：詞典法 MVP 先上線（純本地零 LLM 成本），RAG／模型法列為後續升級選項，介面已就位
+5. **Ken 文件中「未完全收斂項目」**：dedup 最小樣本門檻與 dedup_penalty 分級曲線已用**暫定值**實作在 `static/source_reputation.json`（$comment 有標記），需與 Ken 校準後改 JSON 定案；`static/weights_backtest.json` 檔名統一屬 Ken 的機制②③選配，尚未實作、維持待 Ken 點頭
+6. **Ken 分支（`origin/ken`）整合**：14 個 commit、含大量 collector 改動與 `pipeline/`／`raw_data/` prototype，其中 `macro.py` 的 F&G limit=30 百分位、相對強弱計算與我們已完成的 R2-2／`relative.py` 有重疊，合併前建議三方（Kevin/Ken/Alan）對一次避免衝突與重工
 
 ---
 

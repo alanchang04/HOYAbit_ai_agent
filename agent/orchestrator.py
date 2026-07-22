@@ -28,7 +28,8 @@ from agent.reasoning.pipeline import ReasoningResult, ReasoningStepError, run_re
 from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
 from agent.report.view_builder import build_report_view
-from agent.filters.content import apply_content_filters
+from agent.filters.content import apply_content_filters, scan_pr_terms
+from agent.filters.dedup import apply_dedup
 from agent.filters.source_weights import apply_source_weights
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
@@ -171,13 +172,45 @@ def run_pipeline(
 
     evidences = assign_evidence_ids(drafts)
 
-    # L1 信源權重：統一補權重（collector 不動，單點修改）
-    apply_source_weights(evidences, logger)
-
-    # L2 內容層過濾（純本地，毫秒級）
-    filter_decisions: list[FilterDecision] = []
+    # Phase 2（R12，Ken 設計）：去重先行 → 話術掃描 → 四因子權重 → L2 決策紀錄
+    dedup_result = None
     try:
-        filter_decisions = apply_content_filters(evidences, logger)
+        dedup_result = apply_dedup(evidences, logger)
+    except Exception as exc:
+        # R12-5：去重失敗隔離，權重層自動視為無 dedup 資訊（覆蓋度/dedup 因子=1）
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_dedup_failed",
+            detail=f"去重失敗，退回無 dedup 資訊計算（R12-5）: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+
+    try:
+        pr_hits = scan_pr_terms(evidences)
+    except Exception as exc:
+        pr_hits = {}
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_pr_scan_failed",
+            detail=str(exc),
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+
+    # L1 信源權重：四因子公式（信譽表載入失敗時內部自動退回舊制規則表，R12-5）
+    breakdowns = apply_source_weights(
+        evidences, logger, dedup_result=dedup_result, pr_demotions=pr_hits
+    )
+
+    # L2 內容層過濾（純本地，毫秒級）；DEDUP 決策一併納入供面板①③對帳
+    filter_decisions: list[FilterDecision] = (
+        list(dedup_result.decisions) if dedup_result else []
+    )
+    try:
+        filter_decisions += apply_content_filters(
+            evidences, logger, pr_hits=pr_hits, breakdowns=breakdowns
+        )
     except Exception as exc:
         logger.log(
             phase=LogPhase.COLLECT,

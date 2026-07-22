@@ -205,34 +205,39 @@ def _build_panel3(
 
     # L2 content checks
     pr_hits = [fd for fd in filter_decisions if fd.check_code == "PR"]
+    dedup_removed = [fd for fd in filter_decisions if fd.check_code == "DEDUP"]
     f10_pairs = [fd for fd in filter_decisions if fd.check_code == "F10"]
+
+    def _fd_items(fds: list[FilterDecision]) -> list[dict]:
+        return [
+            {
+                "fingerprint": fingerprint_map.get(fd.evidence_id, ""),
+                "evidence_id": fd.evidence_id,
+                "reason": fd.reason,
+            }
+            for fd in fds
+        ]
+
+    # DEDUP 群組統計與 F9 情緒分布：從 execution log 對帳（缺項時誠實顯示空/未啟用）
+    dedup_summary = _find_log_metrics(log_entries, "l2_dedup_summary")
+    f9_metrics = _find_log_metrics(log_entries, "l2_f9_sentiment")
 
     l2_layer = {
         "layer": "L2_content",
         "checks": [
+            {"code": "PR", "hits": _fd_items(pr_hits)},
             {
-                "code": "PR",
-                "hits": [
-                    {
-                        "fingerprint": fingerprint_map.get(fd.evidence_id, ""),
-                        "evidence_id": fd.evidence_id,
-                        "reason": fd.reason,
-                    }
-                    for fd in pr_hits
-                ],
+                "code": "DEDUP",
+                "removed": _fd_items(dedup_removed),
+                "stats": dedup_summary.get("groups", []),
             },
-            {
-                "code": "F10",
-                "pairs": [
-                    {
-                        "fingerprint": fingerprint_map.get(fd.evidence_id, ""),
-                        "evidence_id": fd.evidence_id,
-                        "reason": fd.reason,
-                    }
-                    for fd in f10_pairs
-                ],
-            },
-            {"code": "F9", "enabled": False},
+            # F10 模板相似度已由 Phase 2 去重（DEDUP）取代，保留欄位相容
+            {"code": "F10", "pairs": _fd_items(f10_pairs)},
+            (
+                {"code": "F9", **{k: v for k, v in f9_metrics.items()}}
+                if f9_metrics.get("enabled")
+                else {"code": "F9", "enabled": False}
+            ),
         ],
     }
 
@@ -350,11 +355,35 @@ def _build_panel4(
                 if fp:
                     risk_evidence.append({"fingerprint": fp, "evidence_id": eid})
 
+    # 執行摘要：跟 report.md 的「執行摘要」同一套邏輯與資料來源（重組既有欄位，
+    # 不多打一次 LLM），供面板④最上方的醒目摘要卡片使用
+    invalidation_conditions = conclusion.get("invalidation_conditions", [])
+    if invalidation_conditions:
+        watchpoint = invalidation_conditions[0]
+        watchpoint_label = "最需留意的推翻條件"
+    elif reasoning_result.follow_up_watchpoints:
+        watchpoint = reasoning_result.follow_up_watchpoints[0]
+        watchpoint_label = "最需留意的後續觀察"
+    else:
+        watchpoint, watchpoint_label = "", ""
+
+    summary = {
+        "confidence_label": conclusion.get("confidence", "未知"),
+        "bull_argument": debate.get("bull_argument", ""),
+        "bull_evidence_ids": debate.get("bull_evidence_ids", []),
+        "bear_argument": debate.get("bear_argument", ""),
+        "bear_evidence_ids": debate.get("bear_evidence_ids", []),
+        "has_debate": bool(debate),
+        "watchpoint": watchpoint,
+        "watchpoint_label": watchpoint_label,
+    }
+
     return {
         "integrity_status": run_metrics.integrity_status,
         "degraded_reasons": run_metrics.degraded_reasons,
         "confidence": reasoning_result.confidence_score,
         "market_judgment": conclusion.get("market_judgment", ""),
+        "summary": summary,
         "core_facts": core_facts,
         "bullish_evidence": bullish_evidence,
         "risk_evidence": risk_evidence,

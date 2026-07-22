@@ -10,3 +10,4 @@ python-multipart>=0.0.9
 pytest>=8.0
 pytest-asyncio>=0.23
 google-genai>=1.0  # 開發階段暫代 Bedrock 用，正式比賽不使用
+markdown>=3.6  # Web UI 將 report.md 渲染成排版化 HTML（report.md 本身仍是命題要求的純文字交付檔，不受影響）

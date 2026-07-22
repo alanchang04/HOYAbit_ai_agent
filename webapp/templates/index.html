@@ -7,42 +7,54 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>HOYA BIT 加密市場分析 AI Agent</h1>
-    <p class="subtitle">多源資訊信任提煉：輸入幣種與題目，產出具備分層推理與可回溯證據的市場分析報告。</p>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="/">HOYA BIT<span>加密市場分析 AI Agent</span></a>
+    </div>
+  </header>
 
-    <form method="post" action="/analyze">
-      <label>
-        幣種
-        <select name="coin" required>
-          {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-        </select>
-      </label>
+  <div class="container">
+    <div class="hero">
+      <h1>多源資訊信任提煉</h1>
+      <p class="subtitle">輸入幣種與題目，產出具備分層推理與可回溯證據的市場分析報告——每個結論都能回溯到原始證據。</p>
+    </div>
+
+    <form method="post" action="/analyze" class="card">
+      <div class="form-row">
+        <label>
+          幣種
+          <select name="coin" required>
+            {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </label>
+
+        <label>
+          第二幣種（比較分析題型可選）
+          <select name="coin2">
+            <option value="">（無，留空則自動從題目文字偵測）</option>
+            {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
 
       <label>
         題目全文
         <textarea name="question" rows="4" required placeholder="例如：分析 BTC 過去兩週的市場表現，整合價格走勢、鏈上活躍度、主要新聞事件與社群討論熱度，給出整體市場狀態判斷。"></textarea>
       </label>
 
-      <label>
-        第二幣種（比較分析題型可選，留空則自動從題目文字偵測）
-        <select name="coin2">
-          <option value="">（無）</option>
-          {% for c in coins %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-        </select>
-      </label>
+      <div class="option-row">
+        <label class="checkbox-row">
+          <input type="checkbox" name="dry_run" value="true">
+          <span>Dry-run<small>不打真實 API/LLM，僅供流程排練</small></span>
+        </label>
 
-      <label class="checkbox-row">
-        <input type="checkbox" name="dry_run" value="true">
-        Dry-run（不打真實 API/LLM，僅供流程排練）
-      </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="with_baseline" value="true">
+          <span>啟用對照組<small>未過濾證據直接 LLM 分析，作為信任提煉對比基準</small></span>
+        </label>
+      </div>
 
-      <label class="checkbox-row">
-        <input type="checkbox" name="with_baseline" value="true">
-        啟用對照組（未過濾證據直接 LLM 分析，作為信任提煉對比基準）
-      </label>
-
-      <button type="submit">開始分析</button>
+      <button type="submit">開始分析 →</button>
     </form>
 
     <p class="note">

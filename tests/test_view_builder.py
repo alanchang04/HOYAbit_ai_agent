@@ -248,11 +248,61 @@ def test_build_report_view_produces_valid_json(
     assert len(panel4["risk_evidence"]) >= 1
     assert panel4["follow_up_watchpoints"] == ["觀察 ETF 資金流向"]
 
+    # panel4 執行摘要（summary）：與 report.md 的執行摘要同資料來源
+    summary = panel4["summary"]
+    assert summary["confidence_label"] == "中"
+    assert summary["has_debate"] is True
+    assert summary["bull_argument"] == "算力新高加上 ETF 資金流入支持偏強格局"
+    assert summary["bull_evidence_ids"] == ["ev-001", "ev-002"]
+    assert summary["bear_argument"] == "新聞面利好可能已被價格反映"
+    assert summary["watchpoint"] == "若出現大量拋售訊號"
+    assert summary["watchpoint_label"] == "最需留意的推翻條件"
+
     # 驗證寫入檔案
     view_path = out_dir / "report_view.json"
     assert view_path.exists()
     loaded = json.loads(view_path.read_text(encoding="utf-8"))
     assert loaded["schema_version"] == "1.0"
+
+
+def test_build_report_view_panel4_summary_without_debate_falls_back(
+    tmp_path: Path, sample_evidences: list[Evidence]
+) -> None:
+    """無辯論（fallback 路徑）時，summary.has_debate=False，watchpoint 改用
+    follow_up_watchpoints（沒有 invalidation_conditions 可用時）。"""
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    (out_dir / "execution_log.jsonl").write_text("", encoding="utf-8")
+
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]}],
+        conclusion={
+            "market_judgment": "資料不足，暫無明確判斷",
+            "confidence": "低",
+            "evidence_ids": ["ev-001"],
+        },
+        follow_up_watchpoints=["觀察後續資金流向"],
+    )
+    run_metrics = RunMetrics(confidence=30, integrity_status="INTACT")
+
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        coin2=None,
+        question="測試題目",
+    )
+
+    summary = view["panel4_report"]["summary"]
+    assert summary["has_debate"] is False
+    assert summary["bull_argument"] == ""
+    assert summary["watchpoint"] == "觀察後續資金流向"
+    assert summary["watchpoint_label"] == "最需留意的後續觀察"
 
 
 def test_build_report_view_fingerprint_mapping(
