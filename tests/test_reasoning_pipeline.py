@@ -71,7 +71,37 @@ def test_debate_happy_path_populates_bull_and_bear():
     assert client.call_count == 5
 
 
-def test_debate_failure_falls_back_to_single_model_inference():
+def test_debate_passes_bear_critique_to_the_judge():
+    """反方對正方的批評必須進到 Step D 的 prompt。
+
+    critique 不在 inference 裡（inference 只攤平了雙方的 argument），
+    早期版本因此讓裁判在完全沒看到反駁的情況下下結論。
+    """
+    prompts: list[str] = []
+
+    class RecordingClient(FakeLLMClient):
+        def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
+            prompts.append(user_prompt)
+            return super().converse(system_prompt, user_prompt, max_tokens)
+
+    client = RecordingClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',
+            '{"critique": "正方過度解讀了量能數據", "argument": "bear arg", "evidence_ids": ["ev-001"]}',
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    step_d_prompt = prompts[-1]
+    assert "正方過度解讀了量能數據" in step_d_prompt
+    assert "裁判守則" in step_d_prompt
+
+
+def test_bull_failure_falls_back_to_single_model_inference():
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
@@ -88,6 +118,31 @@ def test_debate_failure_falls_back_to_single_model_inference():
     assert result.inference[0]["hypothesis"] == "h"
     assert result.conclusion["market_judgment"] == "mj"
     assert client.call_count == 5
+
+
+def test_bear_failure_keeps_the_bull_argument_instead_of_discarding_it():
+    """C2 失敗時，C1 已經花掉一次呼叫產出的正方論證要保留，不能整段丟掉重跑。"""
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',  # Step C1 成功
+        RuntimeError("simulated network failure on bear step"),  # Step C2 失敗
+        '{"inference": [{"hypothesis": "h", "supporting_evidence_ids": ["ev-001"], "opposing_evidence_ids": []}]}',  # fallback Step C
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    # 單方面的辯論不成立，debate 維持空 dict，報告與四面板不會呈現成完整辯論
+    assert result.debate == {}
+    # 正方論證仍以假設的形式保留下來，並由單模型補上對立假設
+    assert len(result.inference) == 2
+    assert result.inference[0]["hypothesis"] == "[正方] bull arg"
+    assert result.inference[0]["supporting_evidence_ids"] == ["ev-001"]
+    assert result.inference[1]["hypothesis"] == "h"
+    assert result.conclusion["market_judgment"] == "mj"
+    assert client.call_count == 6
 
 
 def test_comparison_mode_threads_coin2_through_result():

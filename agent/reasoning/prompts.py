@@ -256,6 +256,27 @@ def build_step_c2_bear_prompt(
 """
 
 
+def _format_debate_section(debate: dict | None) -> str:
+    """把辯論全文交給裁判。
+
+    推論層被攤平成 inference 時只保留了正反方的 argument，反方對正方的 critique
+    整段遺失——那正是辯論最有價值的產出。這裡把原始辯論紀錄補回給 Step D，
+    否則裁判等於沒看到反方的反駁就下結論。
+    """
+    if not debate:
+        return ""
+    return f"""
+辯論紀錄（正方論證 → 反方批評 → 反方論證）：
+[正方論證] {debate.get("bull_argument", "")}
+[反方對正方的批評] {debate.get("bear_critique", "")}
+[反方論證] {debate.get("bear_argument", "")}
+
+裁判守則：你必須明確評估反方的批評是否成立。
+若成立，market_judgment 與 confidence 都要據此下修，並把該批評寫進 limitations；
+若不成立，要說明為何不採納。不可略過批評直接採信正方。
+"""
+
+
 def build_step_d_prompt(
     coin: str,
     question: str,
@@ -264,6 +285,7 @@ def build_step_d_prompt(
     cross_validation: dict,
     inference: list[dict],
     coin2: str | None = None,
+    debate: dict | None = None,
 ) -> str:
     framing = _resolve_framing(question_type, coin, coin2)
     return f"""題目：{question}
@@ -278,7 +300,7 @@ def build_step_d_prompt(
 
 推論層：
 {json.dumps(inference, ensure_ascii=False, indent=2)}
-
+{_format_debate_section(debate)}
 請執行【結論層】分析：綜合以上所有層次，給出最終市場判斷。
 market_judgment 需開門見山說明判斷，不要用買賣建議（不要給進場價/停損點）。
 confidence 只能是「高」、「中」或「低」三選一，並考量資料完整度、來源獨立性、矛盾訊號多寡來校準。
