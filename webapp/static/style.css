@@ -958,6 +958,35 @@ a {
   font-weight: 700;
 }
 
+.debate-round {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--code-bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 0.82rem;
+}
+
+.debate-round:first-child {
+  margin-top: 0.5rem;
+}
+
+.debate-round-header {
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+
+.debate-round p {
+  margin: 0.3rem 0;
+}
+
+.debate-round-cite {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
 .log-events-details {
   margin-top: 0.75rem;
   border-top: 1px solid var(--border);

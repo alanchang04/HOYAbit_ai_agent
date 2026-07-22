@@ -265,6 +265,110 @@ def test_build_report_view_produces_valid_json(
     assert loaded["schema_version"] == "1.0"
 
 
+def test_build_report_view_l5_debate_rounds_exposed(
+    tmp_path: Path, sample_evidences: list[Evidence]
+) -> None:
+    """面板③ L5 需要拿到完整逐輪辯論紀錄＋收斂原因人話標籤，
+    而不是只有相容層的最後一輪扁平資料（隊友3的多輪辯論功能）。"""
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    (out_dir / "execution_log.jsonl").write_text("", encoding="utf-8")
+
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "BTC 偏強", "confidence": "中", "evidence_ids": ["ev-001"]},
+        debate={
+            "rounds": [
+                {
+                    "round": 1,
+                    "bull_argument": "第一輪正方論證",
+                    "bull_evidence_ids": ["ev-001"],
+                    "bear_critique": "第一輪批評",
+                    "bear_argument": "第一輪反方論證",
+                    "bear_evidence_ids": ["ev-002"],
+                    "bear_has_new_points": True,
+                },
+                {
+                    "round": 2,
+                    "bull_argument": "第二輪正方論證（修正版）",
+                    "bull_evidence_ids": ["ev-003"],
+                    "bear_critique": "第二輪批評",
+                    "bear_argument": "第二輪反方論證（最終）",
+                    "bear_evidence_ids": [],
+                    "bear_has_new_points": False,
+                },
+            ],
+            "round_count": 2,
+            "stopped_reason": "converged",
+            "bull_argument": "第二輪正方論證（修正版）",
+            "bull_evidence_ids": ["ev-001", "ev-003"],
+            "bear_critique": "第二輪批評",
+            "bear_argument": "第二輪反方論證（最終）",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=65,
+    )
+    run_metrics = RunMetrics(confidence=65, integrity_status="INTACT")
+
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        coin2=None,
+        question="測試題目",
+    )
+
+    l5 = view["panel3_refinement"]["layers"][4]
+    assert l5["layer"] == "L5_conclusion"
+    debate = l5["debate"]
+    assert debate["round_count"] == 2
+    assert debate["stopped_reason"] == "converged"
+    assert debate["stopped_reason_label"] == "反方自認已無新的實質論點，辯論提前收斂"
+    assert len(debate["rounds"]) == 2
+    assert debate["rounds"][0]["bull_argument"] == "第一輪正方論證"
+    assert debate["rounds"][1]["bull_argument"] == "第二輪正方論證（修正版）"
+    # 相容層仍在（給不逐輪展示的地方用）
+    assert debate["bull"] == "第二輪正方論證（修正版）"
+
+
+def test_build_report_view_l5_debate_rounds_empty_without_debate(
+    tmp_path: Path, sample_evidences: list[Evidence]
+) -> None:
+    """無辯論時 rounds 應為空清單、round_count=0，不應報錯。"""
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    (out_dir / "execution_log.jsonl").write_text("", encoding="utf-8")
+
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "s", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "j", "confidence": "低", "evidence_ids": ["ev-001"]},
+    )
+    run_metrics = RunMetrics(confidence=30, integrity_status="INTACT")
+
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        coin2=None,
+        question="測試題目",
+    )
+
+    debate = view["panel3_refinement"]["layers"][4]["debate"]
+    assert debate["rounds"] == []
+    assert debate["round_count"] == 0
+    assert debate["stopped_reason_label"] == ""
+
+
 def test_build_report_view_panel4_summary_without_debate_falls_back(
     tmp_path: Path, sample_evidences: list[Evidence]
 ) -> None:

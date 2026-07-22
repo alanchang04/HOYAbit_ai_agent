@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 
 from agent.reasoning.pipeline import ReasoningResult
+from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import (
     Evidence,
     FilterDecision,
@@ -277,9 +278,15 @@ def _build_panel3(
     l5_layer = {
         "layer": "L5_conclusion",
         "debate": {
+            # 相容欄位（最後一輪）：舊版單輪畫面與其他不逐輪展示的地方沿用
             "bull": debate.get("bull_argument", ""),
             "bear_critique": debate.get("bear_critique", ""),
             "bear": debate.get("bear_argument", ""),
+            # 逐輪完整紀錄：面板③要完整呈現多輪辯論攻防用這組
+            "rounds": debate.get("rounds", []),
+            "round_count": debate.get("round_count", 1 if debate else 0),
+            "stopped_reason": debate.get("stopped_reason", ""),
+            "stopped_reason_label": STOP_REASON_LABEL.get(debate.get("stopped_reason", ""), ""),
         },
         "confidence_breakdown": {
             "base": l5_metrics.get("base", 35),

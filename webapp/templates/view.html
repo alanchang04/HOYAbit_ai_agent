@@ -199,7 +199,32 @@
                 <p>缺口扣減：-{{ layer.confidence_breakdown.gap_penalty }}</p>
                 <p><strong>最終信心：{{ layer.confidence_breakdown.final }}%</strong></p>
               </div>
-              {% if layer.debate.bull %}
+              {% if layer.debate.rounds %}
+                <details class="debate-details" open>
+                  <summary>
+                    多空辯論（共 {{ layer.debate.round_count }} 輪
+                    {%- if layer.debate.stopped_reason_label %}／{{ layer.debate.stopped_reason_label }}{% endif -%}
+                    ）
+                  </summary>
+                  {% for rd in layer.debate.rounds %}
+                    <div class="debate-round">
+                      <p class="debate-round-header">第 {{ rd.round }} 輪</p>
+                      <p><strong>正方：</strong>{{ rd.bull_argument }}</p>
+                      {% if rd.bull_evidence_ids %}
+                        <p class="debate-round-cite">引用：{{ rd.bull_evidence_ids|join(', ') }}</p>
+                      {% endif %}
+                      {% if rd.bear_critique %}
+                        <p><strong>反方對正方的批評：</strong>{{ rd.bear_critique }}</p>
+                      {% endif %}
+                      <p><strong>反方：</strong>{{ rd.bear_argument }}</p>
+                      {% if rd.bear_evidence_ids %}
+                        <p class="debate-round-cite">引用：{{ rd.bear_evidence_ids|join(', ') }}</p>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </details>
+              {% elif layer.debate.bull %}
+                {# 相容舊版扁平單輪資料（理論上合併後不會再產生，保留以防萬一） #}
                 <details class="debate-details">
                   <summary>多空辯論</summary>
                   <p><strong>多方論點：</strong>{{ layer.debate.bull }}</p>
