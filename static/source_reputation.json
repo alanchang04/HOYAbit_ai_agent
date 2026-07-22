@@ -1,0 +1,84 @@
+{
+  "$comment": "R12-3a 賽前信譽表：來源等級＋一行分級理由（印進報告附錄）。設計權威為 Ken《07_流程圖迭代定案.md》。注意：dedup_penalty 的分級曲線是暫定值（Ken 未收斂項目 #3），賽前需與 Ken 校準一次——調整本檔即可，不需改程式。本檔載入失敗時程式退回舊制規則表（R12-5 fallback）。",
+  "version": "1.0",
+  "levels": {
+    "A+": 0.95,
+    "A": 0.85,
+    "B+": 0.8,
+    "B": 0.65,
+    "C": 0.6,
+    "D": 0.45,
+    "E": 0.3,
+    "F": 0.15
+  },
+  "level_order": ["A+", "A", "B+", "B", "C", "D", "E", "F"],
+  "rules": [
+    {
+      "keywords": ["HOYA BIT 共同基準", "本地技術指標", "本地雙幣相對指標"],
+      "level": "A+",
+      "rationale": "官方基準資料／決定性本地運算"
+    },
+    {
+      "source_type": "onchain",
+      "level": "A",
+      "rationale": "鏈上公開 RPC，數據不可竄改"
+    },
+    {
+      "keywords": ["CoinGecko", "CryptoCompare"],
+      "level": "B+",
+      "rationale": "交易所聚合行情 API"
+    },
+    {
+      "source_type": "macro",
+      "level": "B",
+      "rationale": "公開指數/央行匯率"
+    },
+    {
+      "source_type": "news",
+      "level": "C",
+      "rationale": "主流媒體，未逐篇查證"
+    },
+    {
+      "source_type": "social",
+      "level": "E",
+      "rationale": "未經查證社群內容"
+    }
+  ],
+  "default": {
+    "level": "D",
+    "rationale": "未匹配任何信譽表規則，使用預設等級"
+  },
+  "freshness": {
+    "$comment": "以 fetched_at 距執行當下的小時數分級。正式執行時證據皆為當下抓取（因子≈1.0）；dry-run 舊 fixtures 或快取資料會呈現降級效果",
+    "tiers": [
+      { "max_age_hours": 24, "factor": 1.0 },
+      { "max_age_hours": 72, "factor": 0.9 },
+      { "max_age_hours": 168, "factor": 0.8 }
+    ],
+    "default_factor": 0.7
+  },
+  "coverage": {
+    "$comment": "覆蓋度＝去重後獨立來源數（來源多樣性）。與『覆蓋率』（collector 成功執行比例，用於 L5 信心公式）是兩個不同的量，不可混用。僅適用敘事類（news/social）；決定性資料（price/onchain/macro）單一來源即具完整效力，因子固定 1.0",
+    "applies_to": ["news", "social"],
+    "tiers": [
+      { "min_distinct_sources": 3, "factor": 1.0 },
+      { "min_distinct_sources": 2, "factor": 0.85 }
+    ],
+    "default_factor": 0.7
+  },
+  "dedup_penalty": {
+    "$comment": "【暫定曲線，待 Ken 校準】dedup_rate→倍率的分段映射。min_sample=5 依 R12-3d：去重前筆數 <5 時固定為 1（小樣本不判讀）。獨立於覆蓋度計算——覆蓋度量來源多樣性，dedup_penalty 量單一敘事被灌水/聯播的程度",
+    "applies_to": ["news", "social"],
+    "min_sample": 5,
+    "tiers": [
+      { "max_dedup_rate": 0.3, "factor": 1.0 },
+      { "max_dedup_rate": 0.5, "factor": 0.9 },
+      { "max_dedup_rate": 0.7, "factor": 0.75 }
+    ],
+    "default_factor": 0.6
+  },
+  "pr_demotion": {
+    "$comment": "R12-4 拉盤話術命中→來源等級降一級（取代舊制權重×0.5）。與 dedup_penalty 是獨立維度、允許同時疊加——非重複扣分",
+    "demote_levels": 1
+  }
+}

@@ -1,0 +1,15 @@
+# Kiro Agent Hook：報告文案／前端模板變更時自動跑合規測試
+# 合規紅線見 .kiro/steering/product.md（禁投資建議語彙、INTACT 語意）
+# 對應 R9／R11-3：合規把關由 Alan 負責，測試為 tests/test_compliance.py
+
+name: Compliance check on report/UI changes
+description: 儲存報告產生器、baseline 或前端模板時，自動執行合規測試確保無投資建議語彙
+
+trigger:
+  onSave:
+    - "webapp/templates/**/*.html"
+    - "agent/report/**/*.py"
+    - "agent/reasoning/baseline.py"
+    - "agent/reasoning/prompts.py"
+
+command: pytest tests/test_compliance.py -q

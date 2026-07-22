@@ -7,8 +7,14 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="/">HOYA BIT<span>加密市場分析 AI Agent</span></a>
+      <a class="header-link" href="/">&larr; 回到首頁</a>
+    </div>
+  </header>
+
   <div class="container">
-    <p><a href="/">&larr; 回到首頁</a></p>
     <h1>分析結果{% if coin2 %}：{{ coin }} vs {{ coin2 }}{% else %}：{{ coin }}{% endif %}</h1>
     <p class="question">題目：{{ question }}</p>
 
@@ -18,25 +24,41 @@
       </div>
     {% else %}
       {# Header summary from RunMetrics #}
-      <div class="run-summary">
-        <span>生成時間：{{ view_metrics.get("generated_at", "N/A") }}</span>
-        <span>信心：{{ view_metrics.get("confidence_score", "N/A") }}%</span>
-        <span>雜訊剔除率：{{ "%.1f"|format(view_metrics.get("noise_removal_rate", 0) * 100) }}%</span>
-        <span>Tokens：{{ view_metrics.get("total_tokens", "N/A") }}</span>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">信心</span>
+          <span class="stat-value">{{ view_metrics.get("confidence", "N/A") }}%</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">雜訊剔除率</span>
+          <span class="stat-value">{{ "%.1f"|format(view_metrics.get("noise_removal_rate", 0) * 100) }}%</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">耗時</span>
+          <span class="stat-value">{{ "%.2f"|format(result.elapsed_seconds) }}<small>秒</small></span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">證據筆數</span>
+          <span class="stat-value">{{ result.evidences|length }}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Tokens</span>
+          <span class="stat-value">{{ view_metrics.get("total_tokens", "N/A") }}</span>
+        </div>
       </div>
-
       <p class="meta">
-        耗時 {{ "%.2f"|format(result.elapsed_seconds) }} 秒
-        （degraded_mode={{ result.degraded_mode }}） ｜
-        證據筆數：{{ result.evidences|length }}
+        生成時間：{{ view_metrics.get("generated_at", "N/A") }}
+        {% if result.degraded_mode %}<span class="degraded-tag">DEGRADED</span>{% endif %}
       </p>
-      <p class="downloads">
-        <a href="/view/{{ run_id }}"><strong>四面板檢視</strong></a> ｜
-        <a href="/download/{{ run_id }}/report.md">下載 report.md</a> ｜
-        <a href="/download/{{ run_id }}/evidence.json">下載 evidence.json</a> ｜
-        <a href="/download/{{ run_id }}/execution_log.jsonl">下載 execution_log.jsonl</a> ｜
-        <a href="/download/{{ run_id }}/report_view.json">下載 report_view.json</a>
-      </p>
+
+      <div class="downloads card">
+        <a href="/view/{{ run_id }}" class="primary-link">📊 四面板檢視</a>
+        <span class="divider"></span>
+        <a href="/download/{{ run_id }}/report.md">report.md</a>
+        <a href="/download/{{ run_id }}/evidence.json">evidence.json</a>
+        <a href="/download/{{ run_id }}/execution_log.jsonl">execution_log.jsonl</a>
+        <a href="/download/{{ run_id }}/report_view.json">report_view.json</a>
+      </div>
 
       {# Tab navigation #}
       <div class="tabs">
@@ -46,9 +68,10 @@
           <button class="tab-btn" data-tab="rawlog">Raw Log</button>
         </nav>
 
-        {# Tab 1: 報告 (existing report content) #}
+        {# Tab 1: 報告（排版化 HTML，report.md 交付檔本身不受影響） #}
         <div class="tab-panel active" id="tab-report">
-          <pre class="report">{{ result.report_markdown }}</pre>
+          <nav class="report-toc" id="report-toc"></nav>
+          <div class="markdown-body card" id="report-body">{{ report_html | safe }}</div>
         </div>
 
         {# Tab 2: 執行時間線 #}
@@ -90,6 +113,61 @@
       document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
     });
   });
+
+  // 報告分頁易讀性強化：純前端呈現層調整，不改動 report.md 本身內容
+  (function () {
+    var body = document.getElementById('report-body');
+    var toc = document.getElementById('report-toc');
+    if (!body || !toc) return;
+
+    var headers = Array.prototype.slice.call(body.querySelectorAll('h2'));
+
+    // 1. 依標題自動產生「跳到章節」導覽列（markdown toc extension 已幫每個標題加 id）
+    headers.forEach(function (h) {
+      if (!h.id) return;
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent;
+      toc.appendChild(a);
+    });
+
+    // 2. 執行摘要（第一段）加醒目卡片外框，讓讀者一眼就能抓到重點
+    var summaryHeader = headers.find(function (h) {
+      return h.textContent.indexOf('執行摘要') !== -1;
+    });
+    if (summaryHeader) {
+      var summaryBox = document.createElement('div');
+      summaryBox.className = 'exec-summary';
+      var sNode = summaryHeader.nextElementSibling;
+      while (sNode && sNode.tagName !== 'H2') {
+        var sNext = sNode.nextElementSibling;
+        summaryBox.appendChild(sNode);
+        sNode = sNext;
+      }
+      summaryHeader.insertAdjacentElement('afterend', summaryBox);
+    }
+
+    // 3. 附錄（信源分級依據）每次執行內容固定不變，預設收合以縮短報告長度，
+    // 需要查證時仍可展開，連結仍可精準跳轉
+    var appendixHeader = headers.find(function (h) {
+      return h.textContent.indexOf('附錄') !== -1;
+    });
+    if (appendixHeader) {
+      var details = document.createElement('details');
+      details.className = 'report-appendix';
+      var summary = document.createElement('summary');
+      summary.textContent = appendixHeader.textContent;
+      details.id = appendixHeader.id;
+      details.appendChild(summary);
+      var node = appendixHeader.nextElementSibling;
+      appendixHeader.replaceWith(details);
+      while (node) {
+        var next = node.nextElementSibling;
+        details.appendChild(node);
+        node = next;
+      }
+    }
+  })();
   </script>
 </body>
 </html>

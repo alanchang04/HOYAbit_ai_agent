@@ -6,7 +6,8 @@
 
 本檔案是 `trust-refinement-upgrade` spec 的執行清單，按 Phase 0–7 依序執行。
 Phase 0–5 已完成並經程式碼審查＋實測驗證；Phase 6 因 Bedrock 帳號未開通而
-blocked；Phase 7（R12，資料層改版）因實作歸屬未定而 blocked，見下方 Notes。
+blocked；Phase 7（R12，資料層改版）已於 2026-07-21 拍板由 Alan 實作並完成
+filters 層部分（7.2 collector 側除外，見該條註記），見下方 Notes。
 
 ## Task Dependency Graph
 
@@ -18,9 +19,10 @@ Phase 0（bug 修復＋Kiro 證據，無依賴）
                     └─▶ Phase 4（前端 MVP）
                           └─▶ Phase 5（完整四面板）
                                 └─▶ Phase 6（Bedrock 最終驗證）[BLOCKED: bedrock 帳號]
-Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema，
-                              但實作前置條件是「團隊拍板歸屬」，非技術依賴
-                              [BLOCKED: 實作歸屬未定]
+Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema；
+                              filters 層已由 Alan 完成（2026-07-21），
+                              剩 7.2（collector 側，歸 Kevin/Ken）與
+                              7.8（依賴 Phase 6 Bedrock）
 ```
 
 ```json
@@ -108,40 +110,55 @@ Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema，
 - [~] 6.2 Bedrock 3 題型端到端＋四面板／usage 核對；Gemini 額度允許時先預演一次＿R10-2
 - [~] 6.3 簡報素材：Kiro 工作流截圖＋AgentCore 取捨說明段落＿R11-4
 
-## Phase 7 — 資料層改版：採用 Ken 的信任評分設計 [BLOCKED: 實作歸屬未定]
+## Phase 7 — 資料層改版：採用 Ken 的信任評分設計（filters 層已完成）
 
 > 2026-07-20 架構決策：資料層（信源分級／去重／權重公式）採用 Ken 的
 > `07_流程圖迭代定案.md` 設計，取代 Phase 2.1/2.2 現行實作（design.md §3.9）。
 > LLM 結論產生邏輯不受影響、不變（辯論鏈維持裁判角色）。
-> **實作歸屬（Kevin／Alan／協作）尚未拍板，見 `team-division.md`「邊界待對齊」，
-> 有結論前不要動手實作，避免跟其他人重工。**
+> **2026-07-21 拍板：`agent/filters/` 層（去重／四因子權重／話術降級／fallback）
+> 由 Alan 實作，已完成；7.2 屬 collector 側（`news.py`），仍歸 Kevin／Ken，
+> 且 `origin/ken` 分支有 197 行未合併的 news.py 改動，為避免衝突暫不實作。**
+> 落點：`agent/filters/dedup.py`（新）／`trust_config.py`（新）／
+> `source_weights.py`／`content.py`／`static/source_reputation.json`（新）。
 
-- [ ] 7.1 Phase 2 新增標題相似度去重（本地字串級），算出 `raw_count`／`deduped_count`／
-      `dedup_rate` 隨證據傳遞＿R12-1
+- [x] 7.1 Phase 2 新增標題相似度去重（本地字串級），算出 `raw_count`／`deduped_count`／
+      `dedup_rate` 隨證據傳遞（`dedup.py`；統計欄位進 evidence.json）＿R12-1
 - [ ] 7.2 news 命中則數改用去重後數量（現行 R2-3 實作是去重前計數，需修正）＿R12-2
-- [ ] 7.3 建立 `static/source_reputation.json`（賽前信譽表＋分級理由）＋改寫
-      `source_weights.py` 為四因子公式（新鮮度×來源等級×覆蓋度×dedup_penalty）＿R12-3
-- [ ] 7.4 `dedup_penalty` 獨立計算＋最小樣本門檻防呆（<5 則固定=1）＿R12-3c/3d
-- [ ] 7.5 拉盤話術詞庫命中改為「來源等級降一級」（取代現行權重 ×0.5），與
-      `dedup_penalty` 降權允許疊加，文件/報告註明避免誤認為 bug＿R12-4
-- [ ] 7.6 Fallback：靜態表或去重邏輯失敗時退回現行 Phase 2.1 規則表，不中斷流程＿R12-5
-- [ ] 7.7 更新受影響測試（`test_source_weights.py`／`test_content_filter.py`／
-      `test_macro_news_upgrade.py`）＋新增覆蓋度 vs 覆蓋率不混用的回歸測試
+      **[歸屬 Kevin／Ken：`news.py` 在 `origin/ken` 分支有大量未合併改動，合併後再做，
+      可直接讀取 evidence 上的 `dedup_deduped_count` 欄位]**
+- [x] 7.3 建立 `static/source_reputation.json`（賽前信譽表＋分級理由，並印進 report.md
+      附錄）＋改寫 `source_weights.py` 為四因子公式（新鮮度×來源等級×覆蓋度×
+      dedup_penalty），全部係數資料驅動＿R12-3
+- [x] 7.4 `dedup_penalty` 獨立計算＋最小樣本門檻防呆（<5 則固定=1；門檻與分級曲線
+      放 JSON 設定檔，標暫定待 Ken 校準）＿R12-3c/3d
+- [x] 7.5 拉盤話術詞庫命中改為「來源等級降一級」（取代現行權重 ×0.5），與
+      `dedup_penalty` 降權允許疊加；FilterDecision reason 與 steering 文件皆註明
+      「獨立維度非重複扣分」＿R12-4
+- [x] 7.6 Fallback：信譽表載入失敗或四因子計算出錯時退回舊制規則表
+      （log 標 `formula=legacy_fallback`），不中斷流程＿R12-5
+- [x] 7.7 更新受影響測試（`test_source_weights.py`／`test_content_filter.py` 重寫、
+      `test_dedup.py` 新增）＋新增覆蓋度 vs 覆蓋率不混用的回歸測試
+      （226 個 pytest 全綠，含 dry-run 端到端實測）
 - [ ] 7.8 Bedrock 開通後（Phase 6 之後）用真實 pipeline 確認四面板數字仍可對帳
-      （L1/L3 metrics 改版後 view_builder 是否仍正確組裝）
+      （L1/L3 metrics 改版後 view_builder 是否仍正確組裝）[BLOCKED: bedrock]
+- [x] 7.9 F9 情緒分布分析詞典法 MVP（非 R12，R4-2 佔位升級、Alan 認領項）：
+      正/負面詞典 word-boundary 統計、去重後樣本、單向占比 ≥80% 且樣本 ≥5 標
+      羊群警示；觀察性指標不動權重；面板③ L2 與 log 皆有輸出
 
 ## Notes
 
 - Phase 0–5 已於 2026-07-20 完成並經完整程式碼審查＋實際執行驗證（198→200 個
   pytest 全綠，含 3 次真實 dry-run 場景手動驗證：比較題型+baseline、degraded mode、
   L3 removed_items）。詳見 `team-division.md`「已完成里程碑對照」。
-- Phase 6／Phase 7 的 blocked 條件不同：Phase 6 是外部帳號依賴（等 AWS Bedrock
-  開通即可解除）；Phase 7 是團隊協調依賴（等分工拍板即可解除），兩者互不影響，
-  Phase 7 拍板後可以在 Phase 6 仍 blocked 的情況下先行開工。
-- Phase 7 的設計權威是隊友 Ken（`07_流程圖迭代定案.md`），實作前務必先讀過該檔案
-  全文，尤其「未完全收斂項目」章節列出的三個 Ken 自己也還沒定案的細節（信譽表
-  檔名、dedup 最小樣本門檻、dedup_penalty 分級曲線），遇到時要跟 Ken 對一次，
-  不要自行拍板。
+- Phase 7 已於 2026-07-21 由 Alan 完成 filters 層實作（7.1／7.3–7.7／7.9），
+  含 226 個 pytest 全綠與 dry-run 端到端實測（去重、四因子 reason、報告附錄、
+  面板③ L2 皆驗證正確）。剩餘：7.2（collector 側，等 `origin/ken` 分支合併後
+  由 Kevin／Ken 做，evidence 上已備妥 `dedup_deduped_count` 欄位）、
+  7.8（依賴 Phase 6 Bedrock 開通）。
+- Phase 7 的設計權威是隊友 Ken（`07_流程圖迭代定案.md`）。Ken 未收斂的兩個
+  細節（dedup 最小樣本門檻、dedup_penalty 分級曲線）已實作為
+  `static/source_reputation.json` 內的**暫定設定值**（有 $comment 標記），
+  與 Ken 校準後只需改 JSON、不需改程式；校準前不要把暫定值當定案引用。
 - 架構層級決策（資料層採用 Ken 設計／LLM 結論產生權維持辯論鏈）已於 2026-07-20
   裁定並記錄於 `requirements.md`（架構決策記錄）、`design.md`（文件頂部＋
   Property 6）、`team-division.md`（架構分歧章節），三份文件互為交叉引用，

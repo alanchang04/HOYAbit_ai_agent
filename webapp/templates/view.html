@@ -7,8 +7,14 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="/">HOYA BIT<span>加密市場分析 AI Agent</span></a>
+      <a class="header-link" href="/">&larr; 回到首頁</a>
+    </div>
+  </header>
+
   <div class="container container-wide">
-    <p><a href="/">&larr; 回到首頁</a></p>
     <h1>信任提煉四面板檢視</h1>
     <p class="meta">
       幣種：{{ view.meta.coin }}{% if view.meta.coin2 %} vs {{ view.meta.coin2 }}{% endif %}
@@ -18,11 +24,23 @@
     <p class="question">題目：{{ view.meta.question }}</p>
 
     {# Run metrics summary #}
-    <div class="run-summary">
-      <span>信心：{{ view.meta.metrics.confidence }}%</span>
-      <span>雜訊剔除率：{{ "%.1f"|format(view.meta.metrics.noise_removal_rate * 100) }}%</span>
-      <span>完整性：{{ view.meta.metrics.integrity_status }}</span>
-      <span>Tokens：{{ view.meta.metrics.total_tokens }}</span>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">信心</span>
+        <span class="stat-value">{{ view.meta.metrics.confidence }}%</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">雜訊剔除率</span>
+        <span class="stat-value">{{ "%.1f"|format(view.meta.metrics.noise_removal_rate * 100) }}%</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">完整性</span>
+        <span class="stat-value stat-value-tag">{{ view.meta.metrics.integrity_status }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Tokens</span>
+        <span class="stat-value">{{ view.meta.metrics.total_tokens }}</span>
+      </div>
     </div>
 
     {# Four-panel grid #}
@@ -31,8 +49,8 @@
       {# Panel 1: 原始證據流 #}
       <div class="panel">
         <div class="panel-header">① 原始證據流（{{ view.panel1_raw_feed.count }} 筆）</div>
-        {% if view.panel1_raw_feed.items %}
-          {% for item in view.panel1_raw_feed.items %}
+        {% if view.panel1_raw_feed["items"] %}
+          {% for item in view.panel1_raw_feed["items"] %}
           <div class="evidence-item">
             <span class="fingerprint-badge">{{ item.fingerprint }}</span>
             <span class="source-type-badge">{{ item.source_type }}</span>
@@ -103,7 +121,7 @@
               {% if layer.layer == "L1_source" %}
                 權威 {{ layer.summary.authoritative }} / 一般 {{ layer.summary.normal }} / 低信度 {{ layer.summary.low }}
               {% elif layer.layer == "L2_content" %}
-                PR 命中 {{ layer.checks[0].hits|length }} 筆，相似度配對 {{ layer.checks[1].pairs|length }} 筆
+                話術命中 {{ layer.checks[0].hits|length }} 筆，去重剔除 {{ layer.checks[1].removed|length }} 筆
               {% elif layer.layer == "L3_fact" %}
                 輸入 {{ layer.input }} → 保留 {{ layer.kept }}（剔除率 {{ "%.1f"|format(layer.removal_rate * 100) }}%）
               {% elif layer.layer == "L4_cross" %}
@@ -121,18 +139,28 @@
             {% elif layer.layer == "L2_content" %}
               {% for check in layer.checks %}
                 {% if check.code == "PR" %}
-                  <p><strong>PR 話術偵測</strong>：{{ check.hits|length }} 筆命中</p>
+                  <p><strong>拉盤話術偵測</strong>：{{ check.hits|length }} 筆命中（命中→來源等級降一級，與去重降權獨立疊加）</p>
                   {% for hit in check.hits %}
                     <div class="filter-hit">{{ hit.fingerprint }} — {{ hit.reason }}</div>
                   {% endfor %}
-                {% elif check.code == "F10" %}
-                  <p><strong>模板相似度</strong>：{{ check.pairs|length }} 筆配對</p>
+                {% elif check.code == "DEDUP" %}
+                  <p><strong>Phase 2 去重</strong>：{{ check.removed|length }} 筆判定為轉載/聯播剔除</p>
+                  {% for item in check.removed %}
+                    <div class="filter-hit">{{ item.fingerprint }} — {{ item.reason }}</div>
+                  {% endfor %}
+                  {% for g in check.stats %}
+                    <div class="filter-hit">{{ g.coin }}/{{ g.source_type }}：去重前 {{ g.raw_count }} → 去重後 {{ g.deduped_count }}（重複率 {{ "%.0f"|format(g.dedup_rate * 100) }}%，獨立來源 {{ g.distinct_sources }}{% if g.small_sample %}；樣本 &lt;5 不觸發降權{% endif %}）</div>
+                  {% endfor %}
+                {% elif check.code == "F10" and check.pairs %}
+                  <p><strong>模板相似度（舊制）</strong>：{{ check.pairs|length }} 筆配對</p>
                   {% for pair in check.pairs %}
                     <div class="filter-hit">{{ pair.fingerprint }} — {{ pair.reason }}</div>
                   {% endfor %}
                 {% elif check.code == "F9" %}
-                  {% if not check.get("enabled", True) %}
-                    <p class="data-missing">F9 情緒分布：未啟用（同伴 RAG 介面）</p>
+                  {% if check.get("enabled") %}
+                    <p><strong>F9 情緒分布（詞典法）</strong>：{{ check.note }}</p>
+                  {% else %}
+                    <p class="data-missing">F9 情緒分布：未啟用</p>
                   {% endif %}
                 {% endif %}
               {% endfor %}
@@ -216,17 +244,25 @@
           </div>
         {% endif %}
 
-        <div class="report-section">
-          <strong>市場判斷：</strong>
-          {% if view.panel4_report.market_judgment %}
-            {{ view.panel4_report.market_judgment }}
+        {% set summary = view.panel4_report.summary %}
+        <div class="exec-summary">
+          <p class="exec-summary-meta">信心：{{ view.panel4_report.confidence }}%（{{ summary.confidence_label }}）</p>
+          <p><strong>市場判斷：</strong>
+            {% if view.panel4_report.market_judgment %}
+              {{ view.panel4_report.market_judgment }}
+            {% else %}
+              <span class="data-missing">資料缺失</span>
+            {% endif %}
+          </p>
+          {% if summary.has_debate %}
+            <p><strong>利多依據：</strong> {{ summary.bull_argument }}</p>
+            <p><strong>風險依據：</strong> {{ summary.bear_argument }}</p>
           {% else %}
-            <span class="data-missing">資料缺失</span>
+            <p class="note">本次未觸發正反辯論（fallback 模式），完整推論假設見左側面板③。</p>
           {% endif %}
-        </div>
-
-        <div class="report-section">
-          <strong>信心：</strong> {{ view.panel4_report.confidence }}%
+          {% if summary.watchpoint %}
+            <p><strong>{{ summary.watchpoint_label }}：</strong> {{ summary.watchpoint }}</p>
+          {% endif %}
         </div>
 
         {% if view.panel4_report.core_facts %}
