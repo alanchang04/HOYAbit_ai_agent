@@ -1,5 +1,8 @@
 """用假 LLM client 驗證推理鏈邏輯，不需要真的呼叫 Bedrock/Gemini。"""
 
+import json
+import time
+
 import pytest
 
 from agent.reasoning.pipeline import run_reasoning
@@ -149,6 +152,104 @@ def test_second_round_bull_sees_the_previous_rounds_critique():
     second_round_bull_prompt = client.prompts[4]
     assert "你把單日量能當成趨勢" in second_round_bull_prompt
     assert "第 2 輪" in second_round_bull_prompt
+
+
+@pytest.mark.parametrize(
+    "raw_value, expected_rounds, expected_reason",
+    [
+        ("false", 1, "converged"),  # 字串而非 JSON boolean
+        ('"false"', 1, "converged"),  # 帶引號的字串
+        ("否", 1, "converged"),  # 中文
+        ("0", 1, "converged"),  # 數字 0
+    ],
+)
+def test_has_new_points_accepts_non_boolean_forms(raw_value, expected_rounds, expected_reason):
+    """模型不一定回 JSON boolean，回字串/中文/數字時收斂機制仍要生效。"""
+    bear = json.dumps(
+        {
+            "critique": "crit",
+            "argument": "bear arg",
+            "evidence_ids": ["ev-001"],
+            "has_new_points": raw_value,
+        },
+        ensure_ascii=False,
+    )
+    client = FakeLLMClient([STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, bear, STEP_D_RESPONSE])
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == expected_rounds
+    assert result.debate["stopped_reason"] == expected_reason
+
+
+def test_has_new_points_unparseable_value_keeps_debating():
+    """無法判讀時要預設繼續辯論，不能因為模型亂填就把辯論悄悄砍成單輪。"""
+    bear = (
+        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], '
+        '"has_new_points": "看情況"}'
+    )
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            bear,
+            '{"argument": "bull r2", "evidence_ids": ["ev-001"]}',
+            BEAR_CONVERGED_RESPONSE,
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 2
+
+
+def test_deadline_stops_the_debate_before_starting_another_round():
+    """剩餘時間不足時要收在當輪，把時間留給裁判。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            # 反方說還有新論點，正常情況下會進第二輪
+            '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning(
+        "BTC",
+        "分析 BTC 市場狀態",
+        _evidences(),
+        dry_run=False,
+        llm_client=client,
+        deadline=time.monotonic() - 1,  # 已經超時
+    )
+
+    assert result.debate["round_count"] == 1
+    assert result.debate["stopped_reason"] == "deadline"
+    assert result.conclusion["market_judgment"] == "mj"  # 裁判仍然跑完
+    assert client.call_count == 5  # 沒有進第二輪
+
+
+def test_no_deadline_means_unlimited():
+    """不傳 deadline 時維持原行為，不受時間影響。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            '{"argument": "bull r2", "evidence_ids": ["ev-001"]}',
+            BEAR_CONVERGED_RESPONSE,
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 2
 
 
 def test_bull_rebuttal_failure_keeps_the_completed_rounds():

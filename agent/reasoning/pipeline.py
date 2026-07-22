@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from agent.logging_utils import ExecutionLogger
@@ -210,6 +211,30 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
     return sanitized
 
 
+_TRUTHY_TOKENS = {"true", "yes", "y", "1", "是", "有", "有新論點"}
+_FALSY_TOKENS = {"false", "no", "n", "0", "否", "沒有", "無", "無新論點"}
+
+
+def _coerce_bool(value, default: bool = True) -> bool:
+    """把模型回傳的布林欄位正規化。
+
+    模型不一定會照規格回 JSON boolean——常見的是回字串 `"false"`，偶爾是中文
+    「否」或數字 0。只認 `isinstance(x, bool)` 會把這些一律當成預設值，
+    讓依賴這個欄位的機制悄悄失效。無法判讀時才落回 `default`。
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        token = value.strip().strip("\"'").lower()
+        if token in _FALSY_TOKENS:
+            return False
+        if token in _TRUTHY_TOKENS:
+            return True
+    return default
+
+
 def _union_ids(id_lists) -> list[str]:
     """跨輪次取 evidence id 聯集，保留首次出現的順序。"""
     seen: dict[str, None] = {}
@@ -268,6 +293,7 @@ def _real_reasoning(
     log_step=None,
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
+    deadline: float | None = None,
 ) -> ReasoningResult:
     known_ids = {e.id for e in evidences}
 
@@ -371,10 +397,9 @@ def _real_reasoning(
         argument = raw.get("argument", "")
         critique = raw.get("critique", "")
         ids = _sanitize_ids(raw.get("evidence_ids", []), known_ids)
-        # 欄位缺漏或型別不對時預設繼續辯論——輪數本來就有上限，寧可多跑一輪也不要
+        # 欄位缺漏或無法判讀時預設繼續辯論——輪數本來就有上限，寧可多跑一輪也不要
         # 因為模型漏填欄位就把辯論悄悄砍成單輪。
-        raw_has_new = raw.get("has_new_points")
-        has_new = raw_has_new if isinstance(raw_has_new, bool) else True
+        has_new = _coerce_bool(raw.get("has_new_points"), default=True)
         _log(step, "ok", f"evidence_count={len(ids)}, has_new_points={has_new}")
         return critique, argument, ids, has_new
 
@@ -395,7 +420,25 @@ def _real_reasoning(
     if not bull_opened:
         inference = _fallback_inference()
     else:
+        last_round_seconds = 0.0
         for round_no in range(1, MAX_DEBATE_ROUNDS + 1):
+            # 時間預算：一輪要花 2 次呼叫（正方＋反方），裁判還需要 1 次，所以要再開
+            # 一輪至少得剩下「上一輪實測時間 × 1.5」。不夠就收在當輪，把時間留給裁判——
+            # 沒有結論的辯論沒有價值。第一輪不檢查：沒有它就沒有任何辯論可言。
+            if round_no > 1 and deadline is not None:
+                remaining = deadline - time.monotonic()
+                needed = last_round_seconds * 1.5
+                if remaining < needed:
+                    stopped_reason = "deadline"
+                    _log(
+                        "step_c_debate_deadline",
+                        "skipped",
+                        f"剩餘 {remaining:.1f}s < 需要 {needed:.1f}s，"
+                        f"以已完成的 {len(rounds)} 輪進入裁判",
+                    )
+                    break
+
+            round_started = time.monotonic()
             if round_no > 1:
                 try:
                     bull_argument, bull_evidence_ids = _run_bull(round_no, rounds)
@@ -431,6 +474,7 @@ def _real_reasoning(
                     "bear_has_new_points": has_new_points,
                 }
             )
+            last_round_seconds = time.monotonic() - round_started
 
             if not has_new_points:
                 stopped_reason = "converged"
@@ -544,7 +588,13 @@ def run_reasoning(
     log_step=None,
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
+    deadline: float | None = None,
 ) -> ReasoningResult:
+    """執行四步推理鏈。
+
+    `deadline` 是 `time.monotonic()` 的絕對值，用來在多輪辯論之間做時間預算控制；
+    傳 None 代表不限時（測試與 dry-run 皆如此）。
+    """
     question_type = classify_question_type(question)
 
     if dry_run:
@@ -554,5 +604,6 @@ def run_reasoning(
         raise RuntimeError("非 dry-run 模式需要傳入 llm_client。")
 
     return _real_reasoning(
-        coin, question, question_type, evidences, llm_client, log_step=log_step, coin2=coin2, logger=logger
+        coin, question, question_type, evidences, llm_client,
+        log_step=log_step, coin2=coin2, logger=logger, deadline=deadline,
     )

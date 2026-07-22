@@ -336,6 +336,7 @@ def build_step_c2_bear_prompt(
 STOP_REASON_LABEL: dict[str, str] = {
     "converged": "反方自認已無新的實質論點，辯論提前收斂",
     "max_rounds": "達到輪數上限",
+    "deadline": "剩餘時間不足以再跑一輪，提前進入裁判",
     "bull_failed": "正方該輪呼叫失敗，以已完成的輪次進入裁判",
     "bear_failed": "反方該輪呼叫失敗，以已完成的輪次進入裁判",
 }

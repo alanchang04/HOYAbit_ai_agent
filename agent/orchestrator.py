@@ -237,7 +237,8 @@ def run_pipeline(
         )
         try:
             reasoning_result = run_reasoning(
-                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger
+                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
+                deadline=start_time + settings.hard_deadline_seconds,
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
