@@ -231,7 +231,7 @@
 <div class="wrap">
 
   <h1>資料抓取網格總表 — 方向 × 幣種 × 三層用途</h1>
-  <p class="meta">衍生自 <code>02_資料來源設計筆記.md</code>（02 原檔未動）・點任一色塊看「去哪抓／怎麼抓／怎麼讀」・左邊打勾記錄「這項我做完了」（存在瀏覽器本機，重開頁面還在）・更新 2026-07-21</p>
+  <p class="meta">衍生自 <code>02_資料來源設計筆記.md</code>（02 原檔未動）・點任一色塊看「去哪抓／怎麼抓／怎麼讀」・左邊打勾記錄「這項我做完了」（存在瀏覽器本機，重開頁面還在）・更新 2026-07-22</p>
   <p class="progress" id="checklistProgress"></p>
 
   <div class="legend">
@@ -678,10 +678,11 @@ const SPECS = {
     caveat: '同一篇文章在列表頁會出現兩個連結：一個純圖片無標題、一個才有真標題，之前抓到圖片版會整篇退化成印網址——已經修掉這個 bug，改成優先抓有標題文字的那個。跟 bnbchain-blog 一樣沒有 RSS，站方改版一樣有失效風險，賽前建議重跑確認。',
   },
   'news-coin-keywords': {
-    title: '特有題材關鍵字組', status: 'local',
-    where: '不是外部來源，是人工整理的「該幣特有關鍵字組」清單，用來在官方發布源的文章上多加一層篩選/標記。',
-    how: '針對每個幣整理 3-6 個特有關鍵字（例如 XRP：SEC、RLUSD、ODL、跨境支付），過濾時額外標記該篇官方公告命中了哪個特有主題。',
-    read: '這層是敘事素材不是量化訊號——讓 LLM 在 Phase 6 寫報告時能講出「XRP 本週官方公告集中在監管明確化」這種具體內容，而不是空泛帶過。',
+    title: '特有題材關鍵字組', status: 'done',
+    where: '不是外部來源，是人工整理的「該幣特有關鍵字組」清單，用來在官方發布源的文章標題上多加一層篩選/標記。已於 2026-07-22 補實作並實測。',
+    how: '每幣 2-4 個主題、每主題掛 1-6 個英文關鍵字，大小寫不敏感比對標題 substring；已在 <code>pipeline/fetch_news.py</code> 的 <code>NARRATIVE_KEYWORDS</code> / <code>tag_narrative_topics()</code> 實作，輸出 <code>news_snapshot.json</code> 每筆 item 多一個 <code>narrative_topics</code> 欄位。⚠️ 只比對標題不比對全文，正式 <code>agent/collectors/news.py</code> 尚未併入。',
+    read: '這層是敘事素材不是量化訊號——讓 LLM 在 Phase 6 寫報告時能講出「XRP 本週官方公告集中在監管明確化」這種具體內容，而不是空泛帶過；沒命中不代表沒這個敘事，只代表這批標題沒直接提到。',
+    caveat: '只比對標題不比對全文（HTML 解析的 BNB／XRP 本來就只有標題可用）；實測 2026-07-22 五幣 25 筆標題僅 2 筆命中（BNB 季度銷毀、XRP RLUSD 各 1-2 筆），其餘沒命中是這批新聞剛好沒聊到，不是關鍵字設錯；正式 collector 尚未併入這段邏輯。',
   },
   'reddit-search': {
     title: 'Reddit 討論熱度', status: 'done',
@@ -1034,6 +1035,35 @@ document.addEventListener('keydown', (e) => {
     ];
     DEFAULT_DONE_7.forEach((key) => { state[key] = true; });
     localStorage.setItem(SEEDED_KEY_7, '1');
+    save();
+  }
+
+  // 2026-07-21h：歷史波動率百分位 prototype 完成
+  // （compute_historical_volatility_percentile.py，全歷史擴張視窗百分位）。
+  // 層1「RSI14・波動率・量能趨勢」chip 的「波動率」原本只有裸標準差數字、
+  // 沒有歷史對照脈絡，現在補上百分位，補打勾（層2 MA20/60/120 那格上一批
+  // 已勾過，這次補的是層1）。
+  const SEEDED_KEY_8 = 'dataGrid02_checklist_seeded_pipeline_2026-07-21h';
+  if (!localStorage.getItem(SEEDED_KEY_8)) {
+    const DEFAULT_DONE_8 = [
+      'BTC|tech-indicators|1', 'ETH|tech-indicators|1', 'SOL|tech-indicators|1', 'BNB|tech-indicators|1', 'XRP|tech-indicators|1',
+    ];
+    DEFAULT_DONE_8.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_8, '1');
+    save();
+  }
+
+  // 2026-07-22：特有題材關鍵字組（news-coin-keywords）補實作完成
+  // （pipeline/fetch_news.py 的 NARRATIVE_KEYWORDS / tag_narrative_topics()，
+  // 五幣皆已實測跑過，見 流程紀錄.md Step 25），之前六批都刻意跳過這格，這次補勾。
+  const SEEDED_KEY_9 = 'dataGrid02_checklist_seeded_pipeline_2026-07-22a';
+  if (!localStorage.getItem(SEEDED_KEY_9)) {
+    const DEFAULT_DONE_9 = [
+      'BTC|news-coin-keywords|1', 'ETH|news-coin-keywords|1', 'SOL|news-coin-keywords|1',
+      'BNB|news-coin-keywords|1', 'XRP|news-coin-keywords|1',
+    ];
+    DEFAULT_DONE_9.forEach((key) => { state[key] = true; });
+    localStorage.setItem(SEEDED_KEY_9, '1');
     save();
   }
 

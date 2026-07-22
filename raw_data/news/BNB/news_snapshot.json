@@ -5,33 +5,40 @@
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-the-web3-blueprint",
       "title": "Bnb chain the web3 blueprint（標題由網址還原，非原文標題）",
-      "published": "未知"
+      "published": "未知",
+      "narrative_topics": []
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-ai-agent-landscape-agents-tools-and-payments",
       "title": "Bnb chain ai agent landscape agents tools and payments（標題由網址還原，非原文標題）",
-      "published": "未知"
+      "published": "未知",
+      "narrative_topics": []
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/36th-bnb-burn",
       "title": "36th bnb burn（標題由網址還原，非原文標題）",
-      "published": "未知"
+      "published": "未知",
+      "narrative_topics": [
+        "季度銷毀"
+      ]
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-h2-2026-tech-roadmap-doubling-down-on-speed",
       "title": "Bnb chain h2 2026 tech roadmap doubling down on speed（標題由網址還原，非原文標題）",
-      "published": "未知"
+      "published": "未知",
+      "narrative_topics": []
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/meet-the-winners-of-bnb-hack-ai-trading-agent-edition",
       "title": "Meet the winners of bnb hack ai trading agent edition（標題由網址還原，非原文標題）",
-      "published": "未知"
+      "published": "未知",
+      "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-21T08:14:17Z"
+  "fetched_at": "2026-07-22T02:21:23Z"
 }

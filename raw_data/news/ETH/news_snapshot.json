@@ -5,33 +5,38 @@
       "source": "Ethereum Foundation Blog（官方源）",
       "url": "https://blog.ethereum.org/en/2026/07/14/devcon8-tickets",
       "title": "Devcon 8 Tickets Are Live: Find Your Path to Mumbai",
-      "published": "Tue, 14 Jul 2026 00:00:00 GMT"
+      "published": "Tue, 14 Jul 2026 00:00:00 GMT",
+      "narrative_topics": []
     },
     {
       "source": "Ethereum Foundation Blog（官方源）",
       "url": "https://blog.ethereum.org/en/2026/07/09/triage-is-the-product",
       "title": "The triage is the product: running AI agents against Ethereum's protocol code",
-      "published": "Thu, 09 Jul 2026 00:00:00 GMT"
+      "published": "Thu, 09 Jul 2026 00:00:00 GMT",
+      "narrative_topics": []
     },
     {
       "source": "Ethereum Foundation Blog（官方源）",
       "url": "https://blog.ethereum.org/en/2026/07/01/ethereum-for-institutions",
       "title": "Ethereum for Governments and Institutions: Why neutral infrastructure matters now",
-      "published": "Wed, 01 Jul 2026 00:00:00 GMT"
+      "published": "Wed, 01 Jul 2026 00:00:00 GMT",
+      "narrative_topics": []
     },
     {
       "source": "Ethereum Foundation Blog（官方源）",
       "url": "https://blog.ethereum.org/en/2026/06/23/ef-structure",
       "title": "The EF’s new structure",
-      "published": "Tue, 23 Jun 2026 00:00:00 GMT"
+      "published": "Tue, 23 Jun 2026 00:00:00 GMT",
+      "narrative_topics": []
     },
     {
       "source": "Ethereum Foundation Blog（官方源）",
       "url": "https://blog.ethereum.org/en/2026/05/12/clear-signing-announcement",
       "title": "Clear Signing: Making Transaction Approvals Safer on Ethereum",
-      "published": "Tue, 12 May 2026 00:00:00 GMT"
+      "published": "Tue, 12 May 2026 00:00:00 GMT",
+      "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-21T08:14:17Z"
+  "fetched_at": "2026-07-22T02:21:22Z"
 }

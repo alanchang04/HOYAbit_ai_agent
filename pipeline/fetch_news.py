@@ -50,6 +50,50 @@ OFFICIAL_SOURCES: dict[str, list[dict]] = {
     ],
 }
 
+# 對照 02改_資料網格.html 的 news-coin-keywords spec：每幣 3-6 個特有主題，
+# 各主題掛幾個英文關鍵字（官方源文章標題多是英文）。只比對標題大小寫不敏感的
+# substring，不是語意分類——命中就標記主題名，沒命中不代表本週沒這個敘事，
+# 只代表這批標題沒直接提到，報告措辭要照這個誠實。
+NARRATIVE_KEYWORDS: dict[str, dict[str, list[str]]] = {
+    "BTC": {
+        "ETF 資金流": ["etf", "inflow", "outflow"],
+        "企業／國家儲備": ["reserve", "treasury", "strategic bitcoin"],
+        "減半供給敘事": ["halving", "halve", "block reward"],
+        "挖礦算力": ["hashrate", "hash rate", "miner", "mining"],
+    },
+    "ETH": {
+        "網路升級": ["pectra", "fusaka", "glamsterdam", "hard fork", "upgrade"],
+        "質押／再質押": ["staking", "restaking", "validator"],
+        "L2 生態": ["layer 2", "l2", "rollup", "optimism", "arbitrum", "base"],
+        "ETH ETF": ["etf"],
+    },
+    "SOL": {
+        "網路穩定性／宕機": ["outage", "downtime", "degraded"],
+        "memecoin 生態": ["memecoin", "meme coin", "pump.fun"],
+        "支付／DePIN": ["payments", "depin", "point of sale", "pay"],
+        "SOL ETF": ["etf"],
+    },
+    "BNB": {
+        "季度銷毀": ["burn"],
+        "BNB Chain 生態升級": ["upgrade", "hard fork", "opbnb", "greenfield"],
+    },
+    "XRP": {
+        "SEC 案終局／監管明確化": ["sec", "lawsuit", "regulation", "regulatory"],
+        "RLUSD 穩定幣": ["rlusd", "stablecoin"],
+        "跨境支付 ODL": ["odl", "cross-border", "cross border", "on-demand liquidity"],
+        "XRP ETF": ["etf"],
+    },
+}
+
+
+def tag_narrative_topics(coin: str, title: str) -> list[str]:
+    title_lower = title.lower()
+    return [
+        topic
+        for topic, keywords in NARRATIVE_KEYWORDS.get(coin.upper(), {}).items()
+        if any(kw in title_lower for kw in keywords)
+    ]
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -128,11 +172,13 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
             if source["kind"] == "rss":
                 parsed = feedparser.parse(resp.text)
                 for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
+                    title = entry.get("title", "")
                     items.append({
                         "source": f"{source['name']}（官方源）",
                         "url": entry.get("link", source["url"]),
-                        "title": entry.get("title", ""),
+                        "title": title,
                         "published": entry.get("published", "未知"),
+                        "narrative_topics": tag_narrative_topics(coin, title),
                     })
             else:
                 for item in HTML_SCRAPERS[source["name"]](resp.text):
@@ -141,6 +187,7 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
                         "url": item["url"],
                         "title": item["title"],
                         "published": item["published"],
+                        "narrative_topics": tag_narrative_topics(coin, item["title"]),
                     })
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{source['name']}: error={exc}")
@@ -169,7 +216,8 @@ def main() -> None:
             out_path = write_output(coin, result)
             print(f"[{coin}] 已寫入 {out_path}（{len(result['items'])} 筆）")
             for item in result["items"]:
-                print(f"  {item['source']}：{item['title']}")
+                topics = "・".join(item["narrative_topics"]) or "（無命中主題）"
+                print(f"  {item['source']}：{item['title']}  [{topics}]")
             for err in result["errors"]:
                 print(f"  ⚠️ {err}")
             print()
