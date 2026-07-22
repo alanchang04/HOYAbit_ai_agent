@@ -1,0 +1,16 @@
+{
+  "coin": "ETH",
+  "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源）；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推",
+  "underlying_price": 1911.05744186,
+  "contract_count_total": 568,
+  "target_expiry": "260828",
+  "days_to_expiry": 38.2,
+  "atm_iv_pct": 47.64,
+  "call_25d_iv_pct": 47.57,
+  "put_25d_iv_pct": 50.28,
+  "skew_25d_pct": 2.71,
+  "put_open_interest_total": 103981.54,
+  "call_open_interest_total": 113352.46,
+  "put_call_oi_ratio": 0.9173,
+  "fetched_at": "2026-07-21T02:33:46Z"
+}

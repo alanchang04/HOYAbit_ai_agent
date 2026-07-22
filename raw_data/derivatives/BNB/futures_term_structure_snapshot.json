@@ -1,0 +1,31 @@
+{
+  "coin": "BNB",
+  "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key）",
+  "pair": "BNBUSD",
+  "index_price": 568.5065973,
+  "curve": [
+    {
+      "label": "perp",
+      "symbol": "BNBUSD_PERP",
+      "days_to_expiry": null,
+      "mark_price": 568.98553764,
+      "basis_pct": 0.08424534425363446
+    },
+    {
+      "label": "current_quarter",
+      "symbol": "BNBUSD_260925",
+      "days_to_expiry": 66.7,
+      "mark_price": 572.29760661,
+      "annualized_basis_pct": 3.6488341237421915
+    },
+    {
+      "label": "next_quarter",
+      "symbol": "BNBUSD_261225",
+      "days_to_expiry": 157.7,
+      "mark_price": 575.43835305,
+      "annualized_basis_pct": 2.8219887118388276
+    }
+  ],
+  "shape": "contango",
+  "fetched_at": "2026-07-20T15:04:52Z"
+}

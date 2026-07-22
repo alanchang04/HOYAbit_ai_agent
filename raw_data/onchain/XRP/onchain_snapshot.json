@@ -1,0 +1,8 @@
+{
+  "coin": "XRP",
+  "source": "XRPL 公開 JSON-RPC (https://xrplcluster.com)",
+  "ledger_seq": 105727776,
+  "load_factor": 1,
+  "base_fee_xrp": 1e-05,
+  "fetched_at": "2026-07-20T12:11:25Z"
+}

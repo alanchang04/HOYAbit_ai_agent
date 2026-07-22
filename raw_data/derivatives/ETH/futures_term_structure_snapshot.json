@@ -1,0 +1,31 @@
+{
+  "coin": "ETH",
+  "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key）",
+  "pair": "ETHUSD",
+  "index_price": 1872.65854759,
+  "curve": [
+    {
+      "label": "perp",
+      "symbol": "ETHUSD_PERP",
+      "days_to_expiry": null,
+      "mark_price": 1871.73,
+      "basis_pct": -0.049584457945890115
+    },
+    {
+      "label": "current_quarter",
+      "symbol": "ETHUSD_260925",
+      "days_to_expiry": 66.7,
+      "mark_price": 1879.58150672,
+      "annualized_basis_pct": 2.022869767870051
+    },
+    {
+      "label": "next_quarter",
+      "symbol": "ETHUSD_261225",
+      "days_to_expiry": 157.7,
+      "mark_price": 1893.26978983,
+      "annualized_basis_pct": 2.547376214085819
+    }
+  ],
+  "shape": "contango",
+  "fetched_at": "2026-07-20T15:04:51Z"
+}

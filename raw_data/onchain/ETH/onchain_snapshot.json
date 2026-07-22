@@ -1,0 +1,11 @@
+{
+  "coin": "ETH",
+  "source": "公開 EVM RPC (https://ethereum-rpc.publicnode.com)",
+  "block_number": 25573842,
+  "gas_price_gwei": 0.105380774,
+  "fetched_at": "2026-07-20T12:11:22Z",
+  "supply_supplement": {
+    "source": "https://api.etherscan.io/v2/api?chainid=1",
+    "result": "122373866217800000000000000"
+  }
+}

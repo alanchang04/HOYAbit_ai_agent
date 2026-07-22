@@ -70,7 +70,7 @@ LLMClient 介面（agent/reasoning/llm_client.py）
 |---|---|---|
 | 價格 | 主辦方共同基準 OHLCV CSV ＋ CoinGecko 即時報價 | **零成本技術指標**：純 Python 計算 SMA7/14、RSI14、日報酬波動率、量能趨勢，決定性運算不受網路/API 影響，穩定性最高的一類證據 |
 | 鏈上 | 依鏈路由：BTC→Blockchair／ETH,BNB→EVM 公開 RPC／SOL→Solana RPC／XRP→XRPL RPC | 5 種幣種各自對應正確的鏈上資料來源，非用同一套邏輯硬套 |
-| 新聞 | CoinDesk／Cointelegraph RSS | 關鍵字比對幣種別名過濾，避免抓到無關新聞 |
+| 新聞 | 每幣官方發布源（各幣公司/基金會/鏈官方源，優先 RSS，無 RSS 則解析官方頁面） | 第一手官方公告，不靠關鍵字過濾全站新聞去猜相關性 |
 | 社群 | Reddit 公開 `.json` 端點 | 已知限制：部分雲端 IP 會被 Reddit 封鎖，我們誠實揭露而非隱藏 |
 | 總經 | Fear & Greed Index ＋ Frankfurter 匯率（美元強弱代理） | 提供宏觀背景，交叉驗證時常被用來解釋市場情緒 |
 

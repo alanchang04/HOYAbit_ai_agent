@@ -1,0 +1,14 @@
+{
+  "coin_a": "XRP",
+  "coin_b": "ETH",
+  "percentile_30d_a": 21.11111111111111,
+  "percentile_30d_b": 32.22222222222222,
+  "percentile_diff": -11.11,
+  "gap_label": "XRP 與 ETH 擁擠度接近，無明顯落差",
+  "sentence": "[XRP 費率 21.1 百分位 vs ETH 費率 32.2 百分位] 差 -11.1 點 → XRP 與 ETH 擁擠度接近，無明顯落差",
+  "source_fetched_at": {
+    "XRP": "2026-07-20T15:08:38Z",
+    "ETH": "2026-07-20T15:08:38Z"
+  },
+  "computed_at": "2026-07-21T08:34:43Z"
+}

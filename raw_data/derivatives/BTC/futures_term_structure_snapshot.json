@@ -1,0 +1,31 @@
+{
+  "coin": "BTC",
+  "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key）",
+  "pair": "BTCUSD",
+  "index_price": 64511.4381637,
+  "curve": [
+    {
+      "label": "perp",
+      "symbol": "BTCUSD_PERP",
+      "days_to_expiry": null,
+      "mark_price": 64492.0,
+      "basis_pct": -0.030131344538734263
+    },
+    {
+      "label": "current_quarter",
+      "symbol": "BTCUSD_260925",
+      "days_to_expiry": 66.7,
+      "mark_price": 65004.10245422,
+      "annualized_basis_pct": 4.17877609164847
+    },
+    {
+      "label": "next_quarter",
+      "symbol": "BTCUSD_261225",
+      "days_to_expiry": 157.7,
+      "mark_price": 65639.23081607,
+      "annualized_basis_pct": 4.046132033284741
+    }
+  ],
+  "shape": "contango",
+  "fetched_at": "2026-07-20T15:04:51Z"
+}

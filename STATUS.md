@@ -15,7 +15,7 @@
 - `agent/collectors/base.py`：統一 timeout（預設 75 秒）＋ try/except 隔離，單一來源失敗不影響全流程
 - `price`：主辦方 OHLCV CSV ＋ 純 Python 技術指標（SMA7/14、RSI14、波動率、量能趨勢，零 LLM/API 成本）＋ CoinGecko（備援 CryptoCompare）
 - `onchain`：依鏈路由（BTC→Blockchair／ETH,BNB→EVM RPC／SOL→Solana RPC／XRP→XRPL RPC），皆為免 key 端點，有 Etherscan/BscScan key 時疊加補充證據
-- `news`：CoinDesk／Cointelegraph RSS 關鍵字過濾，有 CryptoPanic key 時疊加補充來源
+- `news`：每幣官方發布源優先（2026-07-20 改版，取代原 CoinDesk／Cointelegraph 全站 RSS＋別名過濾）——BTC/ETH/SOL 走官方 RSS，BNB/XRP 無官方 RSS 退階解析官方頁面
 - `social`：Reddit 公開 `.json` 搜尋端點
 - `macro`：Fear & Greed Index ＋ Frankfurter 匯率（美元強弱代理），有 FRED key 時疊加美債殖利率
 - 已知限制：**Reddit 會封鎖部分雲端/機房 IP（403），與程式碼無關**，會被正確標記 skipped 並在報告中揭露

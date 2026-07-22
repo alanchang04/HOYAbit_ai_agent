@@ -1,0 +1,16 @@
+{
+  "coin": "BNB",
+  "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源）；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推",
+  "underlying_price": 572.2976389,
+  "contract_count_total": 120,
+  "target_expiry": "260731",
+  "days_to_expiry": 10.2,
+  "atm_iv_pct": 33.31,
+  "call_25d_iv_pct": 33.3,
+  "put_25d_iv_pct": 36.34,
+  "skew_25d_pct": 3.04,
+  "put_open_interest_total": 1939.01,
+  "call_open_interest_total": 6928.09,
+  "put_call_oi_ratio": 0.2799,
+  "fetched_at": "2026-07-21T02:33:47Z"
+}

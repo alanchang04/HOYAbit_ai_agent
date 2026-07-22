@@ -1,0 +1,128 @@
+{
+  "coin": "BNB",
+  "researched_at": "2026-07-21",
+  "written_at": "2026-07-21T09:18:21Z",
+  "fomc": {
+    "last_meeting": {
+      "start_date": "2026-06-16",
+      "end_date": "2026-06-17",
+      "decision_date": "2026-06-17",
+      "days_since": 34
+    },
+    "next_meeting": {
+      "start_date": "2026-07-28",
+      "end_date": "2026-07-29",
+      "decision_date": "2026-07-29",
+      "days_until": 8
+    },
+    "schedule_2026": [
+      {
+        "start_date": "2026-01-27",
+        "end_date": "2026-01-28",
+        "decision_date": "2026-01-28"
+      },
+      {
+        "start_date": "2026-03-17",
+        "end_date": "2026-03-18",
+        "decision_date": "2026-03-18"
+      },
+      {
+        "start_date": "2026-04-28",
+        "end_date": "2026-04-29",
+        "decision_date": "2026-04-29"
+      },
+      {
+        "start_date": "2026-06-16",
+        "end_date": "2026-06-17",
+        "decision_date": "2026-06-17"
+      },
+      {
+        "start_date": "2026-07-28",
+        "end_date": "2026-07-29",
+        "decision_date": "2026-07-29"
+      },
+      {
+        "start_date": "2026-09-15",
+        "end_date": "2026-09-16",
+        "decision_date": "2026-09-16"
+      },
+      {
+        "start_date": "2026-10-27",
+        "end_date": "2026-10-28",
+        "decision_date": "2026-10-28"
+      },
+      {
+        "start_date": "2026-12-08",
+        "end_date": "2026-12-09",
+        "decision_date": "2026-12-09"
+      }
+    ]
+  },
+  "cpi": {
+    "last_release": {
+      "reference_month": "2026-06",
+      "release_date": "2026-07-14",
+      "days_since": 7
+    },
+    "next_release": {
+      "reference_month": "2026-07",
+      "release_date": "2026-08-12",
+      "days_until": 22
+    },
+    "schedule_2026": [
+      {
+        "reference_month": "2025-12",
+        "release_date": "2026-01-13"
+      },
+      {
+        "reference_month": "2026-01",
+        "release_date": "2026-02-13"
+      },
+      {
+        "reference_month": "2026-02",
+        "release_date": "2026-03-11"
+      },
+      {
+        "reference_month": "2026-03",
+        "release_date": "2026-04-10"
+      },
+      {
+        "reference_month": "2026-04",
+        "release_date": "2026-05-12"
+      },
+      {
+        "reference_month": "2026-05",
+        "release_date": "2026-06-10"
+      },
+      {
+        "reference_month": "2026-06",
+        "release_date": "2026-07-14"
+      },
+      {
+        "reference_month": "2026-07",
+        "release_date": "2026-08-12"
+      },
+      {
+        "reference_month": "2026-08",
+        "release_date": "2026-09-11"
+      },
+      {
+        "reference_month": "2026-09",
+        "release_date": "2026-10-14"
+      },
+      {
+        "reference_month": "2026-10",
+        "release_date": "2026-11-10"
+      },
+      {
+        "reference_month": "2026-11",
+        "release_date": "2026-12-10"
+      }
+    ]
+  },
+  "read": "「距下次 FOMC／CPI 剩 X 天」是層3 背景資訊，用來提醒報告讀者「這個判斷是在什麼總經時間點做出的」，尤其 FOMC 利率決議／CPI 公布前後市場常提前定價或劇烈反應——如果查證當下剛好落在事件前後幾天窗口內，報告應該提醒讀者「近期波動可能部分反映總經事件不確定性，不能全部歸因給幣圈自身敘事」。",
+  "sources": [
+    "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "https://www.usinflationcalculator.com/inflation/consumer-price-index-release-schedule/"
+  ]
+}

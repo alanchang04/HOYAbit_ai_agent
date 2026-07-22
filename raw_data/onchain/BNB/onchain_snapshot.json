@@ -1,0 +1,11 @@
+{
+  "coin": "BNB",
+  "source": "公開 EVM RPC (https://bsc-dataseed.binance.org)",
+  "block_number": 111088867,
+  "gas_price_gwei": 0.05,
+  "fetched_at": "2026-07-20T12:11:24Z",
+  "supply_supplement": {
+    "source": "https://api.etherscan.io/v2/api?chainid=56",
+    "skipped": "API 回應：Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis"
+  }
+}
