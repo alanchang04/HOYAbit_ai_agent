@@ -19,11 +19,16 @@ from agent.reasoning.prompts import (
     build_step_b_prompt,
     build_step_c_prompt,
     build_step_c1_bull_prompt,
+    build_step_c1_bull_rebuttal_prompt,
     build_step_c2_bear_prompt,
     build_step_d_prompt,
     classify_question_type,
     extract_json,
 )
+
+# 辯論輪數上限。多智能體辯論的增益在第 2 輪後大致飽和，再往上主要是燒 token 與延遲，
+# 因此預設 2 輪（= 7 次 LLM 呼叫）。反方自報無新論點時會更早收斂。
+MAX_DEBATE_ROUNDS = 2
 from agent.reasoning.confidence import compute_confidence_score
 from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
 
@@ -205,6 +210,38 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
     return sanitized
 
 
+def _union_ids(id_lists) -> list[str]:
+    """跨輪次取 evidence id 聯集，保留首次出現的順序。"""
+    seen: dict[str, None] = {}
+    for ids in id_lists:
+        for i in ids:
+            seen[i] = None
+    return list(seen)
+
+
+def _build_debate(rounds: list[dict], stopped_reason: str) -> dict:
+    """組裝 debate 契約。
+
+    `rounds` 是多輪辯論的完整逐輪紀錄。頂層的 bull_*/bear_* 欄位是給既有下游
+    （`report/builder.py`、`report/view_builder.py`、`webapp/templates/view.html`）
+    的相容層，讓它們不必改動就能繼續運作：
+    - 論證取**最後一輪**（經過反駁修正、最精煉的版本）
+    - evidence id 取**所有輪次的聯集**，否則早期輪次引用的證據會在
+      報告引用檢查與面板四的 bullish/risk 映射中被漏掉
+    """
+    last = rounds[-1]
+    return {
+        "rounds": rounds,
+        "round_count": len(rounds),
+        "stopped_reason": stopped_reason,
+        "bull_argument": last["bull_argument"],
+        "bull_evidence_ids": _union_ids(r["bull_evidence_ids"] for r in rounds),
+        "bear_critique": last["bear_critique"],
+        "bear_argument": last["bear_argument"],
+        "bear_evidence_ids": _union_ids(r["bear_evidence_ids"] for r in rounds),
+    }
+
+
 def _sanitize_inference(inference: list, known_ids: set[str]) -> list[dict]:
     sanitized = []
     if not isinstance(inference, list):
@@ -304,62 +341,135 @@ def _real_reasoning(
         _log("step_c_inference_fallback", "ok", f"hypotheses_count={len(hypotheses)}")
         return hypotheses
 
+    def _run_bull(round_no: int, prior_rounds: list[dict]) -> tuple[str, list[str]]:
+        step = f"step_c1_bull_r{round_no}"
+        if round_no == 1:
+            prompt = build_step_c1_bull_prompt(
+                coin, question, question_type, facts, cross_validation, coin2=coin2
+            )
+        else:
+            prompt = build_step_c1_bull_rebuttal_prompt(
+                coin, question, question_type, facts, cross_validation, prior_rounds,
+                coin2=coin2, round_no=round_no,
+            )
+        raw = _call_json_step(llm_client, prompt, step)
+        argument = raw.get("argument", "")
+        ids = _sanitize_ids(raw.get("evidence_ids", []), known_ids)
+        _log(step, "ok", f"evidence_count={len(ids)}")
+        return argument, ids
+
+    def _run_bear(round_no: int, bull_arg: str, prior_rounds: list[dict]) -> tuple[str, str, list[str], bool]:
+        step = f"step_c2_bear_r{round_no}"
+        raw = _call_json_step(
+            llm_client,
+            build_step_c2_bear_prompt(
+                coin, question, question_type, facts, cross_validation, bull_arg,
+                coin2=coin2, rounds=prior_rounds, round_no=round_no,
+            ),
+            step,
+        )
+        argument = raw.get("argument", "")
+        critique = raw.get("critique", "")
+        ids = _sanitize_ids(raw.get("evidence_ids", []), known_ids)
+        # 欄位缺漏或型別不對時預設繼續辯論——輪數本來就有上限，寧可多跑一輪也不要
+        # 因為模型漏填欄位就把辯論悄悄砍成單輪。
+        raw_has_new = raw.get("has_new_points")
+        has_new = raw_has_new if isinstance(raw_has_new, bool) else True
+        _log(step, "ok", f"evidence_count={len(ids)}, has_new_points={has_new}")
+        return critique, argument, ids, has_new
+
     debate: dict = {}
+    rounds: list[dict] = []
+    inference: list[dict] = []
+    stopped_reason = ""
     bull_argument = ""
     bull_evidence_ids: list[str] = []
-    bull_ok = False
-    try:
-        step_c1_raw = _call_json_step(
-            llm_client,
-            build_step_c1_bull_prompt(coin, question, question_type, facts, cross_validation, coin2=coin2),
-            "step_c1_bull",
-        )
-        bull_argument = step_c1_raw.get("argument", "")
-        bull_evidence_ids = _sanitize_ids(step_c1_raw.get("evidence_ids", []), known_ids)
-        bull_ok = True
-        _log("step_c1_bull", "ok", f"evidence_count={len(bull_evidence_ids)}")
-    except ReasoningStepError as exc:
-        _log("step_c1_bull", "error", f"正方論證失敗，整段退回單模型推論: {exc}")
 
-    if not bull_ok:
+    try:
+        bull_argument, bull_evidence_ids = _run_bull(1, rounds)
+        bull_opened = True
+    except ReasoningStepError as exc:
+        _log("step_c1_bull_r1", "error", f"正方首輪論證失敗，整段退回單模型推論: {exc}")
+        bull_opened = False
+
+    if not bull_opened:
         inference = _fallback_inference()
     else:
-        try:
-            step_c2_raw = _call_json_step(
-                llm_client,
-                build_step_c2_bear_prompt(
-                    coin, question, question_type, facts, cross_validation, bull_argument, coin2=coin2
-                ),
-                "step_c2_bear",
-            )
-            bear_argument = step_c2_raw.get("argument", "")
-            bear_critique = step_c2_raw.get("critique", "")
-            bear_evidence_ids = _sanitize_ids(step_c2_raw.get("evidence_ids", []), known_ids)
-            _log("step_c2_bear", "ok", f"evidence_count={len(bear_evidence_ids)}")
+        for round_no in range(1, MAX_DEBATE_ROUNDS + 1):
+            if round_no > 1:
+                try:
+                    bull_argument, bull_evidence_ids = _run_bull(round_no, rounds)
+                except ReasoningStepError as exc:
+                    stopped_reason = "bull_failed"
+                    _log(
+                        f"step_c1_bull_r{round_no}",
+                        "error",
+                        f"正方反駁失敗，以已完成的 {len(rounds)} 輪進入裁判: {exc}",
+                    )
+                    break
+            try:
+                bear_critique, bear_argument, bear_evidence_ids, has_new_points = _run_bear(
+                    round_no, bull_argument, rounds
+                )
+            except ReasoningStepError as exc:
+                stopped_reason = "bear_failed"
+                _log(
+                    f"step_c2_bear_r{round_no}",
+                    "error",
+                    f"反方論證失敗，已完成 {len(rounds)} 輪: {exc}",
+                )
+                break
 
-            debate = {
-                "bull_argument": bull_argument,
-                "bull_evidence_ids": bull_evidence_ids,
-                "bear_critique": bear_critique,
-                "bear_argument": bear_argument,
-                "bear_evidence_ids": bear_evidence_ids,
-            }
+            rounds.append(
+                {
+                    "round": round_no,
+                    "bull_argument": bull_argument,
+                    "bull_evidence_ids": bull_evidence_ids,
+                    "bear_critique": bear_critique,
+                    "bear_argument": bear_argument,
+                    "bear_evidence_ids": bear_evidence_ids,
+                    "bear_has_new_points": has_new_points,
+                }
+            )
+
+            if not has_new_points:
+                stopped_reason = "converged"
+                break
+        else:
+            stopped_reason = "max_rounds"
+
+        if rounds:
+            debate = _build_debate(rounds, stopped_reason)
             inference = [
                 {
-                    "hypothesis": f"[正方] {bull_argument}",
-                    "supporting_evidence_ids": bull_evidence_ids,
-                    "opposing_evidence_ids": bear_evidence_ids,
+                    "hypothesis": f"[正方] {debate['bull_argument']}",
+                    "supporting_evidence_ids": debate["bull_evidence_ids"],
+                    "opposing_evidence_ids": debate["bear_evidence_ids"],
                 },
                 {
-                    "hypothesis": f"[反方] {bear_argument}",
-                    "supporting_evidence_ids": bear_evidence_ids,
-                    "opposing_evidence_ids": bull_evidence_ids,
+                    "hypothesis": f"[反方] {debate['bear_argument']}",
+                    "supporting_evidence_ids": debate["bear_evidence_ids"],
+                    "opposing_evidence_ids": debate["bull_evidence_ids"],
                 },
             ]
-        except ReasoningStepError as exc:
-            # 反方失敗：正方論證仍然有效，保留它並補上單模型的多假設；debate 維持空 dict，
-            # 因為單方面的「辯論」不成立，報告與四面板不該把它呈現成完整辯論。
-            _log("step_c2_bear", "error", f"反方論證失敗，保留正方論證並以單模型補齊對立假設: {exc}")
+            _log(
+                "step_c_debate",
+                "ok",
+                f"rounds={len(rounds)}, stopped_reason={stopped_reason}",
+            )
+            if logger:
+                logger.log(
+                    phase=LogPhase.REASON,
+                    action="l5_debate_rounds",
+                    detail=f"rounds={len(rounds)}, stopped_reason={stopped_reason}",
+                    status=LogStatus.OK,
+                    layer=PipelineLayer.CONCLUSION,
+                    metrics={"rounds": len(rounds), "stopped_reason": stopped_reason},
+                )
+        else:
+            # 首輪反方就失敗：正方論證仍然有效，保留它並補上單模型的多假設。
+            # debate 維持空 dict——單方面的「辯論」不成立，報告與四面板不該把它
+            # 呈現成完整辯論（也避免 view_builder 走進 debate 分支而讓風險證據消失）。
             inference = [
                 {
                     "hypothesis": f"[正方] {bull_argument}",

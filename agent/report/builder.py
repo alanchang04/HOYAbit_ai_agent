@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent.reasoning.pipeline import ReasoningResult
+from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import Evidence
 
 
@@ -88,21 +89,43 @@ def build_report_markdown(
     lines.append("")
 
     if result.debate:
-        lines.append("**正方 vs 反方辯論：**")
+        # 多輪辯論逐輪呈現；沒有 rounds 的舊單輪結構則收斂成一輪處理。
+        debate_rounds = result.debate.get("rounds") or [
+            {
+                "round": 1,
+                "bull_argument": result.debate.get("bull_argument", ""),
+                "bull_evidence_ids": result.debate.get("bull_evidence_ids", []),
+                "bear_critique": result.debate.get("bear_critique", ""),
+                "bear_argument": result.debate.get("bear_argument", ""),
+                "bear_evidence_ids": result.debate.get("bear_evidence_ids", []),
+            }
+        ]
+        heading = "**正方 vs 反方辯論：**"
+        if len(debate_rounds) > 1:
+            heading = f"**正方 vs 反方辯論（共 {len(debate_rounds)} 輪）：**"
+        lines.append(heading)
         lines.append("")
-        lines.append(f"*正方論證：* {result.debate.get('bull_argument', '')}")
-        bull_ids = result.debate.get("bull_evidence_ids", [])
-        if bull_ids:
-            lines.append(f"- 引用證據：{', '.join(bull_ids)}")
-        lines.append("")
-        if result.debate.get("bear_critique"):
-            lines.append(f"*反方對正方的批評：* {result.debate['bear_critique']}")
+        for rd in debate_rounds:
+            if len(debate_rounds) > 1:
+                lines.append(f"**第 {rd.get('round', '?')} 輪**")
+                lines.append("")
+            lines.append(f"*正方論證：* {rd.get('bull_argument', '')}")
+            bull_ids = rd.get("bull_evidence_ids", [])
+            if bull_ids:
+                lines.append(f"- 引用證據：{', '.join(bull_ids)}")
             lines.append("")
-        lines.append(f"*反方論證：* {result.debate.get('bear_argument', '')}")
-        bear_ids = result.debate.get("bear_evidence_ids", [])
-        if bear_ids:
-            lines.append(f"- 引用證據：{', '.join(bear_ids)}")
-        lines.append("")
+            if rd.get("bear_critique"):
+                lines.append(f"*反方對正方的批評：* {rd['bear_critique']}")
+                lines.append("")
+            lines.append(f"*反方論證：* {rd.get('bear_argument', '')}")
+            bear_ids = rd.get("bear_evidence_ids", [])
+            if bear_ids:
+                lines.append(f"- 引用證據：{', '.join(bear_ids)}")
+            lines.append("")
+        stopped = STOP_REASON_LABEL.get(result.debate.get("stopped_reason", ""))
+        if stopped:
+            lines.append(f"*辯論結束原因：* {stopped}")
+            lines.append("")
 
     lines.append("**推論假設：**")
     for inf in result.inference:
