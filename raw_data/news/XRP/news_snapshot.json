@@ -6,6 +6,7 @@
       "url": "https://ripple.com/insights/more-stablecoins-more-markets-more-flexibility-how-global-payments-infrastructure-is-evolving/",
       "title": "More Stablecoins, More Markets, More Flexibility: How Global Payments Infrastructure is Evolving",
       "published": "April 24, 2026",
+      "summary": "The window for deliberate infrastructure selection, as opposed to reactive infrastructure adoption, is narrowing. What gets decided now, which platform, which architecture, which settlement model will go on to define institutional payments operations for the next several years.",
       "narrative_topics": [
         "RLUSD 穩定幣"
       ]
@@ -15,6 +16,7 @@
       "url": "https://ripple.com/insights/ripple-launches-university-digital-asset-xcelerator-udax-in-brazil/",
       "title": "Ripple launches University Digital Asset Xcelerator (UDAX) in Brazil to boost the development of the XRP ecosystem",
       "published": "July 13, 2026",
+      "summary": "",
       "narrative_topics": []
     },
     {
@@ -22,6 +24,7 @@
       "url": "https://ripple.com/insights/the-xrpl-lending-protocol-bringing-credit-infrastructure-onchain/",
       "title": "The XRPL Lending Protocol: Bringing Credit Infrastructure Onchain",
       "published": "June 29, 2026",
+      "summary": "Moving assets onchain is only half the job. Discover how the XRPL Lending Protocol unlocks productive capital markets through institutional-grade credit infrastructure.",
       "narrative_topics": []
     },
     {
@@ -29,6 +32,7 @@
       "url": "https://ripple.com/insights/xrpl-ai-starter-kit/",
       "title": "Building the Future of Agentic Payments: Introducing the XRP Ledger AI Starter Kit",
       "published": "June 9, 2026",
+      "summary": "",
       "narrative_topics": []
     },
     {
@@ -36,11 +40,12 @@
       "url": "https://ripple.com/insights/fintech-checklist-stablecoin-payments-journey/",
       "title": "From Pilot to Production: A Fintech’s Checklist for Stablecoin Payments",
       "published": "May 20, 2026",
+      "summary": "",
       "narrative_topics": [
         "RLUSD 穩定幣"
       ]
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-22T02:21:24Z"
+  "fetched_at": "2026-07-22T02:46:21Z"
 }

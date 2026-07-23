@@ -15,6 +15,7 @@ class SourceType(str, Enum):
     NEWS = "news"
     SOCIAL = "social"
     MACRO = "macro"
+    DERIVATIVES = "derivatives"
 
 
 class PipelineLayer(str, Enum):

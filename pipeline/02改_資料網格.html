@@ -679,10 +679,10 @@ const SPECS = {
   },
   'news-coin-keywords': {
     title: '特有題材關鍵字組', status: 'done',
-    where: '不是外部來源，是人工整理的「該幣特有關鍵字組」清單，用來在官方發布源的文章標題上多加一層篩選/標記。已於 2026-07-22 補實作並實測。',
-    how: '每幣 2-4 個主題、每主題掛 1-6 個英文關鍵字，大小寫不敏感比對標題 substring；已在 <code>pipeline/fetch_news.py</code> 的 <code>NARRATIVE_KEYWORDS</code> / <code>tag_narrative_topics()</code> 實作，輸出 <code>news_snapshot.json</code> 每筆 item 多一個 <code>narrative_topics</code> 欄位。⚠️ 只比對標題不比對全文，正式 <code>agent/collectors/news.py</code> 尚未併入。',
-    read: '這層是敘事素材不是量化訊號——讓 LLM 在 Phase 6 寫報告時能講出「XRP 本週官方公告集中在監管明確化」這種具體內容，而不是空泛帶過；沒命中不代表沒這個敘事，只代表這批標題沒直接提到。',
-    caveat: '只比對標題不比對全文（HTML 解析的 BNB／XRP 本來就只有標題可用）；實測 2026-07-22 五幣 25 筆標題僅 2 筆命中（BNB 季度銷毀、XRP RLUSD 各 1-2 筆），其餘沒命中是這批新聞剛好沒聊到，不是關鍵字設錯；正式 collector 尚未併入這段邏輯。',
+    where: '不是外部來源，是人工整理的「該幣特有關鍵字組」清單，用來在官方發布源的文章上多加一層篩選/標記。已於 2026-07-22 補實作，同日再補「內文摘要」比對範圍並實測。',
+    how: '每幣 2-4 個主題、每主題掛 1-6 個英文關鍵字，大小寫不敏感比對「標題＋內文摘要」；RSS 三幣（BTC/ETH/SOL）用 <code>feedparser</code> entry 本來就有的 <code>summary</code> 欄位，零額外成本，HTML 解析兩幣（BNB/XRP）改成點進每篇文章網址多打一次 request，抓 <code>&lt;meta property="og:description"&gt;</code>（沒有則退階 <code>&lt;meta name="description"&gt;</code>）——這兩站正文卡在破碎 Chakra UI div 抓不穩，但這個 meta 欄位乾淨完整。已在 <code>pipeline/fetch_news.py</code> 的 <code>NARRATIVE_KEYWORDS</code> / <code>tag_narrative_topics()</code> / <code>fetch_meta_description()</code> 實作，輸出 <code>news_snapshot.json</code> 每筆 item 多兩個欄位：<code>summary</code>、<code>narrative_topics</code>。正式 <code>agent/collectors/news.py</code> 尚未併入。',
+    read: '這層是敘事素材不是量化訊號——讓 LLM 在 Phase 6 寫報告時能講出「XRP 本週官方公告集中在監管明確化」這種具體內容，而不是空泛帶過；沒命中不代表沒這個敘事，只代表標題＋摘要沒直接提到。',
+    caveat: '摘要只是一段話不是全文，仍有可能漏接沒寫進摘要的細節；BNB/XRP 額外點進單篇文章網址多打一次 request，單篇失敗會記進 errors、summary 留空但不影響其他筆；實測 2026-07-22 補摘要後 BNB 多命中 1 筆（標題沒提到，摘要裡的 opBNB／Greenfield 才命中），驗證補摘要有實際效果。⚠️ Ripple Insights 有些文章頁沒設專屬 og:description，會退回網站全站通用標語「Ripple is the leading blockchain payments company.」——不是文章摘要，已加 <code>GENERIC_DESCRIPTION_FALLBACKS</code> 濾掉，命中就當沒有摘要，避免誤導 LLM。正式 collector 尚未併入這段邏輯。',
   },
   'reddit-search': {
     title: 'Reddit 討論熱度', status: 'done',

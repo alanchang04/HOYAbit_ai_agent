@@ -86,13 +86,41 @@ NARRATIVE_KEYWORDS: dict[str, dict[str, list[str]]] = {
 }
 
 
-def tag_narrative_topics(coin: str, title: str) -> list[str]:
-    title_lower = title.lower()
+def tag_narrative_topics(coin: str, *texts: str) -> list[str]:
+    combined = " ".join(texts).lower()
     return [
         topic
         for topic, keywords in NARRATIVE_KEYWORDS.get(coin.upper(), {}).items()
-        if any(kw in title_lower for kw in keywords)
+        if any(kw in combined for kw in keywords)
     ]
+
+
+def strip_html(text: str) -> str:
+    return BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+
+
+# 有些站的單篇文章頁沒設專屬 og:description，會退回網站全站通用標語（og:title
+# 仍是文章專屬的，只有 description 這欄位是罐頭文字）。實測發現 Ripple Insights
+# 5 篇裡有 3 篇是這句——不是文章摘要，混進比對／報告會誤導 LLM 以為文章在講這個，
+# 直接濾掉當作沒有摘要。之後如果其他站也踩到同款罐頭文字，往這個集合加就好。
+GENERIC_DESCRIPTION_FALLBACKS = {
+    "ripple is the leading blockchain payments company.",
+}
+
+
+def fetch_meta_description(client: httpx.Client, url: str) -> str:
+    """點進單篇文章頁抓 og:description／meta description 當內文摘要——BNB／XRP
+    這兩站的本文卡在破碎的 emotion-css div 裡抓不穩，但社群分享用的 meta
+    description 兩邊都有乾淨的一段文字，比硬解析內文可靠。"""
+    resp = client.get(url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for attrs in ({"property": "og:description"}, {"name": "description"}):
+        tag = soup.find("meta", attrs=attrs)
+        content = tag["content"].strip() if tag and tag.get("content") else ""
+        if content and content.lower() not in GENERIC_DESCRIPTION_FALLBACKS:
+            return content
+    return ""
 
 
 def now_iso() -> str:
@@ -173,21 +201,29 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
                 parsed = feedparser.parse(resp.text)
                 for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
                     title = entry.get("title", "")
+                    summary = strip_html(entry.get("summary", "")) if entry.get("summary") else ""
                     items.append({
                         "source": f"{source['name']}（官方源）",
                         "url": entry.get("link", source["url"]),
                         "title": title,
                         "published": entry.get("published", "未知"),
-                        "narrative_topics": tag_narrative_topics(coin, title),
+                        "summary": summary,
+                        "narrative_topics": tag_narrative_topics(coin, title, summary),
                     })
             else:
                 for item in HTML_SCRAPERS[source["name"]](resp.text):
+                    summary = ""
+                    try:
+                        summary = fetch_meta_description(client, item["url"])
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"{item['url']}: summary fetch error={exc}")
                     items.append({
                         "source": f"{source['name']}（官方源・HTML 解析）",
                         "url": item["url"],
                         "title": item["title"],
                         "published": item["published"],
-                        "narrative_topics": tag_narrative_topics(coin, item["title"]),
+                        "summary": summary,
+                        "narrative_topics": tag_narrative_topics(coin, item["title"], summary),
                     })
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{source['name']}: error={exc}")
@@ -218,6 +254,8 @@ def main() -> None:
             for item in result["items"]:
                 topics = "・".join(item["narrative_topics"]) or "（無命中主題）"
                 print(f"  {item['source']}：{item['title']}  [{topics}]")
+                if item["summary"]:
+                    print(f"    摘要：{item['summary'][:120]}")
             for err in result["errors"]:
                 print(f"  ⚠️ {err}")
             print()

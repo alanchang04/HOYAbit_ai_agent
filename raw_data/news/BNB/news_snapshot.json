@@ -6,13 +6,17 @@
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-the-web3-blueprint",
       "title": "Bnb chain the web3 blueprint（標題由網址還原，非原文標題）",
       "published": "未知",
-      "narrative_topics": []
+      "summary": "Explore BNB Chain's growth, ecosystem benefits, and the impact across its three community-led blockchains: BNB Smart Chain (BSC), opBNB, and BNB Greenfield.",
+      "narrative_topics": [
+        "BNB Chain 生態升級"
+      ]
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-ai-agent-landscape-agents-tools-and-payments",
       "title": "Bnb chain ai agent landscape agents tools and payments（標題由網址還原，非原文標題）",
       "published": "未知",
+      "summary": "Onchain AI agents went from 337 in January to 330,000+ today, and 3 in 5 of them run on BNB Chain, more than every other network combined. This piece maps the four things an agent economy needs, identity, capability, payment, and accountability, against what is live on BNB Chain right now.",
       "narrative_topics": []
     },
     {
@@ -20,6 +24,7 @@
       "url": "https://www.bnbchain.org/en/blog/36th-bnb-burn",
       "title": "36th bnb burn（標題由網址還原，非原文標題）",
       "published": "未知",
+      "summary": "The 36th quarterly BNB burn has removed 1,615,827.795 BNB (~$931.7M) from circulation, bringing total supply down to 133.17M BNB. Here are the full facts and figures.",
       "narrative_topics": [
         "季度銷毀"
       ]
@@ -29,6 +34,7 @@
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-h2-2026-tech-roadmap-doubling-down-on-speed",
       "title": "Bnb chain h2 2026 tech roadmap doubling down on speed（標題由網址還原，非原文標題）",
       "published": "未知",
+      "summary": "TL;DR\n\n * In H1 2026, BSC cut block intervals to 450 ms, brought in-memory finality down to 650 ms, and nearly doubled benchmark throughput to ~5,200 TPS\n * The H2 objective is to double mainnet throughput again, on a stated path toward a 10x improvement across BNB Chain\n * A next-generation L1 architecture is in development on a design path toward the 1M TPS end-of-life goal\n\nSix months ago, BNB Chain set three priorities for BSC: speed, throughput, and protocol stability. This roadmap opens",
       "narrative_topics": []
     },
     {
@@ -36,9 +42,10 @@
       "url": "https://www.bnbchain.org/en/blog/meet-the-winners-of-bnb-hack-ai-trading-agent-edition",
       "title": "Meet the winners of bnb hack ai trading agent edition（標題由網址還原，非原文標題）",
       "published": "未知",
+      "summary": "TL;DR\n\n * The latest edition of BNB Hack brought together builders to create autonomous agents, reusable skills, and onchain trading tools.\n * A total of 21 winners share $36,000 across trading agents, strategy skills, and best use of CoinMarketCap Agent Hub, Trust Wallet Agent Kit, and BNB Agent SDK.\n * Full builds can be found here\n\n\nCongrats to All Builders and Winners\n\nBNB Hack: AI Trading Agent Edition brought builders together to create autonomous trading agents, reusable strategy skills,",
       "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-22T02:21:23Z"
+  "fetched_at": "2026-07-22T02:46:20Z"
 }

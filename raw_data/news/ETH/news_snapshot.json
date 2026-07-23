@@ -6,6 +6,7 @@
       "url": "https://blog.ethereum.org/en/2026/07/14/devcon8-tickets",
       "title": "Devcon 8 Tickets Are Live: Find Your Path to Mumbai",
       "published": "Tue, 14 Jul 2026 00:00:00 GMT",
+      "summary": "Devcon 8 tickets are live! 🇮🇳  This November, the Ethereum community will gather in Mumbai for a more focused and intimate Devcon.  Devcon gathers minds from across Ethereum and beyond: builders, researchers, maintainers, organizers, and anyone curious about the future of open technology. Across four days, you can...",
       "narrative_topics": []
     },
     {
@@ -13,6 +14,7 @@
       "url": "https://blog.ethereum.org/en/2026/07/09/triage-is-the-product",
       "title": "The triage is the product: running AI agents against Ethereum's protocol code",
       "published": "Thu, 09 Jul 2026 00:00:00 GMT",
+      "summary": "Notes from the Ethereum Foundation's Protocol Security team on running coordinated AI agents against real protocol code, including how we organize the work, what holds up under scrutiny, and what client teams and security researchers can take from it. This post stands on its own; later posts will go deeper...",
       "narrative_topics": []
     },
     {
@@ -20,6 +22,7 @@
       "url": "https://blog.ethereum.org/en/2026/07/01/ethereum-for-institutions",
       "title": "Ethereum for Governments and Institutions: Why neutral infrastructure matters now",
       "published": "Wed, 01 Jul 2026 00:00:00 GMT",
+      "summary": "Current global shifts clearly signal a critical need for shared, neutral digital public infrastructure outside the control of any single centralized actor. As a public, programmable network designed to operate without reliance on any single party, Ethereum was built to address precisely these needs.  Today, the Ethereum Foundation Global...",
       "narrative_topics": []
     },
     {
@@ -27,6 +30,7 @@
       "url": "https://blog.ethereum.org/en/2026/06/23/ef-structure",
       "title": "The EF’s new structure",
       "published": "Tue, 23 Jun 2026 00:00:00 GMT",
+      "summary": "Today, the EF is changing shape, concluding a months-long process of reorganization as part of the implementation of the Mandate and the Treasury Management Policy.  We come out of this process with the structure, activities, and people necessary for execution on the critical tasks ahead of us, but also...",
       "narrative_topics": []
     },
     {
@@ -34,9 +38,10 @@
       "url": "https://blog.ethereum.org/en/2026/05/12/clear-signing-announcement",
       "title": "Clear Signing: Making Transaction Approvals Safer on Ethereum",
       "published": "Tue, 12 May 2026 00:00:00 GMT",
+      "summary": "An Ethereum Working Group consisting of wallet developers, security firms and the Ethereum Foundation’s Trillion Dollar Security Initiative today launched an open standard designed to end blind signing — a structural flaw that has contributed to billions in user losses, including the Bybit hack. Ethereum Foundation’s Trillion Dollar Security Initiative...",
       "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-22T02:21:22Z"
+  "fetched_at": "2026-07-22T02:46:17Z"
 }

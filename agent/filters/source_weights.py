@@ -32,6 +32,7 @@ _SOURCE_KEYWORD_RULES_AFTER_ONCHAIN: list[tuple[list[str], float, str]] = [
 
 _SOURCE_TYPE_FALLBACK: dict[SourceType, tuple[float, str]] = {
     SourceType.ONCHAIN: (0.85, "鏈上公開 RPC，數據不可竄改"),
+    SourceType.DERIVATIVES: (0.80, "交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差"),
     SourceType.MACRO: (0.65, "公開指數/央行匯率"),
     SourceType.NEWS: (0.60, "主流媒體，未逐篇查證"),
     SourceType.SOCIAL: (0.30, "未經查證社群內容"),

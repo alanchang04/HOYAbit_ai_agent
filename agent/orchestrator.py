@@ -14,6 +14,7 @@ from pathlib import Path
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import detect_coins_in_text
+from agent.collectors.derivatives import DerivativesCollector
 from agent.collectors.dry_run import DryRunCollector
 from agent.collectors.macro import MacroCollector
 from agent.collectors.news import NewsCollector
@@ -32,7 +33,7 @@ from agent.filters.content import apply_content_filters
 from agent.filters.source_weights import apply_source_weights
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
-SOURCE_TYPES = ["price", "onchain", "news", "social", "macro"]
+SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 
 
 @dataclass
@@ -56,6 +57,7 @@ def build_collectors(logger: ExecutionLogger, settings: Settings, dry_run: bool)
         NewsCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
         SocialCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
         MacroCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
+        DerivativesCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
     ]
 
 
