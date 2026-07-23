@@ -11,6 +11,7 @@ import json
 import uuid
 from pathlib import Path
 
+import markdown as md
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -68,6 +69,15 @@ def analyze(
         # 真正的失敗容錯（collector/LLM 步驟）已經在 orchestrator 內處理。
         error = f"{type(exc).__name__}: {exc}"
 
+    # 報告分頁改為排版化 HTML 顯示（僅供 Web UI 呈現，report.md 交付檔本身不受影響）
+    report_html: str = ""
+    if result is not None:
+        # toc extension：即使不插入 [TOC] 標記，也會替每個標題自動加 id，
+        # 供前端產生「跳到章節」導覽列與錨點捲動使用
+        report_html = md.markdown(
+            result.report_markdown, extensions=["extra", "sane_lists", "toc"]
+        )
+
     # Read execution log entries and view metrics for template tabs
     log_entries: list[dict] = []
     view_metrics: dict = {}
@@ -83,7 +93,10 @@ def analyze(
     view_path = out_dir / "report_view.json"
     if view_path.exists():
         view_data = json.loads(view_path.read_text(encoding="utf-8"))
-        view_metrics = view_data.get("meta", {}).get("metrics", {})
+        view_meta = view_data.get("meta", {})
+        # RunMetrics 本身沒有 generated_at（它是 meta 的手足欄位，不在 metrics 裡），
+        # 這裡併進同一個 dict 讓模板只需讀一份 view_metrics
+        view_metrics = {**view_meta.get("metrics", {}), "generated_at": view_meta.get("generated_at", "")}
 
     return templates.TemplateResponse(
         request,
@@ -94,6 +107,7 @@ def analyze(
             "coin2": coin2.upper() if coin2 else None,
             "question": question,
             "result": result,
+            "report_html": report_html,
             "error": error,
             "log_entries": log_entries,
             "view_metrics": view_metrics,

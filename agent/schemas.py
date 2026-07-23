@@ -40,7 +40,7 @@ class FilterDecision(BaseModel):
     """單筆證據經過濾層後的決定紀錄。"""
 
     evidence_id: str
-    check_code: str  # "PR" | "F10" | "F9" | "SUBJ"
+    check_code: str  # "PR" | "F10" | "F9" | "SUBJ" | "DEDUP"
     verdict: FilterVerdict
     reason: str
     weight_before: float | None = None
@@ -75,6 +75,13 @@ class EvidenceDraft(BaseModel):
     weight_reason: str = ""
     rag_verified: bool | None = None
     rag_support: str = ""
+
+    # R12-1: Phase 2 去重 metadata（news/social 依 (coin, source_type) 群組計算，
+    # 隨證據一併保存進 evidence.json；非敘事類證據維持 None）
+    dedup_raw_count: int | None = None
+    dedup_deduped_count: int | None = None
+    dedup_rate: float | None = None
+    duplicate_of: str | None = None  # 被去重剔除時，指向保留的那筆證據 id
 
     @field_validator("fetched_at")
     @classmethod
