@@ -584,9 +584,9 @@ const SPECS = {
   'tech-indicators': {
     title: '技術指標（SMA／RSI／波動率／量能趨勢）', status: 'done',
     where: '同一份 OHLCV CSV，不連外部網路。',
-    how: '本地 Python 純計算：MA20＝近20日收盤均、MA60＝近60日收盤均、MA120＝近120日收盤均；RSI14 用近15日收盤漲跌算平均漲幅/平均跌幅比值換算；波動率＝近14日日報酬的母體標準差×100；量能趨勢＝近7日均量 vs 前7日均量的變化%。已在 <code>compute_technical_indicators()</code> 實作，資料不足15筆會回傳空值，MA 欄位資料不足對應天數時回傳 <code>None</code>。2026-07-21 已把 <code>INDICATOR_WINDOW</code> 拉大到 121 列並把 MA20/60/120 併回這個函式（見上方「近兩週 OHLCV」）。',
-    read: '現價站上 MA20＝短期動能偏多，跌破＝偏空；站上/跌破 MA60、MA120 則分別代表中期／長期趨勢方向，三條同向（例如全站上）＝多頭排列，訊號一致性高，出現交叉（如 MA20 跌破 MA60）可當轉折訊號；RSI14 ≥70 超買、≤30 超賣、中間中性；波動率數字要跟該幣「自己的」歷史比才有意義，不同幣種基準不同，不能拿 BTC 的波動率直接跟 SOL 比大小；量能趨勢正值＝近期關注度上升。',
-    caveat: '2026-07-21 已修：<code>INDICATOR_WINDOW</code> 從 30 拉大到 121，MA120 算得出來了。⚠️ 這個窗口常數改動是 Ken 直接指示先做，還沒跟 alanchang 對過，之後要補講一聲。⚠️ 波動率仍是缺口：<code>volatility_pct</code> 目前只回傳近14日標準差原始數字，不是百分位，跟這欄 read 說的「要跟自己歷史比」還沒兌現；<code>pipeline/compute_historical_volatility_percentile.py</code> 已完成 prototype（全歷史擴張視窗百分位），還沒併回這個 collector，見 <code>pipeline/流程紀錄.md</code> Step 24。',
+    how: '本地 Python 純計算：MA20＝近20日收盤均、MA60＝近60日收盤均、MA120＝近120日收盤均；RSI14 用近15日收盤漲跌算平均漲幅/平均跌幅比值換算；波動率＝近14日日報酬的母體標準差×100；量能趨勢＝近7日均量 vs 前7日均量的變化%。已在 <code>compute_technical_indicators()</code> 實作，資料不足15筆會回傳空值，MA 欄位資料不足對應天數時回傳 <code>None</code>。2026-07-21 已把 <code>INDICATOR_WINDOW</code> 拉大到 121 列並把 MA20/60/120 併回這個函式（見上方「近兩週 OHLCV」）。2026-07-23 再併入 <code>compute_historical_volatility_percentile()</code>：讀完整歷史 CSV（非 121 列截尾）算波動率相對過去全部歷史的百分位（擴張視窗），累積不到 90 筆前不給百分位。',
+    read: '現價站上 MA20＝短期動能偏多，跌破＝偏空；站上/跌破 MA60、MA120 則分別代表中期／長期趨勢方向，三條同向（例如全站上）＝多頭排列，訊號一致性高，出現交叉（如 MA20 跌破 MA60）可當轉折訊號；RSI14 ≥70 超買、≤30 超賣、中間中性；波動率數字現在已附帶「相對該幣自己全歷史的百分位」（例如 BTC 5.1 ＝比過去 5 年 94.9% 的時間都更悶），不用再靠讀者自己心算跟哪個基準比；量能趨勢正值＝近期關注度上升。',
+    caveat: '2026-07-21 已修：<code>INDICATOR_WINDOW</code> 從 30 拉大到 121，MA120 算得出來了。⚠️ 這個窗口常數改動是 Ken 直接指示先做，還沒跟 alanchang 對過，之後要補講一聲。2026-07-23 波動率百分位缺口已補：<code>compute_historical_volatility_percentile()</code> 併入 <code>compute_technical_indicators()</code>，真實 API 跑過 BTC 確認跟 prototype 數字一致（vol=1.14%／percentile=5.1），<code>pytest -q</code> 231 全過；⚠️ 這個改動同樣還沒跟 alanchang 討論。',
   },
   'realtime-price': {
     title: '即時報價', status: 'done',
