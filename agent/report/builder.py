@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.filters.source_weights import reputation_appendix_lines
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import Evidence
@@ -34,6 +35,62 @@ def validate_evidence_references(result: ReasoningResult, evidences: list[Eviden
         )
 
 
+def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
+    """組「執行摘要」：把信心／市場判斷／利多／風險／最需留意項濃縮到最上方，
+    讓讀者不用翻完整份報告就能抓到重點；完整論述與逐筆證據仍保留在下方各節，
+    這裡只是重組既有欄位、不新增 LLM 呼叫、不省略任何一個維度。
+    """
+    conclusion = result.conclusion or {}
+    debate = result.debate or {}
+
+    lines: list[str] = []
+    lines.append("## 執行摘要")
+    lines.append("")
+
+    confidence_label = conclusion.get("confidence", "未知")
+    lines.append(
+        f"> 信心：{result.confidence_score}%（{confidence_label}）"
+        "── 分項計算方式見「4. 信心說明」"
+    )
+    lines.append("")
+
+    market_judgment = conclusion.get("market_judgment", "")
+    lines.append(f"**市場判斷：** {market_judgment}" if market_judgment else "**市場判斷：** （本次未產出市場判斷）")
+    lines.append("")
+
+    if debate.get("bull_argument") or debate.get("bear_argument"):
+        bull_ids = debate.get("bull_evidence_ids", [])
+        bear_ids = debate.get("bear_evidence_ids", [])
+        lines.append(f"**利多依據：** {debate.get('bull_argument', '')}")
+        if bull_ids:
+            lines.append(f"（引用：{', '.join(bull_ids)}）")
+        lines.append("")
+        lines.append(f"**風險依據：** {debate.get('bear_argument', '')}")
+        if bear_ids:
+            lines.append(f"（引用：{', '.join(bear_ids)}）")
+        lines.append("")
+    else:
+        lines.append(
+            "**利多／風險依據：** 本次未觸發正反辯論（fallback 模式），"
+            "完整推論假設與支持/反對證據見「3. 正反方分析與矛盾訊號處理」。"
+        )
+        lines.append("")
+
+    watchpoint = ""
+    invalidation_conditions = conclusion.get("invalidation_conditions", [])
+    if invalidation_conditions:
+        watchpoint = invalidation_conditions[0]
+        watchpoint_label = "最需留意的推翻條件"
+    elif result.follow_up_watchpoints:
+        watchpoint = result.follow_up_watchpoints[0]
+        watchpoint_label = "最需留意的後續觀察"
+    if watchpoint:
+        lines.append(f"**{watchpoint_label}：** {watchpoint}")
+        lines.append("")
+
+    return lines
+
+
 def build_report_markdown(
     coin: str,
     question: str,
@@ -52,6 +109,8 @@ def build_report_markdown(
     lines.append(f"> 題目：{question}")
     lines.append(f"> 題型分類：{result.question_type}")
     lines.append("")
+
+    lines.extend(_build_executive_summary_lines(result))
 
     lines.append("## 1. 結論／市場判斷")
     lines.append("")
@@ -156,6 +215,11 @@ def build_report_markdown(
             lines.append(f"- {point}")
     else:
         lines.append("- （本次推理未產出具體後續觀察重點）")
+    lines.append("")
+
+    lines.append("## 附錄：信源分級依據（賽前信譽表）")
+    lines.append("")
+    lines.extend(reputation_appendix_lines())
     lines.append("")
 
     lines.append("---")
