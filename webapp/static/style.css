@@ -958,6 +958,19 @@ a {
   font-weight: 700;
 }
 
+.debate-round {
+  margin-top: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border, #d0d0d0);
+}
+
+.debate-round-head {
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin-bottom: 0.15rem;
+  color: var(--muted, #666);
+}
+
 .log-events-details {
   margin-top: 0.75rem;
   border-top: 1px solid var(--border);

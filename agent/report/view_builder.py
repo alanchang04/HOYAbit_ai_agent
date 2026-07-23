@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 
 from agent.reasoning.pipeline import ReasoningResult
+from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import (
     Evidence,
     FilterDecision,
@@ -274,12 +275,29 @@ def _build_panel3(
     l5_metrics = _find_log_metrics(log_entries, "l5_confidence_score")
     debate = reasoning_result.debate or {}
 
+    debate_rounds = debate.get("rounds", []) if isinstance(debate, dict) else []
     l5_layer = {
         "layer": "L5_conclusion",
         "debate": {
+            # 扁平欄位＝最後一輪，維持給沒有多輪概念的舊下游相容
             "bull": debate.get("bull_argument", ""),
             "bear_critique": debate.get("bear_critique", ""),
             "bear": debate.get("bear_argument", ""),
+            # 逐輪紀錄：面板③ L5 展開完整辯論過程（無 rounds 時為空，模板退回扁平顯示）
+            "rounds": [
+                {
+                    "round": r.get("round", i + 1),
+                    "bull": r.get("bull_argument", ""),
+                    "bear_critique": r.get("bear_critique", ""),
+                    "bear": r.get("bear_argument", ""),
+                }
+                for i, r in enumerate(debate_rounds)
+            ],
+            "round_count": debate.get("round_count", len(debate_rounds)),
+            "stopped_reason": debate.get("stopped_reason", ""),
+            "stopped_reason_label": STOP_REASON_LABEL.get(
+                debate.get("stopped_reason", ""), ""
+            ),
         },
         "confidence_breakdown": {
             "base": l5_metrics.get("base", 35),
@@ -335,11 +353,22 @@ def _build_panel4(
     risk_evidence: list[dict] = []
 
     if debate:
-        for eid in debate.get("bull_evidence_ids", []):
+        # 面板④「利好/風險證據」是最終結論的依據，應反映**最後一輪**倖存的證據，
+        # 不是所有輪次的聯集——否則正方第 2 輪已放棄的證據仍會被列為利好依據。
+        # （聯集只用於 report/builder 的引用完整性檢查，不用於此處展示。）
+        rounds = debate.get("rounds", [])
+        if rounds:
+            last_round = rounds[-1]
+            bull_ids = last_round.get("bull_evidence_ids", [])
+            bear_ids = last_round.get("bear_evidence_ids", [])
+        else:
+            bull_ids = debate.get("bull_evidence_ids", [])
+            bear_ids = debate.get("bear_evidence_ids", [])
+        for eid in bull_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 bullish_evidence.append({"fingerprint": fp, "evidence_id": eid})
-        for eid in debate.get("bear_evidence_ids", []):
+        for eid in bear_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 risk_evidence.append({"fingerprint": fp, "evidence_id": eid})

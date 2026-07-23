@@ -435,6 +435,126 @@ def test_build_report_view_l3_removed_items_generic_reason_without_filter_decisi
     assert "未引用" in removed_items[0]["reason"]
 
 
+@pytest.fixture
+def multi_round_reasoning_result() -> ReasoningResult:
+    """多輪辯論：第 1 輪正方引用 ev-001+ev-002，第 2 輪放棄 ev-002 只留 ev-001。
+
+    頂層 bull_evidence_ids 是**聯集**（ev-001+ev-002），逐輪 rounds 保留原始。
+    面板④「利好證據」應只反映**最後一輪**（ev-001），不含已被放棄的 ev-002。
+    """
+    rounds = [
+        {
+            "round": 1,
+            "bull_argument": "算力新高加上 ETF 資金流入支持偏強格局",
+            "bull_evidence_ids": ["ev-001", "ev-002"],
+            "bear_critique": "ETF 資金流入的因果推論過度延伸",
+            "bear_argument": "新聞面利好可能已被價格反映",
+            "bear_evidence_ids": ["ev-003"],
+            "bear_has_new_points": True,
+        },
+        {
+            "round": 2,
+            "bull_argument": "撤回算力論點，價格動能仍由 ETF 資金主導",
+            "bull_evidence_ids": ["ev-001"],
+            "bear_critique": "同意動能觀點但質疑持續性",
+            "bear_argument": "資金流入為單週現象，不足以支撐中期",
+            "bear_evidence_ids": ["ev-003"],
+            "bear_has_new_points": False,
+        },
+    ]
+    return ReasoningResult(
+        question_type="multi_source",
+        facts=[
+            {"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]},
+            {"summary": "鏈上算力創新高", "evidence_ids": ["ev-002"]},
+        ],
+        cross_validation={"consistent_signals": [], "contradictions": []},
+        inference=[
+            {
+                "hypothesis": "正方",
+                "supporting_evidence_ids": ["ev-001"],
+                "opposing_evidence_ids": ["ev-003"],
+            }
+        ],
+        conclusion={
+            "market_judgment": "BTC 偏強但動能持續性存疑",
+            "confidence": "中",
+            "evidence_ids": ["ev-001", "ev-002", "ev-003"],
+        },
+        follow_up_watchpoints=["觀察 ETF 資金流是否延續"],
+        debate={
+            "rounds": rounds,
+            "round_count": 2,
+            "stopped_reason": "converged",
+            # 相容層：論證取最後一輪、evidence id 取聯集
+            "bull_argument": rounds[-1]["bull_argument"],
+            "bull_evidence_ids": ["ev-001", "ev-002"],
+            "bear_critique": rounds[-1]["bear_critique"],
+            "bear_argument": rounds[-1]["bear_argument"],
+            "bear_evidence_ids": ["ev-003"],
+        },
+        confidence_score=58,
+    )
+
+
+def test_panel3_l5_exposes_all_debate_rounds(
+    out_dir: Path,
+    sample_evidences: list[Evidence],
+    multi_round_reasoning_result: ReasoningResult,
+    sample_run_metrics: RunMetrics,
+) -> None:
+    """面板③ L5 應攤出逐輪辯論、輪數與收斂原因標籤（缺口一）。"""
+    result = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=multi_round_reasoning_result,
+        run_metrics=sample_run_metrics,
+        filter_decisions=[],
+        coin="BTC",
+        question="test",
+    )
+    assert result is not None
+    l5 = next(l for l in result["panel3_refinement"]["layers"] if l["layer"] == "L5_conclusion")
+    debate = l5["debate"]
+
+    assert debate["round_count"] == 2
+    assert len(debate["rounds"]) == 2
+    assert debate["rounds"][0]["round"] == 1
+    assert debate["rounds"][1]["round"] == 2
+    assert "算力新高" in debate["rounds"][0]["bull"]
+    assert "撤回算力論點" in debate["rounds"][1]["bull"]
+    # 收斂原因轉成人話標籤
+    assert debate["stopped_reason"] == "converged"
+    assert "收斂" in debate["stopped_reason_label"]
+    # 扁平相容欄位仍等於最後一輪
+    assert debate["bull"] == "撤回算力論點，價格動能仍由 ETF 資金主導"
+
+
+def test_panel4_bullish_evidence_uses_last_round_not_union(
+    out_dir: Path,
+    sample_evidences: list[Evidence],
+    multi_round_reasoning_result: ReasoningResult,
+    sample_run_metrics: RunMetrics,
+) -> None:
+    """面板④「利好證據」應只列最後一輪倖存證據（ev-001/F1），
+    不含正方第 2 輪已放棄的 ev-002/F2（缺口二：聯集語意 bug）。"""
+    result = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=multi_round_reasoning_result,
+        run_metrics=sample_run_metrics,
+        filter_decisions=[],
+        coin="BTC",
+        question="test",
+    )
+    assert result is not None
+    bullish_ids = {e["evidence_id"] for e in result["panel4_report"]["bullish_evidence"]}
+    assert bullish_ids == {"ev-001"}
+    assert "ev-002" not in bullish_ids  # 第 2 輪放棄，不得列為利好依據
+    risk_ids = {e["evidence_id"] for e in result["panel4_report"]["risk_evidence"]}
+    assert risk_ids == {"ev-003"}
+
+
 def test_build_report_view_with_baseline(
     out_dir: Path,
     sample_evidences: list[Evidence],

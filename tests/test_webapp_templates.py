@@ -81,3 +81,66 @@ def test_view_page_renders_four_panels(client: TestClient, dry_run_result: dict)
 def test_view_page_unknown_run_id_404(client: TestClient) -> None:
     resp = client.get("/view/doesnotexist")
     assert resp.status_code == 404
+
+
+def _render_view_html(view: dict) -> str:
+    """直接以 webapp 的 Jinja 設定渲染 view.html（dry-run 不會產生多輪辯論，
+    故手構 view dict 走模板本身）。"""
+    from webapp.app import templates
+
+    template = templates.env.get_template("view.html")
+    return template.render(run_id="test", view=view)
+
+
+def _minimal_view(l5_debate: dict) -> dict:
+    """組一個能讓 view.html 渲染的最小 view，只關心面板③ L5 的辯論區塊。"""
+    return {
+        "meta": {"coin": "BTC", "coin2": None, "question": "q", "question_type": "multi_source",
+                 "generated_at": "2026-07-23", "metrics": {"confidence": 58,
+                 "noise_removal_rate": 0.1, "integrity_status": "INTACT", "total_tokens": 100}},
+        "panel1_raw_feed": {"count": 0, "items": []},
+        "panel2_naive_baseline": {"enabled": False, "steps": []},
+        "panel3_refinement": {
+            "noise_removal_rate": 0.1,
+            "skipped_layers": [],
+            "log_events_by_layer": {},
+            "layers": [{
+                "layer": "L5_conclusion",
+                "confidence_breakdown": {"base": 35, "auth_bonus": 0,
+                    "contradiction_penalty": 0, "gap_penalty": 0, "final": 58},
+                "debate": l5_debate,
+            }],
+        },
+        "panel4_report": {"integrity_status": "INTACT", "degraded_reasons": [],
+            "confidence": 58, "market_judgment": "x", "summary": {"has_debate": False},
+            "core_facts": [], "bullish_evidence": [], "risk_evidence": [],
+            "limitations": [], "invalidation_conditions": [], "follow_up_watchpoints": []},
+    }
+
+
+def test_view_html_renders_multi_round_debate() -> None:
+    """多輪辯論：面板③ L5 應逐輪渲染，並顯示輪數與收斂原因（缺口一）。"""
+    debate = {
+        "bull": "最後一輪多方", "bear_critique": "最後一輪批評", "bear": "最後一輪空方",
+        "round_count": 2, "stopped_reason": "converged",
+        "stopped_reason_label": "反方自認已無新的實質論點，辯論提前收斂",
+        "rounds": [
+            {"round": 1, "bull": "第一輪多方論點", "bear_critique": "第一輪批評", "bear": "第一輪空方論點"},
+            {"round": 2, "bull": "第二輪多方論點", "bear_critique": "第二輪批評", "bear": "第二輪空方論點"},
+        ],
+    }
+    html = _render_view_html(_minimal_view(debate))
+    assert "共 2 輪" in html
+    assert "提前收斂" in html
+    assert "第 1 輪" in html and "第 2 輪" in html
+    assert "第一輪多方論點" in html and "第二輪多方論點" in html
+
+
+def test_view_html_falls_back_to_flat_debate_without_rounds() -> None:
+    """無 rounds（單模型 fallback 或舊資料）時退回扁平單段顯示，不報錯。"""
+    debate = {"bull": "多方論點", "bear_critique": "空方批評", "bear": "空方論點",
+              "rounds": [], "round_count": 0, "stopped_reason": "", "stopped_reason_label": ""}
+    html = _render_view_html(_minimal_view(debate))
+    assert "多方論點" in html
+    assert "共 " not in html  # 沒有多輪標頭
+    assert "第 1 輪" not in html
