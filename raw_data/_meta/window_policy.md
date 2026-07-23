@@ -50,9 +50,18 @@
 
 SOL/BNB/XRP 目前沒有免費歷史序列來源（見 `pipeline/待辦筆記/onchain_歷史資料.md`），這不是窗口設計問題，是資料源本身的缺口。「14-30 天日頻」這個窗口設計只有在把 `fetch_onchain_history.py` 併回正式 collector 後才會被讀報告的人看到；目前正式 collector 仍是純即時快照。
 
-### News ✅（已符合，且已內建重大事件不受限的彈性）
+### News ✅（標記不濾除，重大事件不受限）
 
-RSS 抓 `MAX_ITEMS_PER_SOURCE=5` 篇最新項目，沒有寫死日期窗口——RSS feed 本身天然只回傳近期項目，效果上落在 7-14 天內；重大事件不因為超過兩週被排除（RSS 本身沒有窗口截斷邏輯，不會誤刪）。[news.py:18](../../agent/collectors/news.py#L18)
+抓 `MAX_ITEMS_PER_SOURCE=5` 篇最新項目，不寫死濾除日期窗口。**2026-07-23 訂正**：
+原本這裡寫「RSS feed 天然回傳近期項目，效果上落在 7-14 天內」，實測發現這句話
+只對 RSS 三幣（BTC/ETH/SOL）成立，HTML 解析的 BNB/XRP 不成立——BNB 抓不到
+發布日期、XRP 實測 5 篇最新項目跨度近 3 個月，遠超 14 天。改成明確判斷：超過
+`NEWS_RECENCY_WINDOW_DAYS=14` 天的項目標記「⚠️非近期」，日期抓不到的（目前是
+BNB）標記「⚠️日期未知」，兩種都不濾除，項目照樣保留進報告。選擇標記而非濾除
+是因為低頻官方源（如 BTC 只有 Optech Newsletter 一條管道）硬濾窗口可能整批
+變空；重大事件本來就不會因為超過兩週被排除。詳細記錄見
+[pipeline/流程紀錄.md](../../pipeline/流程紀錄.md) News 章節 Step 26。
+[news.py:_recency_note](../../agent/collectors/news.py)
 
 ### Social ✅（已符合，t=week 剛好落在建議窗口內）
 

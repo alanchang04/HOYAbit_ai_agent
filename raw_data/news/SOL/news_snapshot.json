@@ -3,9 +3,21 @@
   "items": [
     {
       "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/rent-reduction-deep-dive",
+      "title": "Rent Reduction on Solana: A Data-Backed Analysis",
+      "published": "Mon, 20 Jul 2026 00:00:00 GMT",
+      "recency_note": "",
+      "summary": "A data-backed analysis of whether Solana can reduce the rent-exempt requirement from 6,960 to 696 lamports per byte without creating immediate state-growth risk, covering attack economics, account persistence, AccountsDB growth, and payment onboarding costs.",
+      "narrative_topics": [
+        "支付／DePIN"
+      ]
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
       "url": "https://solana.com/news/solana-changelog-july-16-2026",
       "title": "Solana Changelog: July 16, 2026",
       "published": "Thu, 16 Jul 2026 14:33:00 GMT",
+      "recency_note": "",
       "summary": "Agave, Firedancer, Frankendancer, Solana Program JS SDKs, LiteSVM, Mollusk, and Surfpool shipped new releases.",
       "narrative_topics": []
     },
@@ -14,6 +26,7 @@
       "url": "https://solana.com/news/skhy-is-now-live",
       "title": "The Sun Rises in Seoul and Trades on Solana: $SKHY is Now Live",
       "published": "Fri, 10 Jul 2026 12:00:00 GMT",
+      "recency_note": "",
       "summary": "SK Hynix ($SKHY), South Korea’s dominant memory-chip maker, is now live on Solana.",
       "narrative_topics": []
     },
@@ -22,6 +35,7 @@
       "url": "https://solana.com/news/solana-changelog-july-9-2026",
       "title": "Solana Changelog: July 9, 2026",
       "published": "Thu, 09 Jul 2026 12:05:00 GMT",
+      "recency_note": "",
       "summary": "Agave, Firedancer, Superbank, Solana Go, and LiteSVM published new releases alongside validator, RPC, and tooling updates.",
       "narrative_topics": []
     },
@@ -30,18 +44,11 @@
       "url": "https://solana.com/news/solana-ecosystem-roundup-june-2026",
       "title": "Solana Ecosystem Roundup: June 2026",
       "published": "Mon, 06 Jul 2026 06:00:00 GMT",
+      "recency_note": "⚠️非近期（發布已 17 天，超過 14 天窗口）",
       "summary": "",
-      "narrative_topics": []
-    },
-    {
-      "source": "Solana Foundation News（官方源）",
-      "url": "https://solana.com/news/solana-changelog-agave-v4-1-0-rpc-2-0-and-alpenglow",
-      "title": "Solana Changelog: Agave v4.1.0, RPC 2.0, and Alpenglow",
-      "published": "Thu, 02 Jul 2026 21:21:00 GMT",
-      "summary": "Agave v4.1.0, Solana Kit v7.0.0, Cloudbreak RPC methods, and Alpenglow feature-flag work led this week’s Solana engineering updates.",
       "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-22T02:46:18Z"
+  "fetched_at": "2026-07-23T14:26:20Z"
 }

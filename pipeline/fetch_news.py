@@ -127,6 +127,36 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# 對照 raw_data/_meta/window_policy.md 的 News「近 7-14 天為主」建議窗口，取
+# 上緣 14 天當「非近期」判斷線。跟 agent/collectors/news.py 同一套邏輯，維護時
+# 兩邊要一起改（理由見 pipeline/待辦筆記/news_日期窗口.md：不濾除只標記，避免
+# 低頻官方源硬濾窗口後整批變空）。
+NEWS_RECENCY_WINDOW_DAYS = 14
+
+
+def _parse_rss_published(entry: dict) -> datetime | None:
+    parsed = entry.get("published_parsed")
+    if not parsed:
+        return None
+    return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+
+def _parse_html_published(published: str) -> datetime | None:
+    try:
+        return datetime.strptime(published, "%B %d, %Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _recency_note(published_dt: datetime | None, now: datetime) -> str:
+    if published_dt is None:
+        return "⚠️日期未知，無法判斷是否近期"
+    age_days = (now - published_dt).days
+    if age_days > NEWS_RECENCY_WINDOW_DAYS:
+        return f"⚠️非近期（發布已 {age_days} 天，超過 {NEWS_RECENCY_WINDOW_DAYS} 天窗口）"
+    return ""
+
+
 def _scrape_bnbchain_blog(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     seen: set[str] = set()
@@ -191,6 +221,7 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
     sources = OFFICIAL_SOURCES.get(coin.upper(), [])
     items: list[dict] = []
     errors: list[str] = []
+    now = datetime.now(timezone.utc)
 
     for source in sources:
         try:
@@ -207,6 +238,7 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
                         "url": entry.get("link", source["url"]),
                         "title": title,
                         "published": entry.get("published", "未知"),
+                        "recency_note": _recency_note(_parse_rss_published(entry), now),
                         "summary": summary,
                         "narrative_topics": tag_narrative_topics(coin, title, summary),
                     })
@@ -222,6 +254,7 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
                         "url": item["url"],
                         "title": item["title"],
                         "published": item["published"],
+                        "recency_note": _recency_note(_parse_html_published(item["published"]), now),
                         "summary": summary,
                         "narrative_topics": tag_narrative_topics(coin, item["title"], summary),
                     })
@@ -253,7 +286,8 @@ def main() -> None:
             print(f"[{coin}] 已寫入 {out_path}（{len(result['items'])} 筆）")
             for item in result["items"]:
                 topics = "・".join(item["narrative_topics"]) or "（無命中主題）"
-                print(f"  {item['source']}：{item['title']}  [{topics}]")
+                recency = f"  {item['recency_note']}" if item["recency_note"] else ""
+                print(f"  {item['source']}：{item['title']}  [{topics}]{recency}")
                 if item["summary"]:
                     print(f"    摘要：{item['summary'][:120]}")
             for err in result["errors"]:

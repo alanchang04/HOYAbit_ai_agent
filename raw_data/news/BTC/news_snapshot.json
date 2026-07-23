@@ -6,6 +6,7 @@
       "url": "https://bitcoinops.org/en/podcast/2026/07/21/",
       "title": "Bitcoin Optech Newsletter #414 Recap Podcast",
       "published": "2026-07-21T00:00:00+00:00",
+      "recency_note": "",
       "summary": "Mark “Murch” Erhardt, Gustavo Flores Echaiz, and Mike Schmidt are joined by Keagan McClelland and Andrew Toth to discuss Newsletter #414.",
       "narrative_topics": []
     },
@@ -14,6 +15,7 @@
       "url": "https://bitcoinops.org/en/newsletters/2026/07/17/",
       "title": "Bitcoin Optech Newsletter #414",
       "published": "2026-07-17T00:00:00+00:00",
+      "recency_note": "",
       "summary": "This week’s newsletter describes a new project to apply formal verification to the Bitcoin protocol. Also included are our regular sections announcing new releases and release candidates, and describing notable changes to popular Bitcoin infrastructure software.",
       "narrative_topics": []
     },
@@ -22,6 +24,7 @@
       "url": "https://bitcoinops.org/en/podcast/2026/07/14/",
       "title": "Bitcoin Optech Newsletter #413 Recap Podcast",
       "published": "2026-07-14T00:00:00+00:00",
+      "recency_note": "",
       "summary": "Mark “Murch” Erhardt, Gustavo Flores Echaiz, and Mike Schmidt are joined by Sjors Provoost to discuss Newsletter #413.",
       "narrative_topics": []
     },
@@ -30,6 +33,7 @@
       "url": "https://bitcoinops.org/en/newsletters/2026/07/10/",
       "title": "Bitcoin Optech Newsletter #413",
       "published": "2026-07-10T00:00:00+00:00",
+      "recency_note": "",
       "summary": "This week’s newsletter describes research into using fountain codes to allow pruned nodes to contribute to initial block download. Also included are our regular sections announcing new releases and release candidates, and describing notable changes to popular Bitcoin infrastructure software.",
       "narrative_topics": []
     },
@@ -38,10 +42,11 @@
       "url": "https://bitcoinops.org/en/podcast/2026/07/07/",
       "title": "Bitcoin Optech Newsletter #412 Recap Podcast",
       "published": "2026-07-07T00:00:00+00:00",
+      "recency_note": "⚠️非近期（發布已 16 天，超過 14 天窗口）",
       "summary": "Mark “Murch” Erhardt and Mike Schmidt are joined by Conduition and Jeremy Rubin to discuss Newsletter #412.",
       "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-22T02:46:17Z"
+  "fetched_at": "2026-07-23T14:26:20Z"
 }
