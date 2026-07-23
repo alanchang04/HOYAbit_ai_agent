@@ -50,7 +50,7 @@ class GeminiClient:
         self.base_backoff_seconds = base_backoff_seconds
         self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
-    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
+    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
         last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 1):
             try:
