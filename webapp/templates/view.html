@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  {# LLM 長文（市場判斷／正反方論證）當 markdown 渲染，而不是塞進 <p> 讓
+     瀏覽器把換行/清單/粗體全部吃掉變成一面文字牆。 #}
+  {% macro long_text(text) %}
+    <div class="llm-longtext">{{ text|render_longtext }}</div>
+  {% endmacro %}
   <header class="site-header">
     <div class="site-header-inner">
       <a class="brand" href="/">HOYA BIT<span>加密市場分析 AI Agent</span></a>
@@ -112,7 +117,9 @@
         {% endif %}
 
         {% for layer in view.panel3_refinement.layers %}
-        <details class="layer-details">
+        {# L5（結論層）預設展開——多輪辯論在這裡，是流水線裡最值得先看的
+           內容；其餘層維持收合避免版面一開始就太長 #}
+        <details class="layer-details"{% if layer.layer == "L5_conclusion" %} open{% endif %}>
           <summary class="layer-summary">
             <span class="layer-badge">{{ layer.layer }}</span>
             {% if layer.get("skipped") %}
@@ -209,14 +216,17 @@
                   {% for rd in layer.debate.rounds %}
                     <div class="debate-round">
                       <p class="debate-round-header">第 {{ rd.round }} 輪</p>
-                      <p><strong>正方：</strong>{{ rd.bull_argument }}</p>
+                      <strong>正方：</strong>
+                      {{ long_text(rd.bull_argument) }}
                       {% if rd.bull_evidence_ids %}
                         <p class="debate-round-cite">引用：{{ rd.bull_evidence_ids|join(', ') }}</p>
                       {% endif %}
                       {% if rd.bear_critique %}
-                        <p><strong>反方對正方的批評：</strong>{{ rd.bear_critique }}</p>
+                        <strong>反方對正方的批評：</strong>
+                        {{ long_text(rd.bear_critique) }}
                       {% endif %}
-                      <p><strong>反方：</strong>{{ rd.bear_argument }}</p>
+                      <strong>反方：</strong>
+                      {{ long_text(rd.bear_argument) }}
                       {% if rd.bear_evidence_ids %}
                         <p class="debate-round-cite">引用：{{ rd.bear_evidence_ids|join(', ') }}</p>
                       {% endif %}
@@ -272,16 +282,17 @@
         {% set summary = view.panel4_report.summary %}
         <div class="exec-summary">
           <p class="exec-summary-meta">信心：{{ view.panel4_report.confidence }}%（{{ summary.confidence_label }}）</p>
-          <p><strong>市場判斷：</strong>
-            {% if view.panel4_report.market_judgment %}
-              {{ view.panel4_report.market_judgment }}
-            {% else %}
-              <span class="data-missing">資料缺失</span>
-            {% endif %}
-          </p>
+          <strong>市場判斷：</strong>
+          {% if view.panel4_report.market_judgment %}
+            {{ long_text(view.panel4_report.market_judgment) }}
+          {% else %}
+            <p><span class="data-missing">資料缺失</span></p>
+          {% endif %}
           {% if summary.has_debate %}
-            <p><strong>利多依據：</strong> {{ summary.bull_argument }}</p>
-            <p><strong>風險依據：</strong> {{ summary.bear_argument }}</p>
+            <strong>利多依據：</strong>
+            {{ long_text(summary.bull_argument) }}
+            <strong>風險依據：</strong>
+            {{ long_text(summary.bear_argument) }}
           {% else %}
             <p class="note">本次未觸發正反辯論（fallback 模式），完整推論假設見左側面板③。</p>
           {% endif %}

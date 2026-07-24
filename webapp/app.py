@@ -17,8 +17,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from markupsafe import Markup
+
 from agent.collectors.coin_map import SUPPORTED_COINS
 from agent.orchestrator import run_pipeline
+from agent.report.text_formatting import normalize_embedded_lists
 
 BASE_DIR = Path(__file__).resolve().parent
 RUNS_DIR = Path("output") / "webapp_runs"
@@ -29,6 +32,20 @@ ALLOWED_DOWNLOAD_FILENAMES = {"report.md", "evidence.json", "execution_log.jsonl
 app = FastAPI(title="HOYA BIT 加密市場分析 AI Agent")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+def _render_longtext(text: str) -> Markup:
+    """四面板顯示 LLM 長文（market_judgment／bull_argument／bear_argument）用：
+    跟 report.md 走同一套邏輯——當成 markdown 渲染，而不是把整段字串塞進
+    <p> 讓瀏覽器把換行/清單/粗體全部吃掉變成一面文字牆。
+    """
+    if not text:
+        return Markup("")
+    html = md.markdown(normalize_embedded_lists(text), extensions=["extra", "sane_lists"])
+    return Markup(html)
+
+
+templates.env.filters["render_longtext"] = _render_longtext
 
 
 @app.get("/healthz")

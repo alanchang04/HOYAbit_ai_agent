@@ -987,6 +987,45 @@ a {
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
 }
 
+/* LLM 長文（市場判斷／正反方論證）markdown 渲染後的排版，套用在
+   .exec-summary／.debate-round 這些卡片內部。與 result.html 的
+   .markdown-body 是同一套視覺語言的精簡版（字級配合卡片縮小） */
+.llm-longtext p {
+  margin: 0.45rem 0;
+}
+
+.llm-longtext p:first-child {
+  margin-top: 0;
+}
+
+.llm-longtext p:last-child {
+  margin-bottom: 0;
+}
+
+.llm-longtext ol,
+.llm-longtext ul {
+  margin: 0.4rem 0;
+  padding-left: 1.3rem;
+}
+
+.llm-longtext li {
+  margin-bottom: 0.5rem;
+}
+
+.llm-longtext li > p {
+  margin: 0;
+}
+
+.llm-longtext strong {
+  color: var(--accent);
+}
+
+.llm-longtext hr {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 0.75rem 0;
+}
+
 .log-events-details {
   margin-top: 0.75rem;
   border-top: 1px solid var(--border);

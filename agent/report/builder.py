@@ -5,6 +5,7 @@ from __future__ import annotations
 from agent.filters.source_weights import reputation_appendix_lines
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
+from agent.report.text_formatting import normalize_embedded_lists
 from agent.schemas import Evidence
 
 
@@ -55,17 +56,26 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     lines.append("")
 
     market_judgment = conclusion.get("market_judgment", "")
-    lines.append(f"**市場判斷：** {market_judgment}" if market_judgment else "**市場判斷：** （本次未產出市場判斷）")
+    if market_judgment:
+        lines.append("**市場判斷：**")
+        lines.append("")
+        lines.append(normalize_embedded_lists(market_judgment))
+    else:
+        lines.append("**市場判斷：** （本次未產出市場判斷）")
     lines.append("")
 
     if debate.get("bull_argument") or debate.get("bear_argument"):
         bull_ids = debate.get("bull_evidence_ids", [])
         bear_ids = debate.get("bear_evidence_ids", [])
-        lines.append(f"**利多依據：** {debate.get('bull_argument', '')}")
+        lines.append("**利多依據：**")
+        lines.append("")
+        lines.append(normalize_embedded_lists(debate.get("bull_argument", "")))
         if bull_ids:
             lines.append(f"（引用：{', '.join(bull_ids)}）")
         lines.append("")
-        lines.append(f"**風險依據：** {debate.get('bear_argument', '')}")
+        lines.append("**風險依據：**")
+        lines.append("")
+        lines.append(normalize_embedded_lists(debate.get("bear_argument", "")))
         if bear_ids:
             lines.append(f"（引用：{', '.join(bear_ids)}）")
         lines.append("")
@@ -114,7 +124,7 @@ def build_report_markdown(
 
     lines.append("## 1. 結論／市場判斷")
     lines.append("")
-    lines.append(result.conclusion.get("market_judgment", ""))
+    lines.append(normalize_embedded_lists(result.conclusion.get("market_judgment", "")))
     lines.append("")
 
     lines.append("## 2. 關鍵依據")
@@ -135,11 +145,13 @@ def build_report_markdown(
     lines.append("")
     consistent = result.cross_validation.get("consistent_signals", [])
     contradictions = result.cross_validation.get("contradictions", [])
-    lines.append("**一致訊號：**")
+    lines.append("### 一致訊號")
+    lines.append("")
     for c in consistent:
         lines.append(f"- {c}")
     lines.append("")
-    lines.append("**矛盾訊號：**")
+    lines.append("### 矛盾訊號")
+    lines.append("")
     if contradictions:
         for c in contradictions:
             lines.append(f"- {c}")
@@ -159,24 +171,30 @@ def build_report_markdown(
                 "bear_evidence_ids": result.debate.get("bear_evidence_ids", []),
             }
         ]
-        heading = "**正方 vs 反方辯論：**"
+        heading = "### 正方 vs 反方辯論"
         if len(debate_rounds) > 1:
-            heading = f"**正方 vs 反方辯論（共 {len(debate_rounds)} 輪）：**"
+            heading = f"### 正方 vs 反方辯論（共 {len(debate_rounds)} 輪）"
         lines.append(heading)
         lines.append("")
         for rd in debate_rounds:
             if len(debate_rounds) > 1:
                 lines.append(f"**第 {rd.get('round', '?')} 輪**")
                 lines.append("")
-            lines.append(f"*正方論證：* {rd.get('bull_argument', '')}")
+            lines.append("*正方論證：*")
+            lines.append("")
+            lines.append(normalize_embedded_lists(rd.get("bull_argument", "")))
             bull_ids = rd.get("bull_evidence_ids", [])
             if bull_ids:
                 lines.append(f"- 引用證據：{', '.join(bull_ids)}")
             lines.append("")
             if rd.get("bear_critique"):
-                lines.append(f"*反方對正方的批評：* {rd['bear_critique']}")
+                lines.append("*反方對正方的批評：*")
                 lines.append("")
-            lines.append(f"*反方論證：* {rd.get('bear_argument', '')}")
+                lines.append(normalize_embedded_lists(rd["bear_critique"]))
+                lines.append("")
+            lines.append("*反方論證：*")
+            lines.append("")
+            lines.append(normalize_embedded_lists(rd.get("bear_argument", "")))
             bear_ids = rd.get("bear_evidence_ids", [])
             if bear_ids:
                 lines.append(f"- 引用證據：{', '.join(bear_ids)}")
@@ -186,7 +204,8 @@ def build_report_markdown(
             lines.append(f"*辯論結束原因：* {stopped}")
             lines.append("")
 
-    lines.append("**推論假設：**")
+    lines.append("### 推論假設")
+    lines.append("")
     for inf in result.inference:
         lines.append(f"- {inf.get('hypothesis', '')}")
         support = inf.get("supporting_evidence_ids", [])
@@ -199,13 +218,17 @@ def build_report_markdown(
 
     lines.append("## 4. 信心說明")
     lines.append("")
-    lines.append(f"- 信心等級：{result.conclusion.get('confidence', '未知')}")
-    lines.append("- 已知限制：")
+    lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
+    lines.append("")
+    lines.append("### 已知限制")
+    lines.append("")
     for lim in result.conclusion.get("limitations", []):
-        lines.append(f"  - {lim}")
-    lines.append("- 可能推翻結論的條件：")
+        lines.append(f"- {lim}")
+    lines.append("")
+    lines.append("### 可能推翻結論的條件")
+    lines.append("")
     for cond in result.conclusion.get("invalidation_conditions", []):
-        lines.append(f"  - {cond}")
+        lines.append(f"- {cond}")
     lines.append("")
 
     lines.append("## 5. 後續觀察重點")
