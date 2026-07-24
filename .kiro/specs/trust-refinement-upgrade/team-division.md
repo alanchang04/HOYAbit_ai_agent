@@ -118,12 +118,12 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 2. ~~LLM 是否只負責敘事~~——**否決**：維持四步辯論鏈產生市場判斷與信心，Ken 的量化訊號若要用，只能當額外證據餵給 LLM，不取代裁判角色
 
 ### 仍待對齊
-1. ~~L1/L2 資料層改版的實作歸屬~~——**已定（2026-07-21）**：filters 層由 Alan 實作完成；collector 側的 7.2（news 命中則數用去重後數量）歸 Kevin／Ken，建議等 `origin/ken` 分支合併後再做
-2. **雙幣相對指標歸屬**：`agent/collectors/relative.py`（相關係數/beta/最大回撤，純本地 CSV 運算）目前掛在 orchestrator 由 Alan 這邊維護，但概念上屬於「資料」，可視 Kevin 意願轉手或維持現狀；Ken 的 07 文件也把「CSV 再榨」列在 Phase 1 本地層、且 `origin/ken` 分支的 `pipeline/compute_relative_strength.py` 有類似功能，**需要跟 Ken 對一次避免重工**
-3. **多輪辯論 vs Best-of-N 最終選哪個**：隊友 3 看完上表分析後決定，若選多輪辯論建議順便定輪數上限
+1. ~~L1/L2 資料層改版的實作歸屬~~——**已定（2026-07-21）**：filters 層由 Alan 實作完成；collector 側的 7.2（news 命中則數用去重後數量）歸 Kevin／Ken，`origin/ken` 已合併（見 #6），可以開始做
+2. **雙幣相對指標歸屬**：`agent/collectors/relative.py`（相關係數/beta/最大回撤，純本地 CSV 運算）目前掛在 orchestrator 由 Alan 這邊維護，但概念上屬於「資料」；`origin/ken` 分支的 `pipeline/compute_relative_strength.py` 有類似功能且**已經合併進 main**，**這是實際存在的重疊，需要跟 Ken 對一次決定用誰的、還是差異化保留**
+3. ~~多輪辯論 vs Best-of-N 最終選哪個~~——**已定（2026-07-22）**：隊友3選了多輪辯論，`origin/debate-dev` 已合併，上限 2 輪、反方自報收斂機制已用 3 種真實 Bedrock 題型驗證過（一次自然收斂、兩次跑滿上限）
 4. ~~F9 情緒分析用詞典法還是 RAG~~——**已定（2026-07-21）**：詞典法 MVP 先上線（純本地零 LLM 成本），RAG／模型法列為後續升級選項，介面已就位
 5. **Ken 文件中「未完全收斂項目」**：dedup 最小樣本門檻與 dedup_penalty 分級曲線已用**暫定值**實作在 `static/source_reputation.json`（$comment 有標記），需與 Ken 校準後改 JSON 定案；`static/weights_backtest.json` 檔名統一屬 Ken 的機制②③選配，尚未實作、維持待 Ken 點頭
-6. **Ken 分支（`origin/ken`）整合**：14 個 commit、含大量 collector 改動與 `pipeline/`／`raw_data/` prototype，其中 `macro.py` 的 F&G limit=30 百分位、相對強弱計算與我們已完成的 R2-2／`relative.py` 有重疊，合併前建議三方（Kevin/Ken/Alan）對一次避免衝突與重工
+6. ~~Ken 分支（`origin/ken`）整合~~——**已合併（2026-07-23，commit `244c7ca`）**：14 個 commit 全部併入，`requirements.txt` 有一處衝突已手動排解（雙方新增套件皆保留，互不排斥），其餘 198 個檔案自動合併乾淨。**但 #2 提到的 `relative.py` vs `pipeline/compute_relative_strength.py` 重疊、以及 #5 的暫定值校準，合併動作本身不會自動解決，仍需要實際跟 Ken 討論**
 
 ---
 
