@@ -66,6 +66,7 @@
 5. **news.py 命中則數改用去重後數量**：屬於 Kevin／Ken 的 collector 範圍，`origin/ken` 分支已合併，可以開始做
 6. **衍生品 collector 正式實作**：Ken 目前只有獨立 prototype 腳本＋範例資料（`pipeline/fetch_*.py`），還沒包成 `agent/collectors/` 底下的正式 Collector、沒接進 orchestrator
 7. **賽前完整排練**：用 Bedrock + 正式 App Runner 網址跑一次完整流程，確認時間與穩定性
+8. **向主辦方確認比賽當日執行環境**：包括是否會提供官方 AWS 帳號（目前只是 Alan 的假設，PDF 未提及）、網路出口 IP（影響 Reddit/交易所地理封鎖）、Bedrock 帳號是否已預先開通。若確定要換成主辦方帳號，務必提前（非當天）用該帳號實際跑過一次完整流程，避免重踩這次自己帳號遇過的 Bedrock/IAM/App Runner 各種帳號層級的坑
 
 ## 開發過程中的重要修正紀錄
 
