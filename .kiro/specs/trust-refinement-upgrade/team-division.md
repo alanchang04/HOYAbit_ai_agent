@@ -119,7 +119,7 @@ Ken 在 `07_流程圖迭代定案.md` 提出一套「規則驅動加權投票」
 
 ### 仍待對齊
 1. ~~L1/L2 資料層改版的實作歸屬~~——**已定（2026-07-21）**：filters 層由 Alan 實作完成；collector 側的 7.2（news 命中則數用去重後數量）歸 Kevin／Ken，`origin/ken` 已合併（見 #6），可以開始做
-2. **雙幣相對指標歸屬**：`agent/collectors/relative.py`（相關係數/beta/最大回撤，純本地 CSV 運算）目前掛在 orchestrator 由 Alan 這邊維護，但概念上屬於「資料」；`origin/ken` 分支的 `pipeline/compute_relative_strength.py` 有類似功能且**已經合併進 main**，**這是實際存在的重疊，需要跟 Ken 對一次決定用誰的、還是差異化保留**
+2. ~~雙幣相對指標歸屬~~——**已比對（2026-07-24）**：`agent/collectors/relative.py` vs `pipeline/compute_relative_strength.py` 用同一份資料（`data/` 與 `raw_data/price/` 下的 CSV byte-for-byte 相同），重疊的相對強弱百分位算法**數字實測一致**（BTC/ETH 兩邊都是 98.9%），**沒有邏輯衝突**。但 Ken 的腳本只做我們四個指標裡的一個（缺相關係數/Beta/最大回撤），且是離線批次預算全部 20 組合寫死成 CSV，不是即時計算；他自己腳本開頭也寫明「不是正式 collector，定案後才會跟 alanchang 對」。**結論：維持 `relative.py` 不動**（它是 Ken 那套邏輯的超集合），不需要整個替換；真正待對齊的是「這塊以後要不要整併進 Ken 的 collector 架構」，不是邏輯正確性問題
 3. ~~多輪辯論 vs Best-of-N 最終選哪個~~——**已定（2026-07-22）**：隊友3選了多輪辯論，`origin/debate-dev` 已合併，上限 2 輪、反方自報收斂機制已用 3 種真實 Bedrock 題型驗證過（一次自然收斂、兩次跑滿上限）
 4. ~~F9 情緒分析用詞典法還是 RAG~~——**已定（2026-07-21）**：詞典法 MVP 先上線（純本地零 LLM 成本），RAG／模型法列為後續升級選項，介面已就位
 5. **Ken 文件中「未完全收斂項目」**：dedup 最小樣本門檻與 dedup_penalty 分級曲線已用**暫定值**實作在 `static/source_reputation.json`（$comment 有標記），需與 Ken 校準後改 JSON 定案；`static/weights_backtest.json` 檔名統一屬 Ken 的機制②③選配，尚未實作、維持待 Ken 點頭
