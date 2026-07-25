@@ -336,6 +336,119 @@ def test_build_report_view_l5_debate_rounds_exposed(
     assert debate["bull"] == "第二輪正方論證（修正版）"
 
 
+def test_build_report_view_panel4_bullish_evidence_uses_last_round_not_union(
+    tmp_path: Path, sample_evidences: list[Evidence]
+) -> None:
+    """面板④利好/風險證據需取『最後一輪』而非跨輪聯集：多輪辯論中正方可能在
+    後續輪次撤回前一輪論點，讀聯集 bull_evidence_ids 會把已撤回的證據仍列為
+    利好，誤導讀者（隊友3 gap 2）。此 fixture 第一輪正方=[ev-001]、第二輪
+    改為 [ev-003]，聯集相容欄位=[ev-001, ev-003]、反方聯集=[ev-002]，
+    但最後一輪反方=[]。"""
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    (out_dir / "execution_log.jsonl").write_text("", encoding="utf-8")
+
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "BTC 偏強", "confidence": "中", "evidence_ids": ["ev-001"]},
+        debate={
+            "rounds": [
+                {
+                    "round": 1,
+                    "bull_argument": "第一輪正方論證",
+                    "bull_evidence_ids": ["ev-001"],
+                    "bear_critique": "第一輪批評",
+                    "bear_argument": "第一輪反方論證",
+                    "bear_evidence_ids": ["ev-002"],
+                    "bear_has_new_points": True,
+                },
+                {
+                    "round": 2,
+                    "bull_argument": "第二輪正方論證（撤回算力、改採資金流）",
+                    "bull_evidence_ids": ["ev-003"],
+                    "bear_critique": "第二輪批評",
+                    "bear_argument": "第二輪反方論證（最終）",
+                    "bear_evidence_ids": [],
+                    "bear_has_new_points": False,
+                },
+            ],
+            "round_count": 2,
+            "stopped_reason": "converged",
+            "bull_argument": "第二輪正方論證（撤回算力、改採資金流）",
+            "bull_evidence_ids": ["ev-001", "ev-003"],
+            "bear_critique": "第二輪批評",
+            "bear_argument": "第二輪反方論證（最終）",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=65,
+    )
+    run_metrics = RunMetrics(confidence=65, integrity_status="INTACT")
+
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        coin2=None,
+        question="測試題目",
+    )
+
+    panel4 = view["panel4_report"]
+    bullish_ids = {e["evidence_id"] for e in panel4["bullish_evidence"]}
+    risk_ids = {e["evidence_id"] for e in panel4["risk_evidence"]}
+    # 只取最後一輪：利好=ev-003（非聯集含 ev-001），風險=空（非聯集含 ev-002）
+    assert bullish_ids == {"ev-003"}
+    assert "ev-001" not in bullish_ids  # 第一輪後被撤回，不應仍列為利好
+    assert risk_ids == set()
+
+
+def test_build_report_view_panel4_bullish_evidence_falls_back_to_union_without_rounds(
+    tmp_path: Path, sample_evidences: list[Evidence]
+) -> None:
+    """無 rounds（單模型 fallback／舊資料）時，面板④退回相容層 bull/bear_evidence_ids，
+    行為與改動前一致，確保不逐輪的情況不受影響。"""
+    out_dir = tmp_path / "run"
+    out_dir.mkdir()
+    (out_dir / "execution_log.jsonl").write_text("", encoding="utf-8")
+
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "BTC 偏強", "confidence": "中", "evidence_ids": ["ev-001"]},
+        debate={
+            "bull_argument": "正方論證",
+            "bull_evidence_ids": ["ev-001", "ev-003"],
+            "bear_critique": "反方批評",
+            "bear_argument": "反方論證",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=60,
+    )
+    run_metrics = RunMetrics(confidence=60, integrity_status="INTACT")
+
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        coin2=None,
+        question="測試題目",
+    )
+
+    panel4 = view["panel4_report"]
+    bullish_ids = {e["evidence_id"] for e in panel4["bullish_evidence"]}
+    risk_ids = {e["evidence_id"] for e in panel4["risk_evidence"]}
+    assert bullish_ids == {"ev-001", "ev-003"}
+    assert risk_ids == {"ev-002"}
+
+
 def test_build_report_view_l5_debate_rounds_empty_without_debate(
     tmp_path: Path, sample_evidences: list[Evidence]
 ) -> None:

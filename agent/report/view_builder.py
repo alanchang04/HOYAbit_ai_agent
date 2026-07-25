@@ -342,11 +342,23 @@ def _build_panel4(
     risk_evidence: list[dict] = []
 
     if debate:
-        for eid in debate.get("bull_evidence_ids", []):
+        # 利好/風險證據取「最後一輪」而非跨輪聯集：多輪辯論中正方可能在後續
+        # 輪次撤回前一輪論點（例：反方指出「算力新高」是挖礦成本非需求驅動，
+        # 正方接受並撤回），若讀 bull_evidence_ids 聯集會把已撤回的證據仍列為
+        # 利好，誤導讀者。無 rounds（單模型 fallback／舊資料）時退回聯集相容欄位。
+        rounds = debate.get("rounds", [])
+        if rounds:
+            last_round = rounds[-1]
+            bull_ids = last_round.get("bull_evidence_ids", [])
+            bear_ids = last_round.get("bear_evidence_ids", [])
+        else:
+            bull_ids = debate.get("bull_evidence_ids", [])
+            bear_ids = debate.get("bear_evidence_ids", [])
+        for eid in bull_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 bullish_evidence.append({"fingerprint": fp, "evidence_id": eid})
-        for eid in debate.get("bear_evidence_ids", []):
+        for eid in bear_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 risk_evidence.append({"fingerprint": fp, "evidence_id": eid})
