@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 import feedparser
 import httpx
@@ -17,6 +18,39 @@ from agent.schemas import EvidenceDraft, LogStatus, now_iso
 HTTP_TIMEOUT = 20.0
 MAX_ITEMS_PER_SOURCE = 5
 USER_AGENT = "hoyabit-crypto-agent/1.0"
+
+# 對照 raw_data/_meta/window_policy.md 的 News「近 7-14 天為主」建議窗口，取
+# 上緣 14 天當「非近期」判斷線。2026-07-23 實測發現 window_policy.md 原本寫的
+# 「RSS feed 天然回傳近期項目、效果上落在 7-14 天內」對 HTML 解析來源不成立
+# （XRP 5 篇實測跨度近 3 個月），改成不濾除、只標記，理由見
+# pipeline/待辦筆記/news_日期窗口.md：低頻官方源（BTC Optech 等）若硬濾掉超窗
+# 項目可能整批變空，標記比濾除更安全。
+NEWS_RECENCY_WINDOW_DAYS = 14
+
+
+def _parse_rss_published(entry: dict) -> datetime | None:
+    parsed = entry.get("published_parsed")
+    if not parsed:
+        return None
+    return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+
+def _parse_html_published(published: str) -> datetime | None:
+    """目前只有 Ripple Insights 會給出可解析的日期字串（如 "April 24, 2026"）；
+    BNB Chain Blog 目前固定回傳「未知」，解析不出來直接回 None。"""
+    try:
+        return datetime.strptime(published, "%B %d, %Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _recency_note(published_dt: datetime | None, now: datetime) -> str:
+    if published_dt is None:
+        return "｜⚠️日期未知，無法判斷是否近期"
+    age_days = (now - published_dt).days
+    if age_days > NEWS_RECENCY_WINDOW_DAYS:
+        return f"｜⚠️非近期（發布已 {age_days} 天，超過 {NEWS_RECENCY_WINDOW_DAYS} 天窗口）"
+    return ""
 
 # 每幣的官方發布源。RSS 端點已於 2026-07-20 逐一 curl 實測確認可用；
 # html 端點沒有 RSS，退階解析官方頁面，CSS 結構若改版會直接失效（見對應 _scrape_*）。
@@ -118,6 +152,7 @@ class NewsCollector(BaseCollector):
     async def fetch(self, coin: str, **kwargs) -> list[EvidenceDraft]:
         sources = OFFICIAL_SOURCES.get(coin.upper(), [])
         evidences: list[EvidenceDraft] = []
+        now = datetime.now(timezone.utc)
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}, follow_redirects=True
@@ -131,6 +166,7 @@ class NewsCollector(BaseCollector):
                     if source["kind"] == "rss":
                         parsed = feedparser.parse(resp.text)
                         for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
+                            recency = _recency_note(_parse_rss_published(entry), now)
                             evidences.append(
                                 EvidenceDraft(
                                     coin=coin,
@@ -140,6 +176,7 @@ class NewsCollector(BaseCollector):
                                     content_reference=(
                                         f"標題：{entry.get('title', '')}"
                                         f"｜發布時間：{entry.get('published', '未知')}"
+                                        f"{recency}"
                                     ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",
@@ -147,13 +184,16 @@ class NewsCollector(BaseCollector):
                             )
                     else:
                         for item in HTML_SCRAPERS[source["name"]](resp.text):
+                            recency = _recency_note(_parse_html_published(item["published"]), now)
                             evidences.append(
                                 EvidenceDraft(
                                     coin=coin,
                                     source=f"{source['name']}（官方源・HTML 解析）",
                                     source_url=item["url"],
                                     fetched_at=now_iso(),
-                                    content_reference=f"標題：{item['title']}｜發布時間：{item['published']}",
+                                    content_reference=(
+                                        f"標題：{item['title']}｜發布時間：{item['published']}{recency}"
+                                    ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",
                                 )

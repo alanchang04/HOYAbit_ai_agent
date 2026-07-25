@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from agent.collectors.derivatives import DerivativesCollector
 from agent.collectors.macro import MacroCollector
 from agent.collectors.news import NewsCollector
 from agent.collectors.onchain import OnchainCollector
@@ -37,6 +38,7 @@ async def run(coin: str) -> None:
         NewsCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
         SocialCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
         MacroCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
+        DerivativesCollector(logger, timeout_seconds=settings.collector_timeout_seconds, settings=settings),
     ]
 
     start = time.monotonic()

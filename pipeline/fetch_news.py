@@ -50,9 +50,111 @@ OFFICIAL_SOURCES: dict[str, list[dict]] = {
     ],
 }
 
+# 對照 02改_資料網格.html 的 news-coin-keywords spec：每幣 3-6 個特有主題，
+# 各主題掛幾個英文關鍵字（官方源文章標題多是英文）。只比對標題大小寫不敏感的
+# substring，不是語意分類——命中就標記主題名，沒命中不代表本週沒這個敘事，
+# 只代表這批標題沒直接提到，報告措辭要照這個誠實。
+NARRATIVE_KEYWORDS: dict[str, dict[str, list[str]]] = {
+    "BTC": {
+        "ETF 資金流": ["etf", "inflow", "outflow"],
+        "企業／國家儲備": ["reserve", "treasury", "strategic bitcoin"],
+        "減半供給敘事": ["halving", "halve", "block reward"],
+        "挖礦算力": ["hashrate", "hash rate", "miner", "mining"],
+    },
+    "ETH": {
+        "網路升級": ["pectra", "fusaka", "glamsterdam", "hard fork", "upgrade"],
+        "質押／再質押": ["staking", "restaking", "validator"],
+        "L2 生態": ["layer 2", "l2", "rollup", "optimism", "arbitrum", "base"],
+        "ETH ETF": ["etf"],
+    },
+    "SOL": {
+        "網路穩定性／宕機": ["outage", "downtime", "degraded"],
+        "memecoin 生態": ["memecoin", "meme coin", "pump.fun"],
+        "支付／DePIN": ["payments", "depin", "point of sale", "pay"],
+        "SOL ETF": ["etf"],
+    },
+    "BNB": {
+        "季度銷毀": ["burn"],
+        "BNB Chain 生態升級": ["upgrade", "hard fork", "opbnb", "greenfield"],
+    },
+    "XRP": {
+        "SEC 案終局／監管明確化": ["sec", "lawsuit", "regulation", "regulatory"],
+        "RLUSD 穩定幣": ["rlusd", "stablecoin"],
+        "跨境支付 ODL": ["odl", "cross-border", "cross border", "on-demand liquidity"],
+        "XRP ETF": ["etf"],
+    },
+}
+
+
+def tag_narrative_topics(coin: str, *texts: str) -> list[str]:
+    combined = " ".join(texts).lower()
+    return [
+        topic
+        for topic, keywords in NARRATIVE_KEYWORDS.get(coin.upper(), {}).items()
+        if any(kw in combined for kw in keywords)
+    ]
+
+
+def strip_html(text: str) -> str:
+    return BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+
+
+# 有些站的單篇文章頁沒設專屬 og:description，會退回網站全站通用標語（og:title
+# 仍是文章專屬的，只有 description 這欄位是罐頭文字）。實測發現 Ripple Insights
+# 5 篇裡有 3 篇是這句——不是文章摘要，混進比對／報告會誤導 LLM 以為文章在講這個，
+# 直接濾掉當作沒有摘要。之後如果其他站也踩到同款罐頭文字，往這個集合加就好。
+GENERIC_DESCRIPTION_FALLBACKS = {
+    "ripple is the leading blockchain payments company.",
+}
+
+
+def fetch_meta_description(client: httpx.Client, url: str) -> str:
+    """點進單篇文章頁抓 og:description／meta description 當內文摘要——BNB／XRP
+    這兩站的本文卡在破碎的 emotion-css div 裡抓不穩，但社群分享用的 meta
+    description 兩邊都有乾淨的一段文字，比硬解析內文可靠。"""
+    resp = client.get(url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for attrs in ({"property": "og:description"}, {"name": "description"}):
+        tag = soup.find("meta", attrs=attrs)
+        content = tag["content"].strip() if tag and tag.get("content") else ""
+        if content and content.lower() not in GENERIC_DESCRIPTION_FALLBACKS:
+            return content
+    return ""
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# 對照 raw_data/_meta/window_policy.md 的 News「近 7-14 天為主」建議窗口，取
+# 上緣 14 天當「非近期」判斷線。跟 agent/collectors/news.py 同一套邏輯，維護時
+# 兩邊要一起改（理由見 pipeline/待辦筆記/news_日期窗口.md：不濾除只標記，避免
+# 低頻官方源硬濾窗口後整批變空）。
+NEWS_RECENCY_WINDOW_DAYS = 14
+
+
+def _parse_rss_published(entry: dict) -> datetime | None:
+    parsed = entry.get("published_parsed")
+    if not parsed:
+        return None
+    return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+
+def _parse_html_published(published: str) -> datetime | None:
+    try:
+        return datetime.strptime(published, "%B %d, %Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _recency_note(published_dt: datetime | None, now: datetime) -> str:
+    if published_dt is None:
+        return "⚠️日期未知，無法判斷是否近期"
+    age_days = (now - published_dt).days
+    if age_days > NEWS_RECENCY_WINDOW_DAYS:
+        return f"⚠️非近期（發布已 {age_days} 天，超過 {NEWS_RECENCY_WINDOW_DAYS} 天窗口）"
+    return ""
 
 
 def _scrape_bnbchain_blog(html: str) -> list[dict]:
@@ -119,6 +221,7 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
     sources = OFFICIAL_SOURCES.get(coin.upper(), [])
     items: list[dict] = []
     errors: list[str] = []
+    now = datetime.now(timezone.utc)
 
     for source in sources:
         try:
@@ -128,19 +231,32 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
             if source["kind"] == "rss":
                 parsed = feedparser.parse(resp.text)
                 for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
+                    title = entry.get("title", "")
+                    summary = strip_html(entry.get("summary", "")) if entry.get("summary") else ""
                     items.append({
                         "source": f"{source['name']}（官方源）",
                         "url": entry.get("link", source["url"]),
-                        "title": entry.get("title", ""),
+                        "title": title,
                         "published": entry.get("published", "未知"),
+                        "recency_note": _recency_note(_parse_rss_published(entry), now),
+                        "summary": summary,
+                        "narrative_topics": tag_narrative_topics(coin, title, summary),
                     })
             else:
                 for item in HTML_SCRAPERS[source["name"]](resp.text):
+                    summary = ""
+                    try:
+                        summary = fetch_meta_description(client, item["url"])
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"{item['url']}: summary fetch error={exc}")
                     items.append({
                         "source": f"{source['name']}（官方源・HTML 解析）",
                         "url": item["url"],
                         "title": item["title"],
                         "published": item["published"],
+                        "recency_note": _recency_note(_parse_html_published(item["published"]), now),
+                        "summary": summary,
+                        "narrative_topics": tag_narrative_topics(coin, item["title"], summary),
                     })
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{source['name']}: error={exc}")
@@ -169,7 +285,11 @@ def main() -> None:
             out_path = write_output(coin, result)
             print(f"[{coin}] 已寫入 {out_path}（{len(result['items'])} 筆）")
             for item in result["items"]:
-                print(f"  {item['source']}：{item['title']}")
+                topics = "・".join(item["narrative_topics"]) or "（無命中主題）"
+                recency = f"  {item['recency_note']}" if item["recency_note"] else ""
+                print(f"  {item['source']}：{item['title']}  [{topics}]{recency}")
+                if item["summary"]:
+                    print(f"    摘要：{item['summary'][:120]}")
             for err in result["errors"]:
                 print(f"  ⚠️ {err}")
             print()
