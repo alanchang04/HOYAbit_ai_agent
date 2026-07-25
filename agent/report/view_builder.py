@@ -337,16 +337,32 @@ def _build_panel4(
                 core_facts.append({"fingerprint": fp, "text": fact.get("summary", "")})
                 break  # one fingerprint per fact
 
+    # 面板④／執行摘要都是「最終結論」的呈現，evidence id 應反映**最後一輪**
+    # 倖存的證據，不是所有輪次的聯集——否則正方在後續輪次已經放棄的證據，
+    # 仍會被列為利好依據。頂層 bull_evidence_ids/bear_evidence_ids 是聯集
+    # （供 report/builder.py 的引用完整性檢查用），此處不能直接沿用。
+    bull_ids: list[str] = []
+    bear_ids: list[str] = []
+    if debate:
+        rounds = debate.get("rounds", [])
+        if rounds:
+            last_round = rounds[-1]
+            bull_ids = last_round.get("bull_evidence_ids", [])
+            bear_ids = last_round.get("bear_evidence_ids", [])
+        else:
+            bull_ids = debate.get("bull_evidence_ids", [])
+            bear_ids = debate.get("bear_evidence_ids", [])
+
     # bullish/risk evidence from debate or inference
     bullish_evidence: list[dict] = []
     risk_evidence: list[dict] = []
 
     if debate:
-        for eid in debate.get("bull_evidence_ids", []):
+        for eid in bull_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 bullish_evidence.append({"fingerprint": fp, "evidence_id": eid})
-        for eid in debate.get("bear_evidence_ids", []):
+        for eid in bear_ids:
             fp = fingerprint_map.get(eid, "")
             if fp:
                 risk_evidence.append({"fingerprint": fp, "evidence_id": eid})
@@ -377,9 +393,9 @@ def _build_panel4(
     summary = {
         "confidence_label": conclusion.get("confidence", "未知"),
         "bull_argument": debate.get("bull_argument", ""),
-        "bull_evidence_ids": debate.get("bull_evidence_ids", []),
+        "bull_evidence_ids": bull_ids,
         "bear_argument": debate.get("bear_argument", ""),
-        "bear_evidence_ids": debate.get("bear_evidence_ids", []),
+        "bear_evidence_ids": bear_ids,
         "has_debate": bool(debate),
         "watchpoint": watchpoint,
         "watchpoint_label": watchpoint_label,

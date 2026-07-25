@@ -65,8 +65,17 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     lines.append("")
 
     if debate.get("bull_argument") or debate.get("bear_argument"):
-        bull_ids = debate.get("bull_evidence_ids", [])
-        bear_ids = debate.get("bear_evidence_ids", [])
+        # 論證文字（bull_argument/bear_argument）已經是最後一輪，但頂層
+        # bull_evidence_ids/bear_evidence_ids 是所有輪次的聯集——引用清單
+        # 應該對齊「最後一輪」的文字，不然會列出文字裡其實沒提到的證據 id。
+        rounds = debate.get("rounds", [])
+        if rounds:
+            last_round = rounds[-1]
+            bull_ids = last_round.get("bull_evidence_ids", [])
+            bear_ids = last_round.get("bear_evidence_ids", [])
+        else:
+            bull_ids = debate.get("bull_evidence_ids", [])
+            bear_ids = debate.get("bear_evidence_ids", [])
         lines.append("**利多依據：**")
         lines.append("")
         lines.append(normalize_embedded_lists(debate.get("bull_argument", "")))

@@ -335,6 +335,18 @@ def test_build_report_view_l5_debate_rounds_exposed(
     # 相容層仍在（給不逐輪展示的地方用）
     assert debate["bull"] == "第二輪正方論證（修正版）"
 
+    # 回歸測試（隊友3發現）：面板④利好/風險證據與執行摘要的引用 id 應該對齊
+    # 「最後一輪」倖存的證據（此例 bull 只有 ev-003），不是所有輪次的聯集
+    # （ev-001+ev-003）——否則正方第 2 輪已放棄的 ev-001 仍會被列為利好依據。
+    panel4 = view["panel4_report"]
+    bullish_ids = {e["evidence_id"] for e in panel4["bullish_evidence"]}
+    assert bullish_ids == {"ev-003"}
+    assert "ev-001" not in bullish_ids
+
+    summary = panel4["summary"]
+    assert summary["bull_evidence_ids"] == ["ev-003"]
+    assert summary["bear_evidence_ids"] == []  # 第二輪反方無引用證據
+
 
 def test_build_report_view_l5_debate_rounds_empty_without_debate(
     tmp_path: Path, sample_evidences: list[Evidence]
