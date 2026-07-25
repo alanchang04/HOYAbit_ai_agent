@@ -65,8 +65,19 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     lines.append("")
 
     if debate.get("bull_argument") or debate.get("bear_argument"):
-        bull_ids = debate.get("bull_evidence_ids", [])
-        bear_ids = debate.get("bear_evidence_ids", [])
+        # 引用證據取「最後一輪」而非跨輪聯集，與面板④（view_builder._build_panel4）
+        # 對齊：bull_argument/bear_argument 本就是最後一輪的論證，證據卻讀聯集會把
+        # 正方後續已撤回的證據仍列進利多依據，與論證自相矛盾。無 rounds（單模型
+        # fallback／舊資料）時退回聯集相容欄位。完整跨輪引用仍由 builder 的引用
+        # 檢查（_collect_referenced_ids 讀聯集）與逐輪明細保留，此處不影響覆蓋率。
+        rounds = debate.get("rounds") or []
+        if rounds:
+            last_round = rounds[-1]
+            bull_ids = last_round.get("bull_evidence_ids", [])
+            bear_ids = last_round.get("bear_evidence_ids", [])
+        else:
+            bull_ids = debate.get("bull_evidence_ids", [])
+            bear_ids = debate.get("bear_evidence_ids", [])
         lines.append("**利多依據：**")
         lines.append("")
         lines.append(normalize_embedded_lists(debate.get("bull_argument", "")))

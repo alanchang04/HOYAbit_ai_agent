@@ -95,6 +95,48 @@ def test_build_report_markdown_executive_summary_with_debate():
     assert md.index("## 執行摘要") < md.index("## 1. 結論")
 
 
+def test_build_report_markdown_executive_summary_uses_last_round_evidence():
+    """執行摘要的利多／風險引用需取『最後一輪』而非跨輪聯集，與面板④對齊：
+    多輪辯論中正方可能在後續輪次撤回前一輪引用的證據，讀聯集會把已撤回的證據
+    仍列進利多依據，與同段落顯示的最後一輪論證自相矛盾。"""
+    evidences = [make_evidence("ev-001"), make_evidence("ev-002"), make_evidence("ev-003")]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "市場判斷內容", "confidence": "中", "evidence_ids": ["ev-001"]},
+        debate={
+            "rounds": [
+                {"round": 1, "bull_argument": "第一輪利多（引用算力）",
+                 "bull_evidence_ids": ["ev-001", "ev-002"],
+                 "bear_critique": "算力是挖礦成本非需求", "bear_argument": "第一輪風險",
+                 "bear_evidence_ids": ["ev-003"], "bear_has_new_points": True},
+                {"round": 2, "bull_argument": "第二輪利多（撤回算力，改採資金流）",
+                 "bull_evidence_ids": ["ev-001"],
+                 "bear_critique": "資金流為單週現象", "bear_argument": "第二輪風險（最終）",
+                 "bear_evidence_ids": [], "bear_has_new_points": False},
+            ],
+            "round_count": 2,
+            "stopped_reason": "converged",
+            # 相容層聯集：利多含已撤回的 ev-002、風險含 ev-003
+            "bull_argument": "第二輪利多（撤回算力，改採資金流）",
+            "bull_evidence_ids": ["ev-001", "ev-002"],
+            "bear_argument": "第二輪風險（最終）",
+            "bear_evidence_ids": ["ev-003"],
+        },
+        confidence_score=60,
+    )
+    md = build_report_markdown("BTC", "測試題目", result, evidences)
+    exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
+
+    # 利多依據只引用最後一輪的 ev-001，不含正方已撤回的 ev-002
+    assert "ev-001" in exec_section
+    assert "ev-002" not in exec_section
+    # 風險依據最後一輪為空，不應殘留聯集的 ev-003
+    assert "ev-003" not in exec_section
+    # 但 ev-002／ev-003 仍在跨輪引用檢查涵蓋內（逐輪明細會列），報告不因此判為缺引用
+    validate_evidence_references(result, evidences)
+
+
 def test_build_report_markdown_executive_summary_without_debate_falls_back():
     """無辯論（fallback 路徑）時，執行摘要要誠實標示，不能假裝有辯論內容。"""
     evidences = [make_evidence("ev-001")]
