@@ -44,5 +44,13 @@
       "content_reference": "value=45, classification=Fear, 30日百分位=60.0%, 30日範圍=25-72",
       "related_claim": "整體加密市場情緒指標"
     }
+  ],
+  "derivatives": [
+    {
+      "source": "Binance Futures /fapi/v1/fundingRate (dry-run fixture)",
+      "source_url": "https://fapi.binance.com/fapi/v1/fundingRate",
+      "content_reference": "{coin} 近 30 天資金費率百分位摘要（dry-run 假資料，非真實查詢結果）",
+      "related_claim": "{coin} 永續合約資金費率擁擠度"
+    }
   ]
 }

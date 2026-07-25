@@ -23,15 +23,23 @@ HTTP_TIMEOUT = 20.0
 # 尚未跟 alanchang 對過這個窗口常數，之後要補講一聲。
 INDICATOR_WINDOW = 121
 MA_WINDOWS = (20, 60, 120)
+# 併自 pipeline/compute_historical_volatility_percentile.py：波動率百分位
+# 窗口跟 volatility_pct 同一個 14 天，累積不到 90 筆前不給百分位（樣本太少
+# 會失真，跟其他 prototype 的門檻一致）。
+VOL_PERCENTILE_WINDOW = 14
+VOL_PERCENTILE_MIN_SAMPLE = 90
 
 
-def load_ohlcv_tail(coin: str, data_dir: str, n: int = 14) -> list[dict]:
+def load_ohlcv_all(coin: str, data_dir: str) -> list[dict]:
     path = Path(data_dir) / f"{coin}_daily_ohlcv.csv"
     if not path.exists():
         raise FileNotFoundError(f"找不到 OHLCV 資料檔: {path}")
     with path.open("r", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-    return rows[-n:]
+        return list(csv.DictReader(f))
+
+
+def load_ohlcv_tail(coin: str, data_dir: str, n: int = 14) -> list[dict]:
+    return load_ohlcv_all(coin, data_dir)[-n:]
 
 
 def summarize_ohlcv(rows: list[dict]) -> str:
@@ -51,11 +59,49 @@ def summarize_ohlcv(rows: list[dict]) -> str:
     )
 
 
-def compute_technical_indicators(rows: list[dict]) -> dict:
+def compute_historical_volatility_percentile(
+    full_closes: list[float],
+    window: int = VOL_PERCENTILE_WINDOW,
+    min_sample: int = VOL_PERCENTILE_MIN_SAMPLE,
+) -> dict | None:
+    """依全歷史收盤價序列，算最新一天 window 天波動率相對「過去至今全部歷史」
+    的百分位（擴張視窗，不是固定滾動視窗）——對照
+    pipeline/compute_historical_volatility_percentile.py 的 compute_series()，
+    這裡只需要序列最後一天的結果餵進證據文字，不落地整份序列。
+
+    累積樣本數不到 min_sample 時回傳 None，呼叫端應顯示「資料不足」而不是
+    硬湊一個不可靠的百分位。
+    """
+    if len(full_closes) < window + 1:
+        return None
+
+    returns = [0.0]
+    for i in range(1, len(full_closes)):
+        prev = full_closes[i - 1]
+        returns.append((full_closes[i] - prev) / prev * 100 if prev else 0.0)
+
+    vol_history: list[float] = []
+    for i in range(len(full_closes)):
+        if i + 1 >= window:
+            vol_history.append(statistics.pstdev(returns[i - window + 1 : i + 1]))
+
+    if len(vol_history) < min_sample:
+        return None
+
+    latest_vol = vol_history[-1]
+    percentile = sum(1 for v in vol_history if v <= latest_vol) / len(vol_history) * 100
+    return {"vol_pct": latest_vol, "percentile_alltime": percentile, "sample_size": len(vol_history)}
+
+
+def compute_technical_indicators(rows: list[dict], full_closes: list[float] | None = None) -> dict:
     """依最近 N 日 OHLCV 計算 SMA7/SMA14、RSI14、日報酬波動率、近 7 日量能趨勢。
 
     需要至少 15 筆資料才能算出一個 RSI14 數值；資料不足時回傳空 dict，
     呼叫端應視為「本次無法計算技術指標」而略過，不應拋例外。
+
+    `full_closes`（選填）是完整歷史收盤價序列（不是 `rows` 這個受
+    INDICATOR_WINDOW 截斷的尾段），用來算 volatility_pct 相對全歷史的百分位；
+    不傳時（例如既有測試手動組 rows）就略過百分位欄位，不影響原有指標。
     """
     closes = [float(r["close"]) for r in rows]
     volumes = [float(r["volume"]) for r in rows]
@@ -108,6 +154,11 @@ def compute_technical_indicators(rows: list[dict]) -> dict:
             result[f"ma{window_size}"] = None
             result[f"ma{window_size}_position"] = "資料不足"
 
+    if full_closes is not None:
+        hist = compute_historical_volatility_percentile(full_closes)
+        result["volatility_percentile_alltime"] = hist["percentile_alltime"] if hist else None
+        result["volatility_percentile_sample_size"] = hist["sample_size"] if hist else None
+
     return result
 
 
@@ -124,10 +175,20 @@ def summarize_technical_indicators(indicators: dict) -> str:
         pos = indicators.get(f"ma{window_size}_position", "資料不足")
         ma_parts.append(f"MA{window_size}={val:.2f}（{pos}）" if val is not None else f"MA{window_size}=資料不足")
 
+    percentile = indicators.get("volatility_percentile_alltime")
+    if percentile is not None:
+        lean = "偏悶（相對全歷史低波動）" if percentile < 50 else "偏熱（相對全歷史高波動）"
+        vol_percentile_part = (
+            f"（全歷史{indicators['volatility_percentile_sample_size']}筆樣本百分位="
+            f"{percentile:.1f}，{lean}）"
+        )
+    else:
+        vol_percentile_part = "（全歷史百分位：資料不足）"
+
     return (
         f"SMA7={indicators['sma7']:.2f}, SMA14={indicators['sma14']:.2f}"
         f"（現價{trend} SMA7）, RSI14={indicators['rsi14']:.1f}（{rsi_zone}區間）, "
-        f"近14日日報酬波動率={indicators['volatility_pct']:.2f}%, "
+        f"近14日日報酬波動率={indicators['volatility_pct']:.2f}%{vol_percentile_part}, "
         f"近7日量能較前7日變化={indicators['volume_trend_pct']:+.2f}%, "
         + "，".join(ma_parts)
     )
@@ -168,7 +229,8 @@ class PriceCollector(BaseCollector):
 
         # --- 主要來源：主辦方提供之共同基準 OHLCV CSV（穩定，不受外部 API 影響）---
         try:
-            indicator_rows = load_ohlcv_tail(coin, data_dir, n=INDICATOR_WINDOW)
+            all_rows = load_ohlcv_all(coin, data_dir)
+            indicator_rows = all_rows[-INDICATOR_WINDOW:]
             summary_rows = indicator_rows[-14:]
             evidences.append(
                 EvidenceDraft(
@@ -183,7 +245,9 @@ class PriceCollector(BaseCollector):
             )
 
             # --- 技術指標：純 Python 決定性運算，不依賴任何外部 API，不會因網路/額度失敗 ---
-            indicators = compute_technical_indicators(indicator_rows)
+            # full_closes 用完整歷史（非 INDICATOR_WINDOW 截斷的尾段）算波動率全歷史百分位
+            full_closes = [float(r["close"]) for r in all_rows]
+            indicators = compute_technical_indicators(indicator_rows, full_closes=full_closes)
             if indicators:
                 evidences.append(
                     EvidenceDraft(

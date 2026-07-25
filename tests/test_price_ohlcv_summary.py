@@ -1,7 +1,9 @@
 from agent.collectors.price import (
     INDICATOR_WINDOW,
+    compute_historical_volatility_percentile,
     compute_perp_basis,
     compute_technical_indicators,
+    load_ohlcv_all,
     load_ohlcv_tail,
     summarize_ohlcv,
     summarize_perp_basis,
@@ -97,6 +99,56 @@ def test_summarize_technical_indicators_includes_ma_positions():
 
 def test_summarize_technical_indicators_handles_empty():
     assert "不足" in summarize_technical_indicators({})
+
+
+def test_compute_historical_volatility_percentile_none_when_insufficient_history():
+    # 累積不到 MIN_SAMPLE=90 筆 vol_14d 前，不該硬湊一個百分位
+    closes = [100.0 + (i % 5) for i in range(50)]
+    assert compute_historical_volatility_percentile(closes) is None
+
+
+def test_compute_historical_volatility_percentile_matches_pipeline_prototype_on_real_btc_data():
+    # 跟 pipeline/compute_historical_volatility_percentile.py 對照過的真實數字
+    # （流程紀錄.md Step 24：BTC vol_14d=1.14%、全歷史百分位=5.1，2026-05-31 收盤）
+    rows = load_ohlcv_all("BTC", data_dir="data")
+    closes = [float(r["close"]) for r in rows]
+    result = compute_historical_volatility_percentile(closes)
+    assert result is not None
+    assert round(result["vol_pct"], 2) == 1.14
+    assert round(result["percentile_alltime"], 1) == 5.1
+
+
+def test_compute_technical_indicators_includes_volatility_percentile_when_full_closes_given():
+    rows = load_ohlcv_all("BTC", data_dir="data")
+    indicator_rows = rows[-INDICATOR_WINDOW:]
+    full_closes = [float(r["close"]) for r in rows]
+    indicators = compute_technical_indicators(indicator_rows, full_closes=full_closes)
+    assert indicators["volatility_percentile_alltime"] is not None
+    assert indicators["volatility_percentile_sample_size"] >= 90
+
+
+def test_compute_technical_indicators_skips_volatility_percentile_when_full_closes_omitted():
+    closes = [100.0 + (i % 5) for i in range(130)]
+    volumes = [10.0] * 130
+    indicators = compute_technical_indicators(_make_rows(closes, volumes))
+    assert "volatility_percentile_alltime" not in indicators
+
+
+def test_summarize_technical_indicators_reports_percentile_lean():
+    indicators = {
+        "sma7": 100.0, "sma14": 95.0, "rsi14": 55.0, "volatility_pct": 1.14,
+        "volume_trend_pct": 1.0, "last_close": 100.0,
+        "volatility_percentile_alltime": 5.1, "volatility_percentile_sample_size": 1813,
+    }
+    summary = summarize_technical_indicators(indicators)
+    assert "全歷史1813筆樣本百分位=5.1" in summary
+    assert "偏悶" in summary
+
+
+def test_summarize_technical_indicators_handles_missing_percentile_gracefully():
+    indicators = {"sma7": 100.0, "sma14": 95.0, "rsi14": 100.0, "volatility_pct": 1.5, "volume_trend_pct": 10.0, "last_close": 105.0}
+    summary = summarize_technical_indicators(indicators)
+    assert "資料不足" in summary
 
 
 def test_compute_perp_basis_positive_is_contango():
