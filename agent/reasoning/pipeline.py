@@ -95,6 +95,8 @@ def _dry_run_reasoning(
     cross_validation = {
         "consistent_signals": ["（dry-run 假資料）各來源皆無法判斷實際一致性，僅為流程驗證"],
         "contradictions": [],
+        "structural_context": [],
+        "direction_matrix": [],
     }
 
     # L4 metrics：交叉驗證層量化
@@ -191,6 +193,62 @@ def _sanitize_ids(ids: list, known_ids: set[str]) -> list[str]:
     if not isinstance(ids, list):
         return []
     return [i for i in ids if isinstance(i, str) and i in known_ids]
+
+
+_VALID_DIRECTIONS = {-1, 0, 1}
+
+
+def _sanitize_direction_matrix(matrix, known_ids: set[str]) -> list[dict]:
+    """清洗 Step B 的 direction_matrix：過濾非法 direction 值與不存在的 evidence id（R3-3）。
+
+    每筆須為 {source_type: str, direction: -1|0|1, basis: [evidence_ids]}。
+    direction 容忍字串整數（"1"／"-1"），但**小數一律丟棄不做四捨五入**：模型回 0.7
+    （「偏多」）若截斷成 0 會變成「中性」這個明確錯誤的表態，直接排除該樣本反而
+    對共識計算的傷害小。同一個 source_type 重複表態時只取第一筆，避免它在共識
+    標準差裡被重複計票。
+    """
+    sanitized: list[dict] = []
+    if not isinstance(matrix, list):
+        return sanitized
+    seen_types: set[str] = set()
+    for row in matrix:
+        if not isinstance(row, dict):
+            continue
+        stype = row.get("source_type")
+        if not isinstance(stype, str) or not stype or stype in seen_types:
+            continue
+        direction = _coerce_direction(row.get("direction"))
+        if direction is None:
+            continue
+        seen_types.add(stype)
+        sanitized.append(
+            {
+                "source_type": stype,
+                "direction": direction,
+                "basis": _sanitize_ids(row.get("basis", []), known_ids),
+            }
+        )
+    return sanitized
+
+
+def _coerce_direction(raw) -> int | None:
+    """把 direction 收斂成 -1/0/1；非整數值（含 bool、小數、無法解析的字串）回 None。"""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, float):
+        if not raw.is_integer():
+            return None
+        value = int(raw)
+    elif isinstance(raw, str):
+        try:
+            value = int(raw.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return value if value in _VALID_DIRECTIONS else None
 
 
 def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
@@ -333,24 +391,42 @@ def _real_reasoning(
     cross_validation = {
         "consistent_signals": step_b_raw.get("consistent_signals", []) if isinstance(step_b_raw.get("consistent_signals"), list) else [],
         "contradictions": step_b_raw.get("contradictions", []) if isinstance(step_b_raw.get("contradictions"), list) else [],
+        # horizon-aware R2-5/R2-7：跨尺度落差寫在 structural_context，不進 contradictions、不扣分。
+        # 解析失敗各自降級為 []（R6-1 降級優先），不中斷推理。
+        "structural_context": step_b_raw.get("structural_context", []) if isinstance(step_b_raw.get("structural_context"), list) else [],
+        # R3-3：方向共識矩陣，sanitize 掉非法 direction 值與幻覺 evidence id。
+        "direction_matrix": _sanitize_direction_matrix(step_b_raw.get("direction_matrix", []), known_ids),
     }
     _log(
         "step_b_cross_validation",
         "ok",
-        f"consistent={len(cross_validation['consistent_signals'])}, contradictions={len(cross_validation['contradictions'])}",
+        f"consistent={len(cross_validation['consistent_signals'])}, "
+        f"contradictions={len(cross_validation['contradictions'])}, "
+        f"structural_context={len(cross_validation['structural_context'])}, "
+        f"direction_matrix={len(cross_validation['direction_matrix'])}",
     )
 
     # L4 metrics：交叉驗證層量化
     if logger:
         consistent_count = len(cross_validation.get("consistent_signals", []))
         contradiction_count = len(cross_validation.get("contradictions", []))
+        structural_count = len(cross_validation.get("structural_context", []))
+        direction_count = len(cross_validation.get("direction_matrix", []))
         logger.log(
             phase=LogPhase.REASON,
             action="l4_cross_validation",
-            detail=f"consistent={consistent_count}, contradictions={contradiction_count}",
+            detail=(
+                f"consistent={consistent_count}, contradictions={contradiction_count}, "
+                f"structural_context={structural_count}, direction_matrix={direction_count}"
+            ),
             status=LogStatus.OK,
             layer=PipelineLayer.CROSS,
-            metrics={"consistent": consistent_count, "contradictions": contradiction_count},
+            metrics={
+                "consistent": consistent_count,
+                "contradictions": contradiction_count,
+                "structural_context": structural_count,
+                "direction_matrix": direction_count,
+            },
         )
 
     # Step C：推論層，改為正方 vs 反方辯論（提升對抗性，避免單一模型自問自答式的假辯論）。
@@ -538,6 +614,15 @@ def _real_reasoning(
         if isinstance(step_d_raw.get("invalidation_conditions"), list)
         else [],
         "evidence_ids": _sanitize_ids(step_d_raw.get("evidence_ids", []), known_ids),
+        # 裁判的辯論後信心調整：這裡只原樣接住，夾值（-15~+5）與「無理由視為 0」
+        # 的規則屬於信心公式（design.md §3.6.4），由 Phase 4 的 compute_confidence()
+        # 處理。先接住是因為不接的話模型產出後會被整段丟棄，白花 token 又沒人發現。
+        "debate_adjustment_raw": step_d_raw.get("debate_adjustment"),
+        "debate_adjustment_reason": (
+            step_d_raw.get("debate_adjustment_reason", "")
+            if isinstance(step_d_raw.get("debate_adjustment_reason"), str)
+            else ""
+        ),
     }
     follow_up_watchpoints = (
         [w for w in step_d_raw.get("follow_up_watchpoints", []) if isinstance(w, str)]

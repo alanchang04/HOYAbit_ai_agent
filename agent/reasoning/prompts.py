@@ -78,15 +78,54 @@ SYSTEM_PROMPT = """你是 HOYA BIT 加密市場分析 AI Agent 的推理引擎�
 4. 不得捏造證據中不存在的數據、事件或 evidence id。
 5. 這不是價格預測系統，避免給出具體買賣建議（進場價、停損點等）。
 6. 只能輸出使用者要求的 JSON，不要輸出任何 JSON 以外的文字或 markdown code fence。
+7. 不同時間尺度（horizon）的證據差異不等於矛盾。短窗訊號與長窗結構之間的落差是「位置關係」，應描述為脈絡而非衝突。
+8. 證據權重（weight）代表來源可信度。低權重證據不足以單獨推翻高權重證據，除非你能具體說明該高權重來源在此情境下為何不適用。
 """
+
+# 證據清單前的固定說明區塊：讓 LLM 看得懂 horizon 分帶與權重對抗規則（horizon-aware R2-4/R4-2）。
+EVIDENCE_LIST_LEGEND = """【時間尺度說明】每筆證據標註了 horizon（觀察窗尺度）：
+  spot=當下快照｜short=≤7天｜medium=8-30天（本次主判斷視野）｜long=31-180天｜structural=>180天
+  medium 是主視野。long/structural 屬「結構脈絡」，用來定位當前判斷處在大週期何處，
+  不應與短窗訊號當成互相矛盾。
+
+【權重說明】weight 為來源可信度（0-1）。低權重證據（<0.5）不足以單獨推翻
+  高權重證據（>0.8）；若要如此主張，必須說明該高權重來源在此情境下為何不適用。"""
+
+# weight_reason 內嵌的最終來源等級格式：「…來源等級0.80(B+:理由)…」（含 PR 降級後結果）。
+# 分級標籤取自 static/source_reputation.json（由 filter 層寫入 reason），此處僅解析、不寫死對照（R4-1）。
+_LEVEL_IN_REASON = re.compile(r"來源等級[0-9.]+\(([^:：)）]+)[:：]")
+
+
+def _grade_label(evidence: Evidence) -> str:
+    """從證據的 weight_reason 解析出來源分級標籤（A+/A/B+…）。解析不到回空字串（優雅降級）。"""
+    m = _LEVEL_IN_REASON.search(evidence.weight_reason or "")
+    return m.group(1).strip() if m else ""
+
+
+def _window_str(evidence: Evidence) -> str:
+    """組出觀察窗字串；spot 類無起訖時回 'n/a'。"""
+    start = getattr(evidence, "window_start", None)
+    end = getattr(evidence, "window_end", None)
+    if start and end:
+        return f"{start}~{end}"
+    if end:
+        return f"~{end}"
+    return "n/a"
 
 
 def _format_evidence_list(evidences: list[Evidence]) -> str:
     lines = []
     for e in evidences:
+        grade = _grade_label(e)
+        weight_field = f"weight={e.source_weight:.2f}" + (f" [{grade}]" if grade else "")
+        horizon = getattr(e, "horizon_class", None)
+        horizon_value = horizon.value if horizon is not None else "spot"
+        # fetched_at 保留：spot 類證據沒有觀察窗，抽掉它模型就完全沒有時間參考，
+        # 無從判斷這筆「快照」是當下的還是舊的。
         lines.append(
-            f"- id={e.id} | coin={e.coin} | type={e.source_type.value} | source={e.source} | "
-            f"fetched_at={e.fetched_at} | content={e.content_reference}"
+            f"- id={e.id} | coin={e.coin} | type={e.source_type.value} | {weight_field} | "
+            f"horizon={horizon_value} | window={_window_str(e)} | fetched_at={e.fetched_at} | "
+            f"source={e.source} | content={e.content_reference}"
         )
     return "\n".join(lines) if lines else "（本次無可用證據）"
 
@@ -101,6 +140,8 @@ def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coi
     return f"""題目：{question}
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
 {coin_note}
+
+{EVIDENCE_LIST_LEGEND}
 
 以下是本次蒐集到的所有證據（含 evidence id 與 coin 欄位）：
 {_format_evidence_list(evidences)}
@@ -133,17 +174,35 @@ def build_step_b_prompt(
 事實層摘要如下：
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
+{EVIDENCE_LIST_LEGEND}
+
 原始證據清單（供比對細節）：
 {_format_evidence_list(evidences)}
 
-請執行【交叉驗證層】分析：找出各來源事實之間「一致的訊號」與「矛盾的訊號」。
-一致訊號代表多個獨立來源指向同一方向；矛盾訊號代表來源之間出現衝突或無法互相印證。
-若發現多筆證據其實引用同一篇文章或同一個原始資料，請在 consistent_signals 中註明「非獨立來源」以避免重複計算可信度。
+請執行【交叉驗證層】分析，輸出**三段**：
+1. consistent_signals：多個獨立來源指向同一方向的一致訊號。
+   若多筆證據其實引用同一篇文章或同一原始資料，請註明「非獨立來源」以避免重複計算可信度。
+2. contradictions：**真正的矛盾訊號**。只有「同一 horizon 帶內」、或「同屬當前訊號三帶
+   （spot/short/medium）之間」的方向衝突才算矛盾。**不同尺度的落差不是矛盾**（見時間尺度說明）。
+3. structural_context：當前訊號（spot/short/medium）與結構脈絡（long/structural）之間的
+   方向差異，一律寫在這裡而非 contradictions，並以「位置關係」措辭描述。
+   例：「兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位，屬高位反彈而非底部啟動」。
+
+另外輸出 direction_matrix：各 source_type 對市場方向的表態。
+  - direction 只能是 1（看多）、0（中性）、-1（看空）三個整數之一，不可填小數或文字。
+  - 只針對 horizon 為 spot/short/medium（當前訊號三帶）的證據表態；
+    若某 source_type 在這三帶內無證據，該類別直接省略不列。
+  - basis 填該表態依據的 evidence id 清單。
 
 請只輸出以下 JSON 格式：
 {{
   "consistent_signals": ["一致訊號描述（可引用 evidence id）", ...],
-  "contradictions": ["矛盾訊號描述（可引用 evidence id）", ...]
+  "contradictions": ["僅限同尺度或當前訊號三帶之間的真實衝突", ...],
+  "structural_context": ["跨尺度的位置關係描述", ...],
+  "direction_matrix": [
+    {{"source_type": "price", "direction": 1, "basis": ["ev-001"]}},
+    ...
+  ]
 }}
 """
 
@@ -376,6 +435,44 @@ def _format_debate_section(debate: dict | None) -> str:
 """
 
 
+def _has_debate_transcript(debate: dict | None) -> bool:
+    """`_format_debate_section()` 是否會真的印出論證全文。"""
+    if not debate:
+        return False
+    return bool(debate.get("rounds") or debate.get("bull_argument"))
+
+
+def _format_inference_section(inference: list[dict], debate: dict | None) -> str:
+    """推論層區塊；有辯論紀錄時只留辯論紀錄沒有的東西（HANDOFF 6.3）。
+
+    有辯論時 `inference` 是從最後一輪攤平出來的，論證全文與下方辯論紀錄逐字重複——
+    同一段文字餵兩次除了浪費 token，還可能讓裁判過度加權最後一輪。但辯論紀錄不印
+    evidence id，所以不能整段拿掉，只截去重複的全文、保留 id 對應。
+    """
+    if not _has_debate_transcript(debate):
+        return f"推論層：\n{json.dumps(inference, ensure_ascii=False, indent=2)}"
+
+    compact = [
+        {
+            "hypothesis": _truncate_hypothesis(item.get("hypothesis", "")),
+            "supporting_evidence_ids": item.get("supporting_evidence_ids", []),
+            "opposing_evidence_ids": item.get("opposing_evidence_ids", []),
+        }
+        for item in inference
+        if isinstance(item, dict)
+    ]
+    return (
+        "推論層證據引用（論證全文見下方辯論紀錄，此處不重複）：\n"
+        + json.dumps(compact, ensure_ascii=False, indent=2)
+    )
+
+
+def _truncate_hypothesis(text: str, limit: int = 40) -> str:
+    """保留 `[正方]`／`[反方]` 標籤與開頭幾個字，讓 id 對得回是誰的論證即可。"""
+    text = text.strip()
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 def build_step_d_prompt(
     coin: str,
     question: str,
@@ -397,14 +494,20 @@ def build_step_d_prompt(
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
 
-推論層：
-{json.dumps(inference, ensure_ascii=False, indent=2)}
+{_format_inference_section(inference, debate)}
 {_format_debate_section(debate)}
 請執行【結論層】分析：綜合以上所有層次，給出最終市場判斷。
 market_judgment 需開門見山說明判斷，不要用買賣建議（不要給進場價/停損點）。
 confidence 只能是「高」、「中」或「低」三選一，並考量資料完整度、來源獨立性、矛盾訊號多寡來校準。
+評估反方批評是否成立時，一併考量雙方所引用證據的權重分佈：以高權重證據支撐的論點，
+比僅以低權重證據支撐的論點更有份量（低權重證據不足以單獨推翻高權重證據）。
 follow_up_watchpoints 請列出 2-4 個具體、可觀察的後續追蹤重點（例如特定鏈上指標、特定事件的後續發展、
 特定價位或情緒指標的變化），不要是空泛的「持續關注市場動態」這類廢話。
+
+另外輸出 debate_adjustment：你對「這份分析報告本身」的信心調整，範圍 -15 到 +5 的整數。
+這不是對市場的看多看空，而是「經過這場辯論，我對自己這個結論的把握變高還是變低」。
+範圍不對稱是刻意的：辯論若揭露了實質漏洞，應大幅下修（可到 -15）；若只是確認了原有判斷，
+最多小幅上調（+5 為上限）。必須填寫 debate_adjustment_reason 說明理由，未填理由則視為 0。
 
 請只輸出以下 JSON 格式：
 {{
@@ -413,7 +516,9 @@ follow_up_watchpoints 請列出 2-4 個具體、可觀察的後續追蹤重點�
   "limitations": ["已知限制或資料不足之處", ...],
   "invalidation_conditions": ["可能推翻此結論的具體條件", ...],
   "evidence_ids": ["market_judgment 直接依據的 evidence id 清單"],
-  "follow_up_watchpoints": ["具體後續觀察重點", ...]
+  "follow_up_watchpoints": ["具體後續觀察重點", ...],
+  "debate_adjustment": -8,
+  "debate_adjustment_reason": "調整理由（例：反方對鏈上活躍度的批評成立，正方第二輪未有效回應）"
 }}
 """
 

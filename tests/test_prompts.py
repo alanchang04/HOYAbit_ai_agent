@@ -1,0 +1,120 @@
+"""horizon-aware Phase 3：證據清單含 horizon/window/weight、Step B 三段＋direction_matrix、
+Step D 裁判調整欄位、SYSTEM_PROMPT 權重與尺度規則。"""
+
+from agent.reasoning.prompts import (
+    SYSTEM_PROMPT,
+    _format_evidence_list,
+    build_step_a_prompt,
+    build_step_b_prompt,
+    build_step_d_prompt,
+)
+from agent.schemas import Evidence
+
+
+def _ev(**overrides):
+    base = dict(
+        id="ev-001",
+        coin="BTC",
+        source="official_csv",
+        fetched_at="2026-07-25T00:00:00Z",
+        content_reference="MA120 位置：現價位於 5 年分佈第 88 百分位",
+        related_claim="x",
+        source_type="price",
+        source_weight=0.92,
+        weight_reason="四因子 w=0.92｜新鮮度1.00×來源等級0.95(A+:官方基準資料)×覆蓋度1.00×dedup1.00",
+        window_start="2021-06-01",
+        window_end="2026-05-31",
+        horizon_class="structural",
+    )
+    base.update(overrides)
+    return Evidence(**base)
+
+
+def test_evidence_list_includes_weight_grade_horizon_window():
+    out = _format_evidence_list([_ev()])
+    assert "weight=0.92" in out
+    assert "[A+]" in out          # 分級標籤解析自 weight_reason
+    assert "horizon=structural" in out
+    assert "window=2021-06-01~2026-05-31" in out
+
+
+def test_evidence_list_spot_has_na_window():
+    ev = _ev(horizon_class="spot", window_start=None, window_end=None)
+    out = _format_evidence_list([ev])
+    assert "horizon=spot" in out
+    assert "window=n/a" in out
+
+
+def test_evidence_list_keeps_fetched_at():
+    """spot 類沒有觀察窗，抽掉 fetched_at 模型就沒有任何時間參考可用。"""
+    out = _format_evidence_list([_ev(horizon_class="spot", window_start=None, window_end=None)])
+    assert "fetched_at=2026-07-25T00:00:00Z" in out
+
+
+def test_evidence_list_omits_grade_when_unparseable():
+    ev = _ev(source_weight=0.50, weight_reason="legacy 舊制規則表 w=0.50")
+    out = _format_evidence_list([ev])
+    assert "weight=0.50" in out
+    assert "[" not in out.split("weight=0.50")[1].split("|")[0]  # 該欄位無分級中括號
+
+
+def test_system_prompt_has_horizon_and_weight_rules():
+    assert "horizon" in SYSTEM_PROMPT
+    assert "低權重證據不足以單獨推翻高權重證據" in SYSTEM_PROMPT
+
+
+def test_step_a_prompt_has_legend():
+    prompt = build_step_a_prompt("BTC", "分析 BTC 過去兩週", [_ev()])
+    assert "【時間尺度說明】" in prompt
+    assert "【權重說明】" in prompt
+
+
+def test_step_b_prompt_has_three_sections_and_direction_matrix():
+    prompt = build_step_b_prompt("BTC", "分析 BTC", [_ev()], facts=[])
+    assert "consistent_signals" in prompt
+    assert "contradictions" in prompt
+    assert "structural_context" in prompt
+    assert "direction_matrix" in prompt
+    # 明確約束：跨尺度不算矛盾、direction 限三值
+    assert "不同尺度的落差不是矛盾" in prompt
+    assert "1（看多）" in prompt and "-1（看空）" in prompt
+
+
+def test_step_d_omits_duplicate_argument_text_when_debate_present():
+    """HANDOFF 6.3：有辯論紀錄時，推論層不再重複貼上同一段論證全文。
+
+    但辯論紀錄不印 evidence id，所以 id 對應必須保留——不能整段拿掉。
+    """
+    long_bull = "正方論證：" + "資金費率百分位偏低顯示槓桿不擁擠。" * 10
+    inference = [
+        {
+            "hypothesis": f"[正方] {long_bull}",
+            "supporting_evidence_ids": ["ev-001"],
+            "opposing_evidence_ids": ["ev-002"],
+        }
+    ]
+    debate = {
+        "rounds": [{"round": 1, "bull_argument": long_bull, "bear_critique": "批評", "bear_argument": "反方"}],
+        "stopped_reason": "converged",
+    }
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, inference, debate=debate)
+
+    assert prompt.count(long_bull) == 1          # 全文只出現在辯論紀錄那一份
+    assert "ev-001" in prompt and "ev-002" in prompt  # id 對應仍在
+    assert "論證全文見下方辯論紀錄" in prompt
+
+
+def test_step_d_keeps_full_inference_without_debate():
+    """沒有辯論紀錄（降級走單模型）時，推論層必須照舊完整帶上。"""
+    inference = [{"hypothesis": "假設一的完整敘述", "supporting_evidence_ids": ["ev-001"], "opposing_evidence_ids": []}]
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, inference, debate=None)
+    assert "假設一的完整敘述" in prompt
+    assert "論證全文見下方辯論紀錄" not in prompt
+
+
+def test_step_d_prompt_has_debate_adjustment_fields():
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, [])
+    assert "debate_adjustment" in prompt
+    assert "debate_adjustment_reason" in prompt
+    assert "-15" in prompt and "+5" in prompt          # 不對稱範圍
+    assert "權重分佈" in prompt                          # R4-4 裁判考量權重
