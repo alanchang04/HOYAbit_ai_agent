@@ -51,23 +51,23 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ### Phase 1 — Schema 地基
 
-- [ ] **1.1** 在 `agent/schemas.py` 新增 `HorizonClass` 列舉（五值）與三個常數集合
+- [x] **1.1** 在 `agent/schemas.py` 新增 `HorizonClass` 列舉（五值）與三個常數集合
   `CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS`／`PRIMARY_HORIZON`
   - 依 design.md §3.1 的定義
   - _Requirements: R2-1_
 
-- [ ] **1.2** 在 `EvidenceDraft` 新增 `window_start`／`window_end`／`horizon_class` 三欄位，
+- [x] **1.2** 在 `EvidenceDraft` 新增 `window_start`／`window_end`／`horizon_class` 三欄位，
   皆給預設值（`None`／`None`／`HorizonClass.SPOT`）
   - **不加** `window_start <= window_end` 的 validator（理由見 design.md §3.1 註記）
   - _Requirements: R2-1, R2-3, R2-9_
 
-- [ ] **1.3** 擴充 `tests/test_schemas.py`：
+- [x] **1.3** 擴充 `tests/test_schemas.py`：
   - 新欄位預設值正確
   - 舊格式 JSON（無這三個欄位）可正常載入為 `Evidence`，不拋錯（R2-9 回歸）
   - `HorizonClass` 五值與兩個集合的成員關係正確
   - _Requirements: R2-1, R2-9_
 
-- [ ] **1.4** 在 `agent/orchestrator.py` 分配 evidence id 的環節加入標註檢查：
+- [x] **1.4** 在 `agent/orchestrator.py` 分配 evidence id 的環節加入標註檢查：
   若 `horizon_class` 為預設 `spot` 但 `window_start`/`window_end` 有值（矛盾標註），
   或 collector 明顯應標非 spot 卻未標，寫一筆 `LogStatus.SKIPPED` 的警示 log
   - 只記 log，**不得**拋錯或過濾掉該證據（R6-1）
@@ -75,7 +75,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ### Phase 2 — Collector 側：標註、補齊、序列化
 
-- [ ] **2.1** 依 design.md §3.2 對照表，為**所有** collector 的每筆 `EvidenceDraft`
+- [x] **2.1** 依 design.md §3.2 對照表，為**所有** collector 的每筆 `EvidenceDraft`
   補上 `horizon_class`／`window_start`／`window_end`
   - 檔案：`price.py`、`onchain.py`、`news.py`、`social.py`、`macro.py`、
     `derivatives.py`、`relative.py`
@@ -83,82 +83,87 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     標 `structural`、`derivatives` 的 CME COT 標 `long`、`relative` 標 `long`
   - _Requirements: R2-2_
 
-- [ ] **2.2** 新增 `tests/test_collectors_horizon.py`：逐 collector 斷言產出的
+- [x] **2.2** 新增 `tests/test_collectors_horizon.py`：逐 collector 斷言產出的
   `horizon_class` 與 §3.2 對照表一致（用 dry-run／mock，不打真實 API）
   - _Requirements: R2-2_
 
-- [ ] **2.3** 在 `agent/collectors/price.py` 實作 `_fetch_gap_klines(coin, since_date)`：
+- [x] **2.3** 在 `agent/collectors/price.py` 實作 `_fetch_gap_klines(coin, since_date)`：
   - 端點：`GET https://api.binance.com/api/v3/klines?symbol={TICKER}USDT&interval=1d&startTime={ms}&limit=1000`
   - **必須剔除最後一筆未收盤 K 棒**（design.md §3.3）
   - 欄位映射 `[0]=openTime, [1]=open, [2]=high, [3]=low, [4]=close, [5]=volume`
   - 失敗時 `log_subsource(..., LogStatus.SKIPPED, ...)` 並回傳空 list，**不得拋錯**
   - _Requirements: R1-2, R1-3, R6-1_
 
-- [ ] **2.4** 實作併接邏輯與 `as_of_date` 計算：
+- [x] **2.4** 實作併接邏輯與 `as_of_date` 計算：
   - `gap_days <= 1` → 跳過補齊（R1-5，**用 mock 斷言零 API 呼叫**）
   - 同日重複時 **CSV 優先**（維護「共同基準」語意）
   - 補齊成功 → `as_of_date` = klines 末日；失敗 → `as_of_date` = csv_end
   - _Requirements: R1-1, R1-2, R1-5_
 
-- [ ] **2.5** 在價格證據的 `content_reference` 加入接縫揭露文字：
+- [x] **2.5** 在價格證據的 `content_reference` 加入接縫揭露文字：
   - 成功：`其中 {start} 起 {n} 日採 Binance 公開日線補齊，官方基準資料集止於 {csv_end}`
   - 失敗：`⚠ 未能補齊，資料止於 {csv_end}，距執行日 {n} 天`
   - _Requirements: R1-3, R1-4_
 
-- [ ] **2.6** 新增 `tests/test_price_gap_fill.py`（全部用 mock，不打真實網路）：
+- [x] **2.6** 新增 `tests/test_price_gap_fill.py`（全部用 mock，不打真實網路）：
   補齊成功／失敗／空回應／未收盤 K 棒剔除／同日 CSV 優先／無缺口零呼叫
   - _Requirements: R1-2, R1-3, R1-5_
 
-- [ ] **2.7** 實作 `summarize_series()` 取代單點輸出（design.md §3.4）：
+- [x] **2.7** 實作 `summarize_series()` 取代單點輸出（design.md §3.4）：
   - 每個指標輸出：首尾值與變化、方向判定、期間極值與發生日、現值於近 30 天分佈的百分位
   - 方向判定四態（單調上升／單調下降／震盪走高／震盪走低／橫盤），決定性計算
   - **不得**把 30 天原始數列寫進 `content_reference`（R1-7）
   - _Requirements: R1-6, R1-7_
 
-- [ ] **2.8** 確認長歷史指標仍以官方 CSV 全歷史計算（R1-8）：
+- [x] **2.8** 確認長歷史指標仍以官方 CSV 全歷史計算（R1-8）：
   `compute_historical_volatility_percentile()` 與 MA120 的 `full_closes`
   **不得**改用併接後的序列
+  - ⚠ 實作時發現的邊界：均線**值**照 R1-8 用官方 CSV 算沒問題，但站上／跌破的
+    **位置判定**若也用 CSV 末日收盤，在 CSV 落後執行日 56 天時會判出與現實相反的
+    結論（實測 BTC：MA120=72613，CSV 末日收盤判「站上」，但 2026-07-26 現價 65400
+    其實是跌破）。已改為「均線值用 CSV、位置用補齊後現價」，並在證據文字揭露兩者
+    的基準日。此為 R1-8 字面之外的補充，請 alanchang 確認是否同意
   - _Requirements: R1-8_
 
-- [ ] **2.9** 新增 `tests/test_price_series_summary.py`：四種方向判定各一例、
+- [x] **2.9** 新增 `tests/test_price_series_summary.py`：四種方向判定各一例、
   30 天資料不足時的降級行為
   - _Requirements: R1-6_
 
-- [ ] **2.10** 用 `scripts/test_collectors.py --coin BTC` 實跑一次真實補齊，
+- [x] **2.10** 用 `scripts/test_collectors.py --coin BTC` 實跑一次真實補齊，
   人工確認 `as_of_date` 已推進到執行日、接縫文字正確、序列摘要可讀
   - _Requirements: R1-2, R1-4, R1-6_
 
 ### Phase 3 — Prompt 層：讓 LLM 看見尺度與權重
 
-- [ ] **3.1** 改寫 `agent/reasoning/prompts.py` 的 `_format_evidence_list()`：
+- [x] **3.1** 改寫 `agent/reasoning/prompts.py` 的 `_format_evidence_list()`：
   加入 `weight`＋分級標籤、`horizon`、`window` 三組欄位（design.md §3.5.1 格式）
   - 分級標籤取自 `static/source_reputation.json`，**不得在程式碼寫死對照**
   - _Requirements: R2-4, R4-1_
 
-- [ ] **3.2** 在證據清單前加入【時間尺度說明】與【權重說明】兩個固定區塊
+- [x] **3.2** 在證據清單前加入【時間尺度說明】與【權重說明】兩個固定區塊
   （design.md §3.5.1 原文）
   - _Requirements: R2-4, R4-2_
 
-- [ ] **3.3** 在 `SYSTEM_PROMPT` 新增第 7、8 條規則（design.md §3.5.2 原文）
+- [x] **3.3** 在 `SYSTEM_PROMPT` 新增第 7、8 條規則（design.md §3.5.2 原文）
   - _Requirements: R2-6, R4-2_
 
-- [ ] **3.4** 改寫 `build_step_b_prompt()` 為三段輸出＋`direction_matrix`：
+- [x] **3.4** 改寫 `build_step_b_prompt()` 為三段輸出＋`direction_matrix`：
   - 新增 `structural_context` 欄位與「僅同尺度才算矛盾」的約束（design.md §3.5.3）
   - `direction_matrix` 限縮 `-1|0|1` 整數、只針對當前訊號三帶表態
   - _Requirements: R2-5, R2-6, R2-7, R3-3_
 
-- [ ] **3.5** 在 `agent/reasoning/pipeline.py` 接住 Step B 的新欄位：
+- [x] **3.5** 在 `agent/reasoning/pipeline.py` 接住 Step B 的新欄位：
   - `cross_validation` dict 新增 `structural_context` 與 `direction_matrix`
   - 兩者解析失敗時各自降級為 `[]`，**不得**中斷（R6-1）
   - `direction_matrix` 需做 sanitize：過濾非法 direction 值、過濾不存在的 evidence id
   - _Requirements: R2-5, R3-3, R3-15, R6-1_
 
-- [ ] **3.6** 改寫 `build_step_d_prompt()` 新增 `debate_adjustment`／
+- [x] **3.6** 改寫 `build_step_d_prompt()` 新增 `debate_adjustment`／
   `debate_adjustment_reason` 兩個輸出欄位（design.md §3.5.4 原文，含不對稱範圍的說明）
   - 同時依 R4-4 要求裁判考量雙方引用證據的權重分佈
   - _Requirements: R3-8, R4-4_
 
-- [ ] **3.7** 擴充 `tests/test_prompts.py`：斷言清單含 horizon/window/weight、
+- [x] **3.7** 擴充 `tests/test_prompts.py`：斷言清單含 horizon/window/weight、
   說明區塊存在、Step B prompt 含三段與 direction_matrix 規格、Step D prompt 含調整欄位
   - _Requirements: R2-4, R3-3, R3-8, R4-1_
 
