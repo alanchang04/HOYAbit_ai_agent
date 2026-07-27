@@ -10,6 +10,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from agent.collectors.base import BaseCollector
@@ -32,7 +33,7 @@ from agent.report.view_builder import build_report_view
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
 from agent.filters.source_weights import apply_source_weights
-from agent.schemas import Evidence, EvidenceDraft, FilterDecision, LogPhase, LogStatus, PipelineLayer, RunMetrics
+from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 
@@ -87,10 +88,56 @@ async def collect_all(
     return drafts
 
 
-def assign_evidence_ids(drafts: list[EvidenceDraft]) -> list[Evidence]:
+# spot 帶容許的最長觀察窗（天）。design.md §3.2 有幾筆合法的 spot 證據帶著跨日窗口
+# （OI 四象限、多空帳戶比皆為 30 小時趨勢），那不是漏標；真正要抓的是把月／年尺度的
+# 資料留在預設 spot 的情況（MA120、CME COT 這類假矛盾來源）。
+SPOT_MAX_WINDOW_DAYS = 7
+
+
+def _window_span_days(window_start: str | None, window_end: str | None) -> int | None:
+    """觀察窗天數（含端點）。任一端缺漏或格式不可解時回 None，由呼叫端各自處理。"""
+    if not window_start or not window_end:
+        return None
+    try:
+        start = date.fromisoformat(window_start[:10])
+        end = date.fromisoformat(window_end[:10])
+    except ValueError:
+        return None
+    return (end - start).days + 1
+
+
+def _horizon_annotation_issue(ev: Evidence) -> str | None:
+    """回傳 horizon 標註的問題描述，無問題回 None（R2-3）。"""
+    if (ev.window_start is None) != (ev.window_end is None):
+        return (
+            f"觀察窗只標了一端（window_start={ev.window_start}, window_end={ev.window_end}），"
+            f"標註不完整"
+        )
+    if ev.horizon_class == HorizonClass.SPOT:
+        span = _window_span_days(ev.window_start, ev.window_end)
+        if span is not None and span > SPOT_MAX_WINDOW_DAYS:
+            return (
+                f"horizon_class 為預設 spot 但觀察窗長達 {span} 天"
+                f"（{ev.window_start}~{ev.window_end}），疑似漏標非 spot 分帶"
+            )
+    return None
+
+
+def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Evidence]:
     evidences = []
     for i, draft in enumerate(drafts, start=1):
-        evidences.append(Evidence(id=f"ev-{i:03d}", **draft.model_dump()))
+        ev = Evidence(id=f"ev-{i:03d}", **draft.model_dump())
+        # horizon-aware R2-3：標註缺漏／矛盾只記警示 log，絕不拋錯或過濾掉證據（R6-1 降級優先）。
+        issue = _horizon_annotation_issue(ev) if logger is not None else None
+        if issue:
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="horizon_annotation_warning",
+                detail=f"{ev.id}（{ev.source_type.value}/{ev.source}）{issue}",
+                status=LogStatus.SKIPPED,
+                layer=PipelineLayer.SOURCE,
+            )
+        evidences.append(ev)
     return evidences
 
 
@@ -172,7 +219,7 @@ def run_pipeline(
     else:
         drafts = asyncio.run(collect_all(collectors, coins, remaining_before_collect))
 
-    evidences = assign_evidence_ids(drafts)
+    evidences = assign_evidence_ids(drafts, logger=logger)
 
     # Phase 2（R12，Ken 設計）：去重先行 → 話術掃描 → 四因子權重 → L2 決策紀錄
     dedup_result = None
