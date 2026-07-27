@@ -8,7 +8,7 @@ import csv
 import math
 from pathlib import Path
 
-from agent.schemas import EvidenceDraft, now_iso
+from agent.schemas import EvidenceDraft, HorizonClass, now_iso
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 WINDOW = 90  # 90 日窗口
@@ -26,6 +26,14 @@ def _load_closes(ticker: str, data_dir: Path | None = None) -> list[float]:
         for row in reader:
             closes.append(float(row["close"]))
     return closes
+
+
+def _load_dates(ticker: str, data_dir: Path | None = None) -> list[str]:
+    """讀 CSV 的日期欄（升序），只給 horizon 標註用的觀察窗起訖，不參與任何計算。"""
+    base = data_dir if data_dir else DATA_DIR
+    csv_path = base / f"{ticker}_daily_ohlcv.csv"
+    with open(csv_path, "r", encoding="utf-8") as f:
+        return [row["date"] for row in csv.DictReader(f)]
 
 
 def _daily_returns(closes: list[float]) -> list[float]:
@@ -128,6 +136,14 @@ def compute_relative_metrics(
         f"• 相對強弱比值百分位: {rs_pct:.1f}%（{coin} 相對 {coin2} 在期間分布中的位置）"
     )
 
+    # 觀察窗取兩幣共同涵蓋的尾段（與實際參與計算的 closes 對齊）。日期欄讀不到時
+    # 留 None，不阻斷這筆證據（R6-1 降級優先）。
+    try:
+        dates = _load_dates(coin, data_dir=data_dir)[-min_len:]
+        window_start, window_end = (dates[0], dates[-1]) if dates else (None, None)
+    except (OSError, KeyError):
+        window_start, window_end = None, None
+
     return EvidenceDraft(
         coin=f"{coin}/{coin2}",
         source="本地雙幣相對指標計算",
@@ -138,4 +154,9 @@ def compute_relative_metrics(
         source_type="price",
         source_weight=0.95,
         weight_reason="決定性本地運算",
+        window_start=window_start,
+        window_end=window_end,
+        # 90 日窗口＝31-180 天帶。相對強弱是「這一季誰比較強」的結構位置，
+        # 不是當前訊號，不該與短窗方向訊號放在同一個矛盾判定裡。
+        horizon_class=HorizonClass.LONG,
     )

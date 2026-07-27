@@ -23,7 +23,8 @@ from datetime import datetime, timezone
 import httpx
 
 from agent.collectors.base import BaseCollector
-from agent.schemas import EvidenceDraft, LogStatus, now_iso
+from agent.collectors.horizon import window_back
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
 
@@ -38,9 +39,13 @@ COT_API_URL = "https://publicreporting.cftc.gov/resource/gpe5-46if.json"
 
 # 費率擁擠度：每 8 小時一筆，limit=90 剛好覆蓋近 30 天
 FUNDING_LIMIT = 90
+FUNDING_INTERVAL_HOURS = 8
 # OI×價格四象限、多空帳戶比：近 30 小時趨勢
 HOURLY_TREND_LIMIT = 30
 HOUR_MS = 3_600_000
+# 30 小時橫跨兩個日曆日，窗口記 today-1 ~ today；仍屬 spot（當下市場結構快照，
+# 不是月尺度趨勢），對照 design.md §3.2。
+HOURLY_TREND_WINDOW_DAYS = 2
 
 QUADRANT_LABEL = {
     ("up", "up"): "多頭增倉（順勢，新多頭進場）",
@@ -189,6 +194,8 @@ class DerivativesCollector(BaseCollector):
         latest_rate = rates[-1]
         percentile = percentile_rank(latest_rate, rates)
         label = crowd_label(percentile)
+        # 窗長由實得筆數×結算週期推導，API 少回幾筆時窗口跟著縮，不寫死 30 天
+        window_start, window_end = window_back(round(len(rates) * FUNDING_INTERVAL_HOURS / 24))
 
         return EvidenceDraft(
             coin=coin,
@@ -203,6 +210,9 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 永續合約資金費率擁擠度（30 天相對位置）",
             source_type="derivatives",
+            window_start=window_start,
+            window_end=window_end,
+            horizon_class=HorizonClass.MEDIUM,
         )
 
     # --- 2. OI × 價格四象限：近 30 小時 OI 與價格同向/背離 ---
@@ -239,6 +249,7 @@ class DerivativesCollector(BaseCollector):
         oi_dir = move_direction(oi_by_bucket[latest_bucket], oi_by_bucket[prev_bucket])
         price_dir = move_direction(price_by_bucket[latest_bucket], price_by_bucket[prev_bucket])
         quadrant = QUADRANT_LABEL[(oi_dir, price_dir)]
+        window_start, window_end = window_back(HOURLY_TREND_WINDOW_DAYS)
 
         return EvidenceDraft(
             coin=coin,
@@ -253,6 +264,9 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 未平倉量與價格的四象限市場結構解讀",
             source_type="derivatives",
+            window_start=window_start,
+            window_end=window_end,
+            horizon_class=HorizonClass.SPOT,
         )
 
     # --- 3. 多空帳戶比：散戶 vs 大戶持倉是否背離 ---
@@ -282,6 +296,7 @@ class DerivativesCollector(BaseCollector):
         retail_dir = ratio_direction(retail_latest)
         smart_dir = ratio_direction(smart_latest)
         diverged = retail_dir != smart_dir
+        window_start, window_end = window_back(HOURLY_TREND_WINDOW_DAYS)
 
         return EvidenceDraft(
             coin=coin,
@@ -295,6 +310,9 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 散戶與大戶（smart money）持倉方向是否背離",
             source_type="derivatives",
+            window_start=window_start,
+            window_end=window_end,
+            horizon_class=HorizonClass.SPOT,
         )
 
     # --- 4. 期貨到期結構：永續/當季/次季 contango/backwardation ---
@@ -361,6 +379,7 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 期貨到期結構曲線形狀（contango/backwardation）",
             source_type="derivatives",
+            horizon_class=HorizonClass.SPOT,  # 曲線是當下報價的橫斷面，不是時間序列
         )
 
     # --- 5. CME COT：機構（Asset Manager）淨倉位，BNB 無 CME 期貨直接跳過 ---
@@ -391,6 +410,9 @@ class DerivativesCollector(BaseCollector):
         asset_mgr_change = int(latest["change_in_asset_mgr_long"]) - int(latest["change_in_asset_mgr_short"])
         lev_money_net = int(latest["lev_money_positions_long"]) - int(latest["lev_money_positions_short"])
         report_date = latest["report_date_as_yyyy_mm_dd"][:10]
+        # rows 依 report_date DESC，窗口直接取最舊～最新報告日：這是真實涵蓋期間，
+        # 比 today-83 準（CFTC 週報落後至當週二，末日本來就不是執行日）。
+        oldest_report_date = rows[-1]["report_date_as_yyyy_mm_dd"][:10]
 
         return EvidenceDraft(
             coin=coin,
@@ -404,6 +426,9 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} CME 期貨機構淨倉位方向（層2 敘事背景佐證，非即時訊號）",
             source_type="derivatives",
+            window_start=oldest_report_date,
+            window_end=report_date,
+            horizon_class=HorizonClass.LONG,
         )
 
     # --- 6. 選擇權 IV/Skew：Binance Options 五幣統一來源 ---
@@ -488,6 +513,9 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 選擇權隱含波動率結構（ATM IV／25Δ Skew／Put-Call OI 比）",
             source_type="derivatives",
+            # IV 描述的是「未來 30 天的預期波動」，但這筆證據本身是當下報價的橫斷面快照，
+            # 不是過去 30 天的觀察窗——標 spot 而非 medium。
+            horizon_class=HorizonClass.SPOT,
         )
 
     # --- 7. CEX-DEX 費率差：Binance vs Hyperliquid 年化費率背離 ---
@@ -529,4 +557,5 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} 中心化與去中心化交易場地的資金費率背離",
             source_type="derivatives",
+            horizon_class=HorizonClass.SPOT,  # 兩邊都取 lastFundingRate，當下快照
         )
