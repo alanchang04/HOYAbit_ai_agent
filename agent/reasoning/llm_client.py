@@ -14,7 +14,7 @@ from agent.config import Settings
 
 
 class LLMClient(Protocol):
-    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str: ...
+    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str: ...
 
 
 def build_llm_client(settings: Settings) -> LLMClient:

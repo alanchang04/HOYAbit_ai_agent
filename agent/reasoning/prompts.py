@@ -215,6 +215,64 @@ def build_step_c1_bull_prompt(
 """
 
 
+def format_debate_transcript(rounds: list[dict]) -> str:
+    """把已完成的辯論輪次攤成可讀的逐輪紀錄，供後續輪次與裁判參考。"""
+    if not rounds:
+        return "（本輪為第一輪，尚無先前辯論）"
+    blocks = []
+    for r in rounds:
+        blocks.append(
+            f"【第 {r.get('round', '?')} 輪】\n"
+            f"[正方] {r.get('bull_argument', '')}\n"
+            f"[反方對正方的批評] {r.get('bear_critique', '')}\n"
+            f"[反方] {r.get('bear_argument', '')}"
+        )
+    return "\n\n".join(blocks)
+
+
+def build_step_c1_bull_rebuttal_prompt(
+    coin: str,
+    question: str,
+    question_type: QuestionType,
+    facts: list[dict],
+    cross_validation: dict,
+    rounds: list[dict],
+    coin2: str | None = None,
+    round_no: int = 2,
+) -> str:
+    """推論層 Step C1（第二輪起）：正方看過反方的批評後反駁並修正自己的論證。"""
+    framing = _resolve_bull_framing(question_type, coin, coin2)
+    return f"""題目：{question}
+幣種：{coin}{f'／{coin2}' if coin2 else ''}
+
+你現在的角色是【正方分析師】，這是第 {round_no} 輪。{framing}
+
+事實層：
+{json.dumps(facts, ensure_ascii=False, indent=2)}
+
+交叉驗證層：
+{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+
+先前的辯論紀錄：
+{format_debate_transcript(rounds)}
+
+你的任務是【回應反方對你的批評】並產出修正後的論證：
+1. 逐項回應反方的批評。批評成立的部分要誠實承認並修正你的論證，不要硬拗。
+2. 批評不成立的部分，要具體說明為什麼（引用事實或 evidence id），不可只說「反方誤解了」。
+3. 輸出你這一輪修正後的**完整**論證，不要只寫增補的片段，也不要原文照抄上一輪。
+
+規則：
+1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
+2. 必須引用 evidence id 支撐你的論點。
+
+請只輸出以下 JSON 格式：
+{{
+  "argument": "第 {round_no} 輪修正後的正方完整論證",
+  "evidence_ids": ["ev-001", ...]
+}}
+"""
+
+
 def build_step_c2_bear_prompt(
     coin: str,
     question: str,
@@ -223,9 +281,23 @@ def build_step_c2_bear_prompt(
     cross_validation: dict,
     bull_argument: str,
     coin2: str | None = None,
+    rounds: list[dict] | None = None,
+    round_no: int = 1,
 ) -> str:
-    """推論層 Step C2：反方分析師，可看到正方論證，任務是批評它並建構反向論證。"""
+    """推論層 Step C2：反方分析師，可看到正方論證，任務是批評它並建構反向論證。
+
+    第二輪起會附上先前的辯論紀錄，並要求反方自報是否還有新的實質論點
+    （`has_new_points`），讓辯論在雙方開始重複時提早收斂，不必固定燒滿輪數。
+    """
     framing = _resolve_bear_framing(question_type, coin, coin2)
+    transcript_section = (
+        f"""
+先前的辯論紀錄：
+{format_debate_transcript(rounds)}
+"""
+        if rounds
+        else ""
+    )
     return f"""題目：{question}
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
 
@@ -234,14 +306,18 @@ def build_step_c2_bear_prompt(
 
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
-
-正方分析師的論證如下：
+{transcript_section}
+正方分析師本輪（第 {round_no} 輪）的論證如下：
 {bull_argument}
 
 你現在的角色是【反方分析師】。{framing}
-你的任務有兩部分：
+你的任務有三部分：
 1. critique：具體指出正方論證的邏輯漏洞、忽略的反面證據、樣本選擇偏誤，或過度解讀之處（不可只是空泛地說「證據不足」，要指名道姓引用具體 evidence id 或論點）。
 2. argument：建構你自己的反方論證，盡量引用正方沒有使用到、或方向相反的事實與證據。
+3. has_new_points：誠實判斷你這一輪是否真的提出了**新的**實質論點。
+   若你已經只是在重複先前輪次講過的說法、或正方的修正已經合理回應了你的疑慮，
+   請填 false 讓辯論收斂；只有在你確實還有尚未被回應的實質疑慮時才填 true。
+   為了讓辯論看起來熱鬧而硬填 true 是不誠實的。
 
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
@@ -251,8 +327,52 @@ def build_step_c2_bear_prompt(
 {{
   "critique": "對正方論證的具體批評",
   "argument": "反方完整論證（可以是一段完整的話，需引用具體事實）",
-  "evidence_ids": ["ev-003", ...]
+  "evidence_ids": ["ev-003", ...],
+  "has_new_points": true
 }}
+"""
+
+
+STOP_REASON_LABEL: dict[str, str] = {
+    "converged": "反方自認已無新的實質論點，辯論提前收斂",
+    "max_rounds": "達到輪數上限",
+    "deadline": "剩餘時間不足以再跑一輪，提前進入裁判",
+    "bull_failed": "正方該輪呼叫失敗，以已完成的輪次進入裁判",
+    "bear_failed": "反方該輪呼叫失敗，以已完成的輪次進入裁判",
+}
+
+
+def _format_debate_section(debate: dict | None) -> str:
+    """把辯論全文交給裁判。
+
+    推論層被攤平成 inference 時只保留了正反方的 argument，反方對正方的 critique
+    整段遺失——那正是辯論最有價值的產出。這裡把完整逐輪紀錄補回給 Step D，
+    否則裁判等於沒看到反方的反駁就下結論。
+    """
+    if not debate:
+        return ""
+    rounds = debate.get("rounds") or []
+    if not rounds:
+        # 相容舊的單輪扁平結構
+        rounds = [
+            {
+                "round": 1,
+                "bull_argument": debate.get("bull_argument", ""),
+                "bear_critique": debate.get("bear_critique", ""),
+                "bear_argument": debate.get("bear_argument", ""),
+            }
+        ]
+    stopped = STOP_REASON_LABEL.get(debate.get("stopped_reason", ""), "未紀錄")
+    return f"""
+辯論紀錄（共 {len(rounds)} 輪；結束原因：{stopped}）：
+{format_debate_transcript(rounds)}
+
+裁判守則：
+1. 你必須明確評估反方的批評是否成立。若成立，market_judgment 與 confidence
+   都要據此下修，並把該批評寫進 limitations；若不成立，要說明為何不採納。
+   不可略過批評直接採信正方。
+2. 若有多輪，後續輪次的論證已經過反駁與修正，應比第一輪的初始版本更有參考價值；
+   但若某一方在後續輪次只是重複或迴避批評，這件事本身就是該方論證薄弱的證據。
 """
 
 
@@ -264,6 +384,7 @@ def build_step_d_prompt(
     cross_validation: dict,
     inference: list[dict],
     coin2: str | None = None,
+    debate: dict | None = None,
 ) -> str:
     framing = _resolve_framing(question_type, coin, coin2)
     return f"""題目：{question}
@@ -278,7 +399,7 @@ def build_step_d_prompt(
 
 推論層：
 {json.dumps(inference, ensure_ascii=False, indent=2)}
-
+{_format_debate_section(debate)}
 請執行【結論層】分析：綜合以上所有層次，給出最終市場判斷。
 market_judgment 需開門見山說明判斷，不要用買賣建議（不要給進場價/停損點）。
 confidence 只能是「高」、「中」或「低」三選一，並考量資料完整度、來源獨立性、矛盾訊號多寡來校準。

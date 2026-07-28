@@ -1,5 +1,8 @@
 """用假 LLM client 驗證推理鏈邏輯，不需要真的呼叫 Bedrock/Gemini。"""
 
+import json
+import time
+
 import pytest
 
 from agent.reasoning.pipeline import run_reasoning
@@ -27,10 +30,10 @@ class FakeLLMClient:
         return item
 
 
-def _evidences() -> list[Evidence]:
+def _evidences(count: int = 1) -> list[Evidence]:
     return [
         Evidence(
-            id="ev-001",
+            id=f"ev-{i:03d}",
             coin="BTC",
             source="test-source",
             fetched_at=now_iso(),
@@ -38,6 +41,7 @@ def _evidences() -> list[Evidence]:
             related_claim="claim",
             source_type="price",
         )
+        for i in range(1, count + 1)
     ]
 
 
@@ -47,14 +51,31 @@ STEP_D_RESPONSE = (
     '{"market_judgment": "mj", "confidence": "中", "limitations": [], '
     '"invalidation_conditions": [], "evidence_ids": ["ev-001"], "follow_up_watchpoints": ["w1"]}'
 )
+BULL_RESPONSE = '{"argument": "bull arg", "evidence_ids": ["ev-001"]}'
+# 反方自報「已無新論點」→ 辯論在第一輪就收斂，整條鏈維持 5 次呼叫
+BEAR_CONVERGED_RESPONSE = (
+    '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], "has_new_points": false}'
+)
+
+
+class RecordingClient(FakeLLMClient):
+    """額外把送出的 user prompt 依序記下來，供 prompt 內容斷言使用。"""
+
+    def __init__(self, responses: list):
+        super().__init__(responses)
+        self.prompts: list[str] = []
+
+    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
+        self.prompts.append(user_prompt)
+        return super().converse(system_prompt, user_prompt, max_tokens)
 
 
 def test_debate_happy_path_populates_bull_and_bear():
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
-        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',  # Step C1 正方
-        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',  # Step C2 反方
+        BULL_RESPONSE,  # Step C1 正方
+        BEAR_CONVERGED_RESPONSE,  # Step C2 反方
         STEP_D_RESPONSE,
     ]
     client = FakeLLMClient(responses)
@@ -71,7 +92,214 @@ def test_debate_happy_path_populates_bull_and_bear():
     assert client.call_count == 5
 
 
-def test_debate_failure_falls_back_to_single_model_inference():
+def test_bear_reporting_no_new_points_stops_the_debate_early():
+    """反方自報已無新論點時，辯論在第一輪收斂，不再進第二輪。"""
+    client = FakeLLMClient(
+        [STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, BEAR_CONVERGED_RESPONSE, STEP_D_RESPONSE]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 1
+    assert result.debate["stopped_reason"] == "converged"
+    assert result.debate["rounds"][0]["bear_has_new_points"] is False
+    assert client.call_count == 5  # 沒有多花第二輪的兩次呼叫
+
+
+def test_debate_runs_second_round_when_bear_still_has_new_points():
+    """反方仍有新論點 → 進第二輪（正方反駁 → 反方再駁），並在輪數上限停下。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            '{"argument": "bull r1", "evidence_ids": ["ev-001"]}',
+            '{"critique": "crit r1", "argument": "bear r1", "evidence_ids": ["ev-002"], "has_new_points": true}',
+            '{"argument": "bull r2", "evidence_ids": ["ev-003"]}',
+            '{"critique": "crit r2", "argument": "bear r2", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(3), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 2
+    assert result.debate["stopped_reason"] == "max_rounds"
+    assert [r["round"] for r in result.debate["rounds"]] == [1, 2]
+    # 相容層：論證取最後一輪（最精煉），evidence id 取全部輪次聯集
+    assert result.debate["bull_argument"] == "bull r2"
+    assert result.debate["bear_critique"] == "crit r2"
+    assert result.debate["bull_evidence_ids"] == ["ev-001", "ev-003"]
+    assert result.debate["bear_evidence_ids"] == ["ev-002", "ev-001"]
+    assert client.call_count == 7  # 5 + 第二輪的 2 次
+
+
+def test_second_round_bull_sees_the_previous_rounds_critique():
+    """正方反駁時必須拿得到反方上一輪的批評，否則第二輪只是重講一次。"""
+    client = RecordingClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            '{"argument": "bull r1", "evidence_ids": ["ev-001"]}',
+            '{"critique": "你把單日量能當成趨勢", "argument": "bear r1", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            '{"argument": "bull r2", "evidence_ids": ["ev-001"]}',
+            BEAR_CONVERGED_RESPONSE,
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    second_round_bull_prompt = client.prompts[4]
+    assert "你把單日量能當成趨勢" in second_round_bull_prompt
+    assert "第 2 輪" in second_round_bull_prompt
+
+
+@pytest.mark.parametrize(
+    "raw_value, expected_rounds, expected_reason",
+    [
+        ("false", 1, "converged"),  # 字串而非 JSON boolean
+        ('"false"', 1, "converged"),  # 帶引號的字串
+        ("否", 1, "converged"),  # 中文
+        ("0", 1, "converged"),  # 數字 0
+    ],
+)
+def test_has_new_points_accepts_non_boolean_forms(raw_value, expected_rounds, expected_reason):
+    """模型不一定回 JSON boolean，回字串/中文/數字時收斂機制仍要生效。"""
+    bear = json.dumps(
+        {
+            "critique": "crit",
+            "argument": "bear arg",
+            "evidence_ids": ["ev-001"],
+            "has_new_points": raw_value,
+        },
+        ensure_ascii=False,
+    )
+    client = FakeLLMClient([STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, bear, STEP_D_RESPONSE])
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == expected_rounds
+    assert result.debate["stopped_reason"] == expected_reason
+
+
+def test_has_new_points_unparseable_value_keeps_debating():
+    """無法判讀時要預設繼續辯論，不能因為模型亂填就把辯論悄悄砍成單輪。"""
+    bear = (
+        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], '
+        '"has_new_points": "看情況"}'
+    )
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            bear,
+            '{"argument": "bull r2", "evidence_ids": ["ev-001"]}',
+            BEAR_CONVERGED_RESPONSE,
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 2
+
+
+def test_deadline_stops_the_debate_before_starting_another_round():
+    """剩餘時間不足時要收在當輪，把時間留給裁判。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            # 反方說還有新論點，正常情況下會進第二輪
+            '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning(
+        "BTC",
+        "分析 BTC 市場狀態",
+        _evidences(),
+        dry_run=False,
+        llm_client=client,
+        deadline=time.monotonic() - 1,  # 已經超時
+    )
+
+    assert result.debate["round_count"] == 1
+    assert result.debate["stopped_reason"] == "deadline"
+    assert result.conclusion["market_judgment"] == "mj"  # 裁判仍然跑完
+    assert client.call_count == 5  # 沒有進第二輪
+
+
+def test_no_deadline_means_unlimited():
+    """不傳 deadline 時維持原行為，不受時間影響。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            '{"argument": "bull r2", "evidence_ids": ["ev-001"]}',
+            BEAR_CONVERGED_RESPONSE,
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 2
+
+
+def test_bull_rebuttal_failure_keeps_the_completed_rounds():
+    """第二輪正方失敗時，第一輪的完整辯論要保留，不能整個作廢。"""
+    client = FakeLLMClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            '{"argument": "bull r1", "evidence_ids": ["ev-001"]}',
+            '{"critique": "crit r1", "argument": "bear r1", "evidence_ids": ["ev-001"], "has_new_points": true}',
+            RuntimeError("simulated failure on round 2 bull"),
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.debate["round_count"] == 1
+    assert result.debate["stopped_reason"] == "bull_failed"
+    assert result.debate["bull_argument"] == "bull r1"
+    assert len(result.inference) == 2
+    assert result.conclusion["market_judgment"] == "mj"
+    assert client.call_count == 6
+
+
+def test_debate_passes_bear_critique_to_the_judge():
+    """反方對正方的批評必須進到 Step D 的 prompt。
+
+    critique 不在 inference 裡（inference 只攤平了雙方的 argument），
+    早期版本因此讓裁判在完全沒看到反駁的情況下下結論。
+    """
+    client = RecordingClient(
+        [
+            STEP_A_RESPONSE,
+            STEP_B_RESPONSE,
+            BULL_RESPONSE,
+            '{"critique": "正方過度解讀了量能數據", "argument": "bear arg", '
+            '"evidence_ids": ["ev-001"], "has_new_points": false}',
+            STEP_D_RESPONSE,
+        ]
+    )
+
+    run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    step_d_prompt = client.prompts[-1]
+    assert "正方過度解讀了量能數據" in step_d_prompt
+    assert "裁判守則" in step_d_prompt
+
+
+def test_bull_failure_falls_back_to_single_model_inference():
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
@@ -90,12 +318,38 @@ def test_debate_failure_falls_back_to_single_model_inference():
     assert client.call_count == 5
 
 
+def test_bear_failure_keeps_the_bull_argument_instead_of_discarding_it():
+    """C2 失敗時，C1 已經花掉一次呼叫產出的正方論證要保留，不能整段丟掉重跑。"""
+    responses = [
+        STEP_A_RESPONSE,
+        STEP_B_RESPONSE,
+        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',  # Step C1 成功
+        RuntimeError("simulated network failure on bear step"),  # Step C2 失敗
+        '{"inference": [{"hypothesis": "h", "supporting_evidence_ids": ["ev-001"], "opposing_evidence_ids": []}]}',  # fallback Step C
+        STEP_D_RESPONSE,
+    ]
+    client = FakeLLMClient(responses)
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    # 單方面的辯論不成立，debate 維持空 dict，報告與四面板不會呈現成完整辯論
+    assert result.debate == {}
+    # 正方論證仍以假設的形式保留下來，並由單模型補上對立假設
+    assert len(result.inference) == 2
+    assert result.inference[0]["hypothesis"] == "[正方] bull arg"
+    assert result.inference[0]["supporting_evidence_ids"] == ["ev-001"]
+    assert result.inference[1]["hypothesis"] == "h"
+    assert result.conclusion["market_judgment"] == "mj"
+    assert client.call_count == 6
+
+
 def test_comparison_mode_threads_coin2_through_result():
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
         '{"argument": "bull arg for BTC", "evidence_ids": ["ev-001"]}',
-        '{"critique": "crit", "argument": "bear arg for ETH", "evidence_ids": ["ev-001"]}',
+        '{"critique": "crit", "argument": "bear arg for ETH", "evidence_ids": ["ev-001"], '
+        '"has_new_points": false}',
         STEP_D_RESPONSE,
     ]
     client = FakeLLMClient(responses)
@@ -122,8 +376,8 @@ def test_debate_happy_path_works_for_every_supported_coin(coin):
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
-        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',
-        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',
+        BULL_RESPONSE,
+        BEAR_CONVERGED_RESPONSE,
         STEP_D_RESPONSE,
     ]
     client = FakeLLMClient(responses)
@@ -151,8 +405,8 @@ def test_fake_llm_client_accumulates_usage():
     responses = [
         STEP_A_RESPONSE,
         STEP_B_RESPONSE,
-        '{"argument": "bull arg", "evidence_ids": ["ev-001"]}',
-        '{"critique": "crit", "argument": "bear arg", "evidence_ids": ["ev-001"]}',
+        BULL_RESPONSE,
+        BEAR_CONVERGED_RESPONSE,
         STEP_D_RESPONSE,
     ]
     client = FakeLLMClient(responses)

@@ -95,6 +95,53 @@ def test_build_report_markdown_executive_summary_with_debate():
     assert md.index("## 執行摘要") < md.index("## 1. 結論")
 
 
+def test_build_report_markdown_executive_summary_cites_last_round_not_union():
+    """回歸測試（隊友3發現）：執行摘要顯示的論證文字已經是最後一輪，
+    引用 id 清單也要對齊最後一輪，不是所有輪次的聯集——否則會列出文字
+    裡其實沒提到的證據 id（例如正方第 2 輪已經放棄引用的 ev-001）。"""
+    evidences = [make_evidence("ev-001"), make_evidence("ev-002"), make_evidence("ev-003")]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "市場判斷內容", "confidence": "中", "evidence_ids": ["ev-001"]},
+        debate={
+            "rounds": [
+                {
+                    "round": 1,
+                    "bull_argument": "第一輪正方論證",
+                    "bull_evidence_ids": ["ev-001"],
+                    "bear_critique": "第一輪批評",
+                    "bear_argument": "第一輪反方論證",
+                    "bear_evidence_ids": ["ev-002"],
+                },
+                {
+                    "round": 2,
+                    "bull_argument": "第二輪正方論證（修正版）",
+                    "bull_evidence_ids": ["ev-003"],
+                    "bear_critique": "第二輪批評",
+                    "bear_argument": "第二輪反方論證（最終）",
+                    "bear_evidence_ids": [],
+                },
+            ],
+            "round_count": 2,
+            "stopped_reason": "max_rounds",
+            "bull_argument": "第二輪正方論證（修正版）",
+            "bull_evidence_ids": ["ev-001", "ev-003"],  # 聯集，report 引用檢查用
+            "bear_critique": "第二輪批評",
+            "bear_argument": "第二輪反方論證（最終）",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=55,
+    )
+    md = build_report_markdown("BTC", "測試題目", result, evidences)
+    exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
+
+    assert "第二輪正方論證（修正版）" in exec_section
+    bull_citation_line = [l for l in exec_section.splitlines() if l.startswith("（引用：")][0]
+    assert bull_citation_line == "（引用：ev-003）"
+    assert "ev-001" not in bull_citation_line
+
+
 def test_build_report_markdown_executive_summary_without_debate_falls_back():
     """無辯論（fallback 路徑）時，執行摘要要誠實標示，不能假裝有辯論內容。"""
     evidences = [make_evidence("ev-001")]

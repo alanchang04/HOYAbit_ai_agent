@@ -103,12 +103,17 @@ Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema；
 - [x] 5.3 合規檢查：全部面板文案無投資建議語彙；INTACT=分析完整性；效能實測新增耗時
       （不含 baseline）<2 秒＿R9
 
-## Phase 6 — 最終驗證 [BLOCKED: bedrock]
+## Phase 6 — 最終驗證（Bedrock 已打通，2026-07-24）
 
-- [-] 6.1 Bedrock 煙測（sts → check_llm.py → 必要時 inference profile／max_tokens 4096／
-      stopReason 檢查）＿R10-2
-- [~] 6.2 Bedrock 3 題型端到端＋四面板／usage 核對；Gemini 額度允許時先預演一次＿R10-2
-- [~] 6.3 簡報素材：Kiro 工作流截圖＋AgentCore 取捨說明段落＿R11-4
+- [x] 6.1 Bedrock 煙測（region `ap-northeast-1`，模型 Claude Sonnet 4.5 透過
+      `jp.anthropic.claude-sonnet-4-5-20250929-v1:0` 推論設定檔）；過程中修好
+      max_tokens 2048→4096（辯論長論證被截斷導致 JSON 解析失敗，commit
+      `ed11036`）＿R10-2
+- [x] 6.2 Bedrock 3 題型端到端＋四面板／usage 核對：多源整合（BTC，8 次呼叫／
+      80,718 tokens／309.6s）、假設驗證（ETH，7 次／47,250 tokens／178.7s，
+      辯論自然收斂非硬停）、比較分析（BTC vs SOL，8 次／110,268 tokens／
+      357.4s）皆完整跑完，report.md／四面板渲染正確＿R10-2
+- [ ] 6.3 簡報素材：Kiro 工作流截圖＋AgentCore 取捨說明段落——尚未製作＿R11-4
 
 ## Phase 7 — 資料層改版：採用 Ken 的信任評分設計（filters 層已完成）
 
@@ -139,8 +144,8 @@ Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema；
 - [x] 7.7 更新受影響測試（`test_source_weights.py`／`test_content_filter.py` 重寫、
       `test_dedup.py` 新增）＋新增覆蓋度 vs 覆蓋率不混用的回歸測試
       （226 個 pytest 全綠，含 dry-run 端到端實測）
-- [ ] 7.8 Bedrock 開通後（Phase 6 之後）用真實 pipeline 確認四面板數字仍可對帳
-      （L1/L3 metrics 改版後 view_builder 是否仍正確組裝）[BLOCKED: bedrock]
+- [x] 7.8 Bedrock 開通後用真實 pipeline 確認四面板數字仍可對帳——已隨 Phase 6.2
+      的 3 題型真實驗證一併確認，L1/L3 metrics／view_builder 組裝皆正確
 - [x] 7.9 F9 情緒分布分析詞典法 MVP（非 R12，R4-2 佔位升級、Alan 認領項）：
       正/負面詞典 word-boundary 統計、去重後樣本、單向占比 ≥80% 且樣本 ≥5 標
       羊群警示；觀察性指標不動權重；面板③ L2 與 log 皆有輸出
@@ -163,3 +168,22 @@ Phase 7（資料層改版，R12）── 設計依賴 Phase 1-2 的 schema；
   裁定並記錄於 `requirements.md`（架構決策記錄）、`design.md`（文件頂部＋
   Property 6）、`team-division.md`（架構分歧章節），三份文件互為交叉引用，
   修改其中一份時建議一併檢查其餘兩份是否同步。
+- **2026-07-22～24 追加進度（尚未在 Phase 編號中，先記在這裡）**：
+  - 隊友3的多輪辯論方案（`origin/debate-dev`）已合併：Step C 迴圈化上限
+    2 輪、反方 `has_new_points` 自報收斂、時間預算防護、debate dict 對下游
+    保留 `bull_*`/`bear_*` 相容層。「多輪辯論 vs Best-of-N」已定案選前者，
+    team-division.md 該項待對齊可標記已解決。
+  - 四面板面板③追加逐輪辯論完整顯示（原本只顯示相容層最後一輪）；L5 層
+    預設展開（其餘層維持收合），避免多輪內容被藏在雙層摺疊框裡沒人發現。
+  - 新增 `agent/report/text_formatting.py`：LLM 長文（market_judgment／
+    bull_argument／bear_argument）改走 markdown 渲染，處理內嵌括號編號與
+    中文序數詞（首先/其次/第三...）兩種 markdown 原生不認得的列點寫法。
+  - Bedrock 已完整打通並用 3 題型真實驗證（見上方 Phase 6.2），過程中修好
+    `max_tokens` 截斷 bug。
+  - AWS 部署進行中：ECR image 已 push（`hoyabit-agent:latest`），App Runner
+    所需兩個 IAM role 已建立，但**建立 service 本身被 AWS 帳號「Free plan」
+    限制擋住**（`SubscriptionRequiredException`），需帳號完成驗證或升級方案
+    才能繼續，非程式或權限問題。
+  - `origin/ken` 分支已合併（`244c7ca`），team-division.md「仍待對齊 #6」
+    可標記已解決；但 #2（雙幣相對指標歸屬）與 #5（Ken 未收斂的暫定值校準）
+    仍待實際跟 Ken 對，合併動作本身不等於協調完成。

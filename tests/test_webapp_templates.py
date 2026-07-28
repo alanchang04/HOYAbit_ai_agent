@@ -78,6 +78,23 @@ def test_view_page_renders_four_panels(client: TestClient, dry_run_result: dict)
     assert "fingerprint-badge" in html
 
 
+def test_view_page_l5_layer_expanded_by_default(client: TestClient, dry_run_result: dict) -> None:
+    """回歸測試：面板③每層預設收合，導致多輪辯論內容（在 L5_conclusion 層）
+    被藏在兩層摺疊框裡、使用者很容易完全沒發現。L5 應預設展開，其餘層維持收合。"""
+    html = client.get(f"/view/{dry_run_result['run_id']}").text
+
+    layer_blocks = re.findall(r'<details class="layer-details"[^>]*>\s*<summary[^>]*>\s*<span class="layer-badge">([^<]+)</span>', html)
+    assert "L5_conclusion" in layer_blocks
+
+    l5_match = re.search(r'<details class="layer-details"( open)?>\s*<summary class="layer-summary">\s*<span class="layer-badge">L5_conclusion</span>', html)
+    assert l5_match is not None
+    assert l5_match.group(1) == " open"
+
+    l1_match = re.search(r'<details class="layer-details"( open)?>\s*<summary class="layer-summary">\s*<span class="layer-badge">L1_source</span>', html)
+    assert l1_match is not None
+    assert l1_match.group(1) is None
+
+
 def test_view_page_unknown_run_id_404(client: TestClient) -> None:
     resp = client.get("/view/doesnotexist")
     assert resp.status_code == 404
