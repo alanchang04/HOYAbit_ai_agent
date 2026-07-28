@@ -27,6 +27,78 @@ USER_AGENT = "hoyabit-crypto-agent/1.0"
 # 項目可能整批變空，標記比濾除更安全。
 NEWS_RECENCY_WINDOW_DAYS = 14
 
+# 併自 pipeline/fetch_news.py（Step 25）：對照 02改_資料網格.html 的
+# news-coin-keywords spec，每幣 3-6 個特有主題，各掛幾個英文關鍵字（官方源
+# 文章多是英文）。只比對標題＋摘要的大小寫不敏感 substring，不是語意分類——
+# 沒命中不代表本週沒這個敘事，只代表這批標題／摘要沒直接提到，報告措辭要
+# 照這個誠實。
+NARRATIVE_KEYWORDS: dict[str, dict[str, list[str]]] = {
+    "BTC": {
+        "ETF 資金流": ["etf", "inflow", "outflow"],
+        "企業／國家儲備": ["reserve", "treasury", "strategic bitcoin"],
+        "減半供給敘事": ["halving", "halve", "block reward"],
+        "挖礦算力": ["hashrate", "hash rate", "miner", "mining"],
+    },
+    "ETH": {
+        "網路升級": ["pectra", "fusaka", "glamsterdam", "hard fork", "upgrade"],
+        "質押／再質押": ["staking", "restaking", "validator"],
+        "L2 生態": ["layer 2", "l2", "rollup", "optimism", "arbitrum", "base"],
+        "ETH ETF": ["etf"],
+    },
+    "SOL": {
+        "網路穩定性／宕機": ["outage", "downtime", "degraded"],
+        "memecoin 生態": ["memecoin", "meme coin", "pump.fun"],
+        "支付／DePIN": ["payments", "depin", "point of sale", "pay"],
+        "SOL ETF": ["etf"],
+    },
+    "BNB": {
+        "季度銷毀": ["burn"],
+        "BNB Chain 生態升級": ["upgrade", "hard fork", "opbnb", "greenfield"],
+    },
+    "XRP": {
+        "SEC 案終局／監管明確化": ["sec", "lawsuit", "regulation", "regulatory"],
+        "RLUSD 穩定幣": ["rlusd", "stablecoin"],
+        "跨境支付 ODL": ["odl", "cross-border", "cross border", "on-demand liquidity"],
+        "XRP ETF": ["etf"],
+    },
+}
+
+# 有些站的單篇文章頁沒設專屬 og:description，會退回網站全站通用標語（og:title
+# 仍是文章專屬的，只有 description 這欄位是罐頭文字）。實測發現 Ripple Insights
+# 5 篇裡有 3 篇是這句——不是文章摘要，混進比對會誤導成「這篇在講這個」，直接
+# 濾掉當作沒有摘要。之後如果其他站也踩到同款罐頭文字，往這個集合加就好。
+GENERIC_DESCRIPTION_FALLBACKS = {
+    "ripple is the leading blockchain payments company.",
+}
+
+
+def tag_narrative_topics(coin: str, *texts: str) -> list[str]:
+    combined = " ".join(texts).lower()
+    return [
+        topic
+        for topic, keywords in NARRATIVE_KEYWORDS.get(coin.upper(), {}).items()
+        if any(kw in combined for kw in keywords)
+    ]
+
+
+def strip_html(text: str) -> str:
+    return BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+
+
+async def _fetch_meta_description(client: httpx.AsyncClient, url: str) -> str:
+    """點進單篇文章頁抓 og:description／meta description 當內文摘要——BNB／XRP
+    這兩站的本文卡在破碎的 emotion-css div 裡抓不穩，但社群分享用的 meta
+    description 兩邊都有乾淨的一段文字，比硬解析內文可靠。"""
+    resp = await client.get(url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for attrs in ({"property": "og:description"}, {"name": "description"}):
+        tag = soup.find("meta", attrs=attrs)
+        content = tag["content"].strip() if tag and tag.get("content") else ""
+        if content and content.lower() not in GENERIC_DESCRIPTION_FALLBACKS:
+            return content
+    return ""
+
 
 def _parse_rss_published(entry: dict) -> datetime | None:
     parsed = entry.get("published_parsed")
@@ -167,6 +239,9 @@ class NewsCollector(BaseCollector):
                         parsed = feedparser.parse(resp.text)
                         for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
                             recency = _recency_note(_parse_rss_published(entry), now)
+                            summary = strip_html(entry.get("summary", "")) if entry.get("summary") else ""
+                            topics = tag_narrative_topics(coin, entry.get("title", ""), summary)
+                            topics_note = f"｜特有題材：{'・'.join(topics)}" if topics else ""
                             evidences.append(
                                 EvidenceDraft(
                                     coin=coin,
@@ -176,7 +251,7 @@ class NewsCollector(BaseCollector):
                                     content_reference=(
                                         f"標題：{entry.get('title', '')}"
                                         f"｜發布時間：{entry.get('published', '未知')}"
-                                        f"{recency}"
+                                        f"{recency}{topics_note}"
                                     ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",
@@ -185,6 +260,13 @@ class NewsCollector(BaseCollector):
                     else:
                         for item in HTML_SCRAPERS[source["name"]](resp.text):
                             recency = _recency_note(_parse_html_published(item["published"]), now)
+                            summary = ""
+                            try:
+                                summary = await _fetch_meta_description(client, item["url"])
+                            except Exception as exc:  # noqa: BLE001
+                                self.log_subsource(f"{sub_name}_summary", coin, LogStatus.SKIPPED, f"error={exc}")
+                            topics = tag_narrative_topics(coin, item["title"], summary)
+                            topics_note = f"｜特有題材：{'・'.join(topics)}" if topics else ""
                             evidences.append(
                                 EvidenceDraft(
                                     coin=coin,
@@ -192,7 +274,7 @@ class NewsCollector(BaseCollector):
                                     source_url=item["url"],
                                     fetched_at=now_iso(),
                                     content_reference=(
-                                        f"標題：{item['title']}｜發布時間：{item['published']}{recency}"
+                                        f"標題：{item['title']}｜發布時間：{item['published']}{recency}{topics_note}"
                                     ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",

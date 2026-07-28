@@ -11,7 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.collectors.derivatives import DerivativesCollector, crowd_label, percentile_rank
+from agent.collectors.derivatives import (
+    DerivativesCollector,
+    coinbase_premium_label,
+    crowd_label,
+    percentile_rank,
+)
 from agent.logging_utils import ExecutionLogger
 from agent.schemas import LogStatus
 
@@ -119,10 +124,26 @@ def _hyperliquid_meta() -> list:
     return [meta, asset_ctxs]
 
 
-def _build_router(*, funding_rate=0.0002, oi_ok=True, ls_ok=True, term_ok=True, cot_ok=True, options_ok=True, cex_dex_ok=True):
+def _build_router(
+    *,
+    funding_rate=0.0002,
+    oi_ok=True,
+    ls_ok=True,
+    term_ok=True,
+    cot_ok=True,
+    options_ok=True,
+    cex_dex_ok=True,
+    coinbase_ok=True,
+):
     """依 URL 分派假回應，任何一段可以關掉（回傳失敗）來測試隔離。"""
 
     async def mock_get(url, **kwargs):
+        if "coinbase.com" in url:
+            if not coinbase_ok:
+                raise RuntimeError("simulated coinbase failure")
+            return _resp({"price": "100.5"})
+        if "api.binance.com/api/v3/ticker/price" in url:
+            return _resp({"price": "100.0"})
         if "fundingRate" in url:
             if funding_rate is None:
                 raise RuntimeError("simulated funding rate failure")
@@ -189,8 +210,15 @@ def test_percentile_rank_and_crowd_label():
     assert crowd_label(50.0) == "中性區間"
 
 
+def test_coinbase_premium_label():
+    assert "偏高" in coinbase_premium_label(0.2)
+    assert "偏低" in coinbase_premium_label(-0.2)
+    assert "正常雜訊範圍內" in coinbase_premium_label(0.05)
+    assert "正常雜訊範圍內" in coinbase_premium_label(-0.05)
+
+
 @pytest.mark.asyncio
-async def test_all_seven_subsources_produce_evidence(mock_logger):
+async def test_all_eight_subsources_produce_evidence(mock_logger):
     mock_get, mock_post = _build_router()
     collector = DerivativesCollector(mock_logger)
 
@@ -198,12 +226,17 @@ async def test_all_seven_subsources_produce_evidence(mock_logger):
         mock_client_cls.return_value = _patched_client(mock_get, mock_post)
         evidences = await collector.fetch("BTC")
 
-    assert len(evidences) == 7
+    assert len(evidences) == 8
     assert all(e.source_type == "derivatives" for e in evidences)
     assert all(e.coin == "BTC" for e in evidences)
 
     funding_ev = next(e for e in evidences if "fundingRate" in e.source)
     assert "百分位" in funding_ev.content_reference
+
+    coinbase_ev = next(e for e in evidences if "Coinbase Exchange" in e.source)
+    assert "溢價" in coinbase_ev.content_reference
+    # router 假回應：coinbase=100.5, binance=100.0 → +0.5%
+    assert "+0.5000%" in coinbase_ev.content_reference
 
 
 @pytest.mark.asyncio
@@ -226,7 +259,7 @@ async def test_cme_cot_skips_bnb_without_network_call(mock_logger):
 
 @pytest.mark.asyncio
 async def test_single_subsource_failure_does_not_block_others(mock_logger):
-    """費率擁擠度打 API 失敗時，其他六項子來源仍要各自產出證據，不能整個 fetch() 掛掉。"""
+    """費率擁擠度打 API 失敗時，其他七項子來源仍要各自產出證據，不能整個 fetch() 掛掉。"""
     mock_get, mock_post = _build_router(funding_rate=None)
     collector = DerivativesCollector(mock_logger)
 
@@ -234,11 +267,29 @@ async def test_single_subsource_failure_does_not_block_others(mock_logger):
         mock_client_cls.return_value = _patched_client(mock_get, mock_post)
         evidences = await collector.fetch("BTC")
 
-    assert len(evidences) == 6
+    assert len(evidences) == 7
     assert not any("fundingRate" in e.source for e in evidences)
     entries = mock_logger.read_all()
     assert any(
         e.status == LogStatus.ERROR and "funding_rate_percentile" in e.action for e in entries
+    )
+
+
+@pytest.mark.asyncio
+async def test_coinbase_premium_failure_does_not_block_others(mock_logger):
+    """Coinbase 沒有某幣掛牌或連線失敗時，其他七項子來源仍要各自產出證據。"""
+    mock_get, mock_post = _build_router(coinbase_ok=False)
+    collector = DerivativesCollector(mock_logger)
+
+    with patch("agent.collectors.derivatives.httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value = _patched_client(mock_get, mock_post)
+        evidences = await collector.fetch("BTC")
+
+    assert len(evidences) == 7
+    assert not any("Coinbase Exchange" in e.source for e in evidences)
+    entries = mock_logger.read_all()
+    assert any(
+        e.status == LogStatus.ERROR and "coinbase_premium" in e.action for e in entries
     )
 
 

@@ -28,6 +28,12 @@ MA_WINDOWS = (20, 60, 120)
 # 會失真，跟其他 prototype 的門檻一致）。
 VOL_PERCENTILE_WINDOW = 14
 VOL_PERCENTILE_MIN_SAMPLE = 90
+# 併自 pipeline/compute_volatility_compression.py：跟上面的全歷史百分位
+# 是不同題目——這裡回答「近期是否相對『近 90 天』悶」，用固定滾動視窗，
+# 不是擴張視窗；20 天日報酬標準差窗口跟 90 天排百分位窗口都沿用 prototype
+# 原始常數，不跟 VOL_PERCENTILE_WINDOW（14天/全歷史）共用。
+VOL_COMPRESSION_WINDOW = 20
+VOL_COMPRESSION_PCTL_WINDOW = 90
 
 
 def load_ohlcv_all(coin: str, data_dir: str) -> list[dict]:
@@ -91,6 +97,41 @@ def compute_historical_volatility_percentile(
     latest_vol = vol_history[-1]
     percentile = sum(1 for v in vol_history if v <= latest_vol) / len(vol_history) * 100
     return {"vol_pct": latest_vol, "percentile_alltime": percentile, "sample_size": len(vol_history)}
+
+
+def compute_volatility_compression(
+    full_closes: list[float],
+    window: int = VOL_COMPRESSION_WINDOW,
+    pctl_window: int = VOL_COMPRESSION_PCTL_WINDOW,
+) -> dict | None:
+    """依全歷史收盤價序列，算近 window 天日報酬標準差，相對「近 pctl_window
+    天」這段固定滾動視窗的百分位——回答「近期是否相對近期悶」，跟
+    `compute_historical_volatility_percentile()` 的擴張視窗（回答「相對全歷史
+    的位置」）是不同題目，兩者不能互相取代。對照
+    pipeline/compute_volatility_compression.py 的 compute_volatility_series()。
+
+    累積樣本數不到 pctl_window 時回傳 None，呼叫端應顯示「資料不足」。
+    """
+    if len(full_closes) < window + 1:
+        return None
+
+    returns = [0.0]
+    for i in range(1, len(full_closes)):
+        prev = full_closes[i - 1]
+        returns.append((full_closes[i] - prev) / prev * 100 if prev else 0.0)
+
+    vol_history: list[float] = []
+    for i in range(len(full_closes)):
+        if i + 1 >= window:
+            vol_history.append(statistics.pstdev(returns[i - window + 1 : i + 1]))
+
+    if len(vol_history) < pctl_window:
+        return None
+
+    latest_vol = vol_history[-1]
+    recent_window = vol_history[-pctl_window:]
+    percentile = sum(1 for v in recent_window if v <= latest_vol) / len(recent_window) * 100
+    return {"vol_20d_pct": latest_vol, "percentile_90d": percentile}
 
 
 def compute_technical_indicators(rows: list[dict], full_closes: list[float] | None = None) -> dict:
@@ -159,6 +200,10 @@ def compute_technical_indicators(rows: list[dict], full_closes: list[float] | No
         result["volatility_percentile_alltime"] = hist["percentile_alltime"] if hist else None
         result["volatility_percentile_sample_size"] = hist["sample_size"] if hist else None
 
+        compression = compute_volatility_compression(full_closes)
+        result["vol_compression_20d_pct"] = compression["vol_20d_pct"] if compression else None
+        result["vol_compression_percentile_90d"] = compression["percentile_90d"] if compression else None
+
     return result
 
 
@@ -185,10 +230,21 @@ def summarize_technical_indicators(indicators: dict) -> str:
     else:
         vol_percentile_part = "（全歷史百分位：資料不足）"
 
+    compression_pctl = indicators.get("vol_compression_percentile_90d")
+    if compression_pctl is not None:
+        c_lean = "偏悶（盤整彈藥）" if compression_pctl < 50 else "偏熱（相對近90天高波動期）"
+        compression_part = (
+            f"近20日日報酬波動率={indicators['vol_compression_20d_pct']:.2f}%，"
+            f"90天滾動百分位={compression_pctl:.1f}（{c_lean}）"
+        )
+    else:
+        compression_part = "近90天波動壓縮度百分位：資料不足"
+
     return (
         f"SMA7={indicators['sma7']:.2f}, SMA14={indicators['sma14']:.2f}"
         f"（現價{trend} SMA7）, RSI14={indicators['rsi14']:.1f}（{rsi_zone}區間）, "
         f"近14日日報酬波動率={indicators['volatility_pct']:.2f}%{vol_percentile_part}, "
+        f"{compression_part}, "
         f"近7日量能較前7日變化={indicators['volume_trend_pct']:+.2f}%, "
         + "，".join(ma_parts)
     )

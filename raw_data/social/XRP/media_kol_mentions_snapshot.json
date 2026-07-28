@@ -1,0 +1,22 @@
+{
+  "coin": "XRP",
+  "mention_count": 2,
+  "items": [
+    {
+      "feed": "NEWS",
+      "title": "美国XRP现货ETF单日总净流入59.25万美元",
+      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）XRP 现货 ETF 单日总净流入 59.25 万美元。 昨日仅 Franklin XRP ETF(XRPZ) 净流入，单日净流入 59.25 万美元，目前历史总净流入达 4.22 亿美元。 截至发稿前，XRP 现货 ETF 总资产净值为 10.02 亿美元，XRP 净资产比率 1.47%，历史累计净流入已达 14.95 亿美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa67c-642d-77ea-9d2c-28243d50498d",
+      "published": "Tue, 28 Jul 2026 02:09:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
+      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
+      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
+      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-28T09:44:52Z"
+}

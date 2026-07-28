@@ -1,0 +1,78 @@
+{
+  "coin": "ETH",
+  "mention_count": 10,
+  "items": [
+    {
+      "feed": "NEWS",
+      "title": "Across Protocol 攻击者退回331.8枚ETH被黑资金至以太坊多签",
+      "summary": "PANews 7月28日消息，据PeckShield 称，Across Protocol 此前在 Solana 上遭攻击，约360万美元加密资产被转出。最新链上数据显示，攻击者标记地址已向 Across Protocol Hub Pool Owner 多签地址退回331.8枚 ETH，价值约624万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa80d-44ca-768b-b37d-ab6a79ad011d",
+      "published": "Tue, 28 Jul 2026 09:25:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "江卓尔：BTC已跌破上升通道，做空目标从ETH切换至BTC",
+      "summary": "PANews 7月28日消息，莱比特矿池创始人江卓尔表示：“这一轮走完，我不空ETH了，改空BTC。”其解释称，此前策略为将ETH质押为WBETH作为保证金，在永续合约等量开空ETH，等效于卖出现货且无杠杆和强平风险，同时保留质押利息收益并收取多头资金费率，仅需存放少量ETH保证金以降低交易所风险。新策略改为以WBETH作为保证金，做空按汇率折算的等量BTC现货。",
+      "url": "https://www.panewslab.com/zh/articles/019fa797-90d7-7225-a3cb-2f5f7ee06f6d",
+      "published": "Tue, 28 Jul 2026 07:19:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "以太坊现货ETF昨日总净流入923万美元，贝莱德ETHA净流入1175万美元居首",
+      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）以太坊现货 ETF 总净流入 923 万美元。 昨日单日净流入最多的以太坊现货 ETF 为贝莱德（Blackrock） ETF ETHA，单日净流入为 1175 万美元，目前 ETHA 历史总净流入达 114.2 亿美元。 昨日单日净流出最多的以太坊现货 ETF 为Invesco ETF QETH，单日净流出为 252 万美元，目前 QETH 历史总净流入达 2210 万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa6e2-cb4d-72e8-a8ae-dd77f7825201",
+      "published": "Tue, 28 Jul 2026 04:01:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "币安将停止支持Sophon（SOPH）主网",
+      "summary": "PANews 7月28日消息，据官方公告，币安将停止支持Sophon（SOPH）主网，并开放Sophon（SOPH）通过以太坊（ERC20）网络进行充值和提现。注意：币安将于2026年08月04日16:00（东八区时间）暂停上述代币在Sophon主网的充值、提现业务。迁移完成后，上述代币将不再支持Sophon主网的充值和提现。迁移期间，现货交易、杠杆交易、合约交易、币安理财的服务将不受影响。币安将协助在其币安账户中持有上述代币的用户处理所涉及的任何技术问题。",
+      "url": "https://www.panewslab.com/zh/articles/019fa6c7-9392-76fa-abf6-29dfa6a7d560",
+      "published": "Tue, 28 Jul 2026 03:32:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "某新钱包从币安提取2101枚ETH，约合395万美元",
+      "summary": "PANews 7月28日消息，据Lookonchain监测，近期多名巨鲸持续积累ETH。另一个新建钱包0x49D9在4小时前从Binance提取2101枚ETH（395万美元）。",
+      "url": "https://www.panewslab.com/zh/articles/019fa64f-b7ae-737b-989b-ad76f8865181",
+      "published": "Tue, 28 Jul 2026 01:21:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Arthur Hayes再次花费632万枚USDC场外买入3298枚ETH",
+      "summary": "PANews 7月28日消息，据链上分析师余烬监测，Arthur Hayes在关掉BitMEX后交易频率提升，2小时前通过FalconX和Galaxy Digital花费632万枚USDC场外买入3298枚ETH。自7月15日以来，其已累计花费1382万枚USDC买入7212.6枚ETH，均价1916美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa61e-71af-729c-935b-f714d532042d",
+      "published": "Tue, 28 Jul 2026 00:27:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
+      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
+      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
+      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Bitmine 4小时前从BitGo收到7500枚ETH，约合1461万美元",
+      "summary": "PANews 7月28日消息，据链上分析师余烬监测，Bitmine本周继续增持ETH，4小时前从BitGo收到7500枚ETH（1461万美元）。",
+      "url": "https://www.panewslab.com/zh/articles/019fa60c-547d-708f-9412-d21af07b4035",
+      "published": "Tue, 28 Jul 2026 00:07:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "分析：比特币未受AI抛售影响，但美联储关键会议或决定下一步方向",
+      "summary": "PANews 7月28日消息，据CoinDesk报道，比特币周一维持在65,000美元附近，过去几日上涨约4%，以太坊触及近两个月高点，而AI相关科技股承压下跌。分析师称本周美联储政策决议、通胀数据和科技巨头财报将决定比特币能否突破数月交易区间，还是回落至6月低点。 LMAX Group市场策略师表示，加密市场在传统市场波动期间的韧性令人鼓舞，支持数字资产开始与传统风险资产脱钩的观点。技术上，比特币需突破67,300美元才能走出自6月以来的盘整区间，以太坊面临2,000美元关键阻力。Bitmine董事长Tom Lee指出ETH/BTC比率升至三个月高点，是看涨信号。",
+      "url": "https://www.panewslab.com/zh/articles/019fa607-19f1-713d-8309-41ab288cc811",
+      "published": "Tue, 28 Jul 2026 00:03:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Bitwise：以太坊、Solana和Avalanche网络更活跃更便宜，即使代币价格下跌",
+      "summary": "PANews 7月28日消息，据The Block报道，以太坊、Solana和Avalanche在过去一年中网络活动增加且使用成本降低，但ETH、SOL和AVAX价格均下跌约50%或更多。Bitwise链上研究主管Kam Benbrik表示，网络基本面与市场情绪出现明显背离——链上活动实际在增长，但协议设计使区块空间更便宜，收入因此大幅下降。 Bitwise首次季度质押报告显示，二季度末以太坊质押量达4,020万枚ETH（占总供应量三分之一），新增质押主要来自机构。",
+      "url": "https://www.panewslab.com/zh/articles/019fa606-c388-719a-bb72-5796cde5c5dc",
+      "published": "Tue, 28 Jul 2026 00:02:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-28T09:44:52Z"
+}

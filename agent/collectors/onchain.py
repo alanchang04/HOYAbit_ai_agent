@@ -6,6 +6,10 @@
 
 from __future__ import annotations
 
+import csv
+import io
+from datetime import datetime, timezone
+
 import httpx
 
 from agent.collectors.base import BaseCollector
@@ -13,6 +17,16 @@ from agent.collectors.coin_map import get_coin_info
 from agent.schemas import EvidenceDraft, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
+
+# 併自 pipeline/fetch_onchain_history.py：只有 BTC/ETH 找到免 key 的免費歷史
+# 來源，SOL/BNB/XRP 仍是開放缺口（見 pipeline/待辦筆記/onchain_歷史資料.md）。
+HISTORY_TREND_DAYS = 30
+BTC_HISTORY_CHARTS: dict[str, tuple[str, str]] = {
+    "算力": ("hash-rate", "TH/s"),
+    "24h交易筆數": ("n-transactions", "筆"),
+    "Mempool待確認筆數": ("mempool-count", "筆"),
+    "Mempool大小": ("mempool-size", "bytes"),
+}
 
 
 async def _evm_rpc_call(client: httpx.AsyncClient, rpc_url: str, method: str, params: list | None = None):
@@ -27,6 +41,30 @@ async def _evm_rpc_call(client: httpx.AsyncClient, rpc_url: str, method: str, pa
     return data["result"]
 
 
+async def _fetch_blockchain_info_chart(client: httpx.AsyncClient, chart_name: str) -> list[tuple[str, float]]:
+    """打 blockchain.info charts API（免 key），回傳依日期排序的 (date, value) 序列。"""
+    resp = await client.get(
+        f"https://api.blockchain.info/charts/{chart_name}",
+        params={"timespan": "5years", "format": "json", "cors": "true"},
+    )
+    resp.raise_for_status()
+    return sorted(
+        (datetime.fromtimestamp(point["x"], tz=timezone.utc).strftime("%Y-%m-%d"), point["y"])
+        for point in resp.json()["values"]
+    )
+
+
+def _history_trend(series: list[tuple[str, float]], days: int = HISTORY_TREND_DAYS) -> tuple[str, float, float] | None:
+    """回傳 (最新日期, 最新值, 對比 days 天前的變化百分比)；資料不足 days+1 筆時回傳
+    None，呼叫端應顯示「資料不足」而不是硬湊。"""
+    if len(series) < days + 1:
+        return None
+    latest_date, latest_val = series[-1]
+    _, past_val = series[-(days + 1)]
+    pct = (latest_val - past_val) / past_val * 100 if past_val else 0.0
+    return latest_date, latest_val, pct
+
+
 class OnchainCollector(BaseCollector):
     name = "onchain_collector"
     source_type = "onchain"
@@ -37,13 +75,16 @@ class OnchainCollector(BaseCollector):
             if info.chain == "bitcoin":
                 return await self._fetch_bitcoin(client, coin)
             if info.chain == "evm":
-                return await self._fetch_evm(
+                evidences = await self._fetch_evm(
                     client,
                     coin,
                     ["https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com"],
                     etherscan_url="https://api.etherscan.io/api",
                     api_key=getattr(self.settings, "etherscan_api_key", None),
                 )
+                if coin == "ETH":
+                    evidences.extend(await self._fetch_eth_gas_history(client, coin))
+                return evidences
             if info.chain == "bnb_chain":
                 return await self._fetch_evm(
                     client,
@@ -59,11 +100,12 @@ class OnchainCollector(BaseCollector):
         return []
 
     async def _fetch_bitcoin(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
+        evidences: list[EvidenceDraft] = []
         try:
             resp = await client.get("https://api.blockchair.com/bitcoin/stats")
             resp.raise_for_status()
             data = resp.json()["data"]
-            return [
+            evidences.append(
                 EvidenceDraft(
                     coin=coin,
                     source="Blockchair /bitcoin/stats",
@@ -76,10 +118,37 @@ class OnchainCollector(BaseCollector):
                     related_claim=f"{coin} 鏈上活躍度（交易量、mempool、算力）",
                     source_type="onchain",
                 )
-            ]
+            )
         except Exception as exc:  # noqa: BLE001
             self.log_subsource("blockchair", coin, LogStatus.ERROR, f"error={exc}")
-            return []
+
+        # 併自 pipeline/fetch_onchain_history.py：快照只有「當下一個時間點」，這裡
+        # 補一筆近 5 年歷史序列的近 30 天趨勢，回答「現在算力/交易量是在漲還是跌」。
+        try:
+            history_parts = []
+            for label, (chart_name, unit) in BTC_HISTORY_CHARTS.items():
+                series = await _fetch_blockchain_info_chart(client, chart_name)
+                trend = _history_trend(series)
+                if trend:
+                    _, latest_val, pct = trend
+                    history_parts.append(f"{label}={latest_val:.2f}{unit}（近{HISTORY_TREND_DAYS}天{pct:+.2f}%）")
+                else:
+                    history_parts.append(f"{label}=資料不足")
+            evidences.append(
+                EvidenceDraft(
+                    coin=coin,
+                    source="blockchain.info Charts API（近5年歷史序列，取近30天趨勢）",
+                    source_url="https://api.blockchain.info/charts/hash-rate",
+                    fetched_at=now_iso(),
+                    content_reference="；".join(history_parts),
+                    related_claim=f"{coin} 鏈上活躍度近期趨勢（算力／交易量／mempool 積壓，非單點快照）",
+                    source_type="onchain",
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.log_subsource("blockchain_info_history", coin, LogStatus.ERROR, f"error={exc}")
+
+        return evidences
 
     async def _fetch_evm(
         self, client: httpx.AsyncClient, coin: str, rpc_urls: list[str], etherscan_url: str, api_key: str | None
@@ -134,6 +203,47 @@ class OnchainCollector(BaseCollector):
                 self.log_subsource("scan_api", coin, LogStatus.SKIPPED, f"error={exc}")
 
         return evidences
+
+    async def _fetch_eth_gas_history(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
+        """併自 pipeline/fetch_onchain_history.py：ETH 唯一免 key 的免費歷史來源
+        是 etherscan.io 的 gas price CSV 匯出端點（回溯到 2015 年），只對 ETH 抓，
+        BNB 走同一個 `_fetch_evm()` 但沒有等價的免費歷史來源，不觸發這段。"""
+        try:
+            resp = await client.get(
+                "https://etherscan.io/chart/gasprice",
+                params={"output": "csv"},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            resp.raise_for_status()
+            series: list[tuple[str, float]] = sorted(
+                (
+                    datetime.strptime(row["Date(UTC)"], "%m/%d/%Y").strftime("%Y-%m-%d"),
+                    float(row["Value (Wei)"]) / 1e9,
+                )
+                for row in csv.DictReader(io.StringIO(resp.text))
+            )
+            trend = _history_trend(series)
+            if trend is None:
+                self.log_subsource("etherscan_gas_history", coin, LogStatus.SKIPPED, f"insufficient_history={len(series)}")
+                return []
+            _, latest_val, pct = trend
+            return [
+                EvidenceDraft(
+                    coin=coin,
+                    source="Etherscan Gas Price 歷史 CSV（etherscan.io/chart/gasprice）",
+                    source_url="https://etherscan.io/chart/gasprice",
+                    fetched_at=now_iso(),
+                    content_reference=(
+                        f"Gas Price={latest_val:.2f} Gwei（近{HISTORY_TREND_DAYS}天{pct:+.2f}%，"
+                        f"樣本回溯至{series[0][0]}）"
+                    ),
+                    related_claim=f"{coin} 鏈上網路壅塞程度近期趨勢（Gas 費用歷史走勢，非單點快照）",
+                    source_type="onchain",
+                )
+            ]
+        except Exception as exc:  # noqa: BLE001
+            self.log_subsource("etherscan_gas_history", coin, LogStatus.ERROR, f"error={exc}")
+            return []
 
     async def _fetch_solana(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
         try:

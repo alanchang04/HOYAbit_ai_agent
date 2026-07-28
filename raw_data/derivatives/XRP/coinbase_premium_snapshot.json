@@ -1,0 +1,10 @@
+{
+  "coin": "XRP",
+  "source": "Coinbase Exchange /products/{coin}-USD/ticker vs Binance Spot /api/v3/ticker/price",
+  "coinbase_price_usd": 1.1093,
+  "binance_price_usdt": 1.1102,
+  "premium_pct": -0.08106647450910853,
+  "premium_label": "價差在正常雜訊範圍內，無明顯溢價訊號",
+  "fetched_at": "2026-07-23T16:45:24Z",
+  "note": "USDT 視為約當 USD（跟本專案其他 Binance USDT 報價的既有假設一致，未額外校正 USDT/USD 匯率；正式版 Coinbase Premium Index 會校正這項，此處為簡化版）"
+}

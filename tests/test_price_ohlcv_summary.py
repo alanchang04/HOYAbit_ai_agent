@@ -3,6 +3,7 @@ from agent.collectors.price import (
     compute_historical_volatility_percentile,
     compute_perp_basis,
     compute_technical_indicators,
+    compute_volatility_compression,
     load_ohlcv_all,
     load_ohlcv_tail,
     summarize_ohlcv,
@@ -149,6 +150,57 @@ def test_summarize_technical_indicators_handles_missing_percentile_gracefully():
     indicators = {"sma7": 100.0, "sma14": 95.0, "rsi14": 100.0, "volatility_pct": 1.5, "volume_trend_pct": 10.0, "last_close": 105.0}
     summary = summarize_technical_indicators(indicators)
     assert "資料不足" in summary
+
+
+def test_compute_volatility_compression_none_when_insufficient_history():
+    # 累積不到 pctl_window=90 筆滾動 vol_20d 前，不該硬湊一個百分位
+    closes = [100.0 + (i % 5) for i in range(50)]
+    assert compute_volatility_compression(closes) is None
+
+
+def test_compute_volatility_compression_matches_pipeline_prototype_on_real_btc_data():
+    # 跟 pipeline/compute_volatility_compression.py 對照過的真實數字
+    # （流程紀錄.md：BTC vol_20d=1.28%、90天百分位=7.8，2026-05-31 收盤）
+    rows = load_ohlcv_all("BTC", data_dir="data")
+    closes = [float(r["close"]) for r in rows]
+    result = compute_volatility_compression(closes)
+    assert result is not None
+    assert round(result["vol_20d_pct"], 2) == 1.28
+    assert round(result["percentile_90d"], 1) == 7.8
+
+
+def test_compute_technical_indicators_includes_volatility_compression_when_full_closes_given():
+    rows = load_ohlcv_all("BTC", data_dir="data")
+    indicator_rows = rows[-INDICATOR_WINDOW:]
+    full_closes = [float(r["close"]) for r in rows]
+    indicators = compute_technical_indicators(indicator_rows, full_closes=full_closes)
+    assert indicators["vol_compression_percentile_90d"] is not None
+    assert round(indicators["vol_compression_20d_pct"], 2) == 1.28
+
+
+def test_compute_technical_indicators_skips_volatility_compression_when_full_closes_omitted():
+    closes = [100.0 + (i % 5) for i in range(130)]
+    volumes = [10.0] * 130
+    indicators = compute_technical_indicators(_make_rows(closes, volumes))
+    assert "vol_compression_percentile_90d" not in indicators
+
+
+def test_summarize_technical_indicators_reports_compression_lean():
+    indicators = {
+        "sma7": 100.0, "sma14": 95.0, "rsi14": 55.0, "volatility_pct": 1.14,
+        "volume_trend_pct": 1.0, "last_close": 100.0,
+        "vol_compression_20d_pct": 1.28, "vol_compression_percentile_90d": 7.8,
+    }
+    summary = summarize_technical_indicators(indicators)
+    assert "近20日日報酬波動率=1.28%" in summary
+    assert "90天滾動百分位=7.8" in summary
+    assert "偏悶（盤整彈藥）" in summary
+
+
+def test_summarize_technical_indicators_handles_missing_compression_gracefully():
+    indicators = {"sma7": 100.0, "sma14": 95.0, "rsi14": 100.0, "volatility_pct": 1.5, "volume_trend_pct": 10.0, "last_close": 105.0}
+    summary = summarize_technical_indicators(indicators)
+    assert "近90天波動壓縮度百分位：資料不足" in summary
 
 
 def test_compute_perp_basis_positive_is_contango():
