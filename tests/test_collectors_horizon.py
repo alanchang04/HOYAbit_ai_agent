@@ -229,17 +229,29 @@ async def test_news_is_medium_with_14_day_window(logger):
 # --- social --------------------------------------------------------------
 
 
+_RSS_FIXTURE = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <author><name>/u/someone</name></author>
+    <title>Bitcoin discussion thread</title>
+    <link href="https://www.reddit.com/r/CryptoCurrency/comments/abc/x/" />
+    <published>2026-07-27T10:00:00+00:00</published>
+  </entry>
+</feed>"""
+
+
 @pytest.mark.asyncio
 async def test_social_is_short_with_7_day_window(logger):
     """Reddit 查詢帶 t=week，窗口由該參數決定性推導（ADR-2），不是猜的。"""
     async def mock_get(url, **kwargs):
         assert kwargs["params"]["t"] == "week"
-        return _resp({"data": {"children": [
-            {"data": {"title": "t", "score": 1, "num_comments": 2, "created_utc": 1.0, "permalink": "/p"}}
-        ]}})
+        return _resp(text=_RSS_FIXTURE)
 
     collector = SocialCollector(logger)
-    with patch("agent.collectors.social.httpx.AsyncClient") as cls:
+    with (
+        patch("agent.collectors.social.httpx.AsyncClient") as cls,
+        patch("agent.collectors.social.RSS_INTER_REQUEST_DELAY", 0),
+    ):
         cls.return_value = _client(get=mock_get)
         evidences = await collector.fetch("BTC")
 
