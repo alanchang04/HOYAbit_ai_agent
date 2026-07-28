@@ -1,0 +1,43 @@
+{
+  "coin": "BNB",
+  "mention_count": 5,
+  "items": [
+    {
+      "feed": "NEWS",
+      "title": "币安将于7月31日移除ERA/BNB、MAGIC/USDC等多个现货交易对",
+      "summary": "PANews 7月28日消息，据官方公告，根据近期审核结果，币安将于2026年07月31日11:00（东八区时间）移除以下现货交易对并停止交易：ERA/BNB、MAGIC/USDC、MASK/USDC、MOVE/TRY、MOVE/USDC、POL/BTC、STORJ/TRY和SUSHI/USDC。上述交易对的现货交易机器人服务也将同时终止，建议用户提前更新或取消。现货交易对的下架不影响代币在币安现货的可用性，用户仍可通过其他交易对交易相关代币。",
+      "url": "https://www.panewslab.com/zh/articles/019fa7a2-756b-72dd-9ae6-b450f454800f",
+      "published": "Tue, 28 Jul 2026 07:30:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "赵长鹏支持东盟加密货币牌照通行证制度",
+      "summary": "PANews 7月28日消息，据Cointelegraph报道，币安联合创始人赵长鹏在东盟科技峰会马尼拉2026上表示支持加密牌照在东盟区域内互认，认为在一个市场受监管的公司应通过简化审批流程进入其他市场，而非从头申请。他指出跨区域协调技术层面很简单，允许更多持牌平台竞争可改善服务并降低消费者成本。该提议由菲律宾金融科技联盟创始主席Lito Villanueva提出。 目前东盟尚无区域性加密牌照互认机制，但已有先例——东盟资本市场论坛的集体投资计划框架允许基金在本国获批后在参与国简化授权发行，专业流动框架下的ACMF Pass允许持牌投资顾问快速注册提供跨境服务。",
+      "url": "https://www.panewslab.com/zh/articles/019fa75e-5341-7508-b0dd-497d34b4e87c",
+      "published": "Tue, 28 Jul 2026 06:16:00 GMT"
+    },
+    {
+      "feed": "NORMAL",
+      "title": "PA日报 | 美参议院暂时搁置Clarity法案；X Money开始向美国Premium和Premium+订阅者推出",
+      "summary": "Hyperliquid回应“海力士合约插针”：合约部署和运营方Trade.xyz正在调查；分析师：比特币现货交易量较2024年底暴跌75%，为2023年熊市以来最低；韩国考虑为“借钱炒股”封顶20%；币安将于7月31日移除ERA/BNB、MAGIC/USDC等多个现货交易对",
+      "url": "https://www.panewslab.com/zh/articles/019fa7f4-9d7f-71f7-b145-a63681c3ae0f",
+      "published": "Tue, 28 Jul 2026 09:30:00 GMT"
+    },
+    {
+      "feed": "NORMAL",
+      "title": "Asia Market Daily: South Korean markets plunge over 10% as chip stocks tumble and crypto trading slows (2026/7/28)",
+      "summary": "South Korea's KOSPI index crashed nearly 11%, dragging down crypto-linked stocks like SK Hynix, while Hong Kong regulators unveiled a quantum-readiness plan for banks. Binance founder Changpeng Zhao backed a proposal for an ASEAN crypto license passport, and Japan's market also saw steep losses. Meanwhile, crypto trading volumes on major exchanges have slumped to 2023 bear-market levels.",
+      "url": "https://www.panewslab.com/zh/articles/019fa7f4-8c26-73a1-a2ab-a1c97f2c7d66",
+      "published": "Tue, 28 Jul 2026 09:00:49 GMT"
+    },
+    {
+      "feed": "NORMAL",
+      "title": "富途香港上架BNB：监管夹缝下反攻加密交易所",
+      "summary": "富途牛牛香港上线BNB实时订单簿交易，成首家持牌券商，提供21种虚拟货币服务。面对中美日监管重罚，传统券商加速转型，布局虚拟资产交易融资，抢占香港牌照红利与年轻用户。",
+      "url": "https://www.panewslab.com/zh/articles/019f9bde-33a4-7648-9cce-72b0ab672e5b",
+      "published": "Sun, 26 Jul 2026 00:40:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-28T09:44:52Z"
+}

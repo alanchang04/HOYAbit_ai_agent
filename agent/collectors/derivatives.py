@@ -1,7 +1,11 @@
 """衍生品資料 collector：費率擁擠度／OI×價格四象限／多空帳戶比背離／期貨到期
-結構／CME COT 機構倉位／選擇權 IV-Skew／CEX-DEX 費率差，七項邏輯皆搬自
-`pipeline/fetch_*.py` prototype（已個別驗證過，見 `pipeline/流程紀錄.md`），這裡
-是第一次併成正式 collector。
+結構／CME COT 機構倉位／選擇權 IV-Skew／CEX-DEX 費率差／Coinbase 溢價，八項
+邏輯皆搬自 `pipeline/fetch_*.py` prototype（已個別驗證過，見
+`pipeline/流程紀錄.md`），這裡是第一次併成正式 collector。
+
+Coinbase 溢價（2026-07-24 補併）：原本 07/08 流程圖文件把這格寫在 price.py
+底下，但查證後 price.py 從未有這段程式碼。Ken 拍板這格性質上是「跨場地價格
+比較」，跟 CEX-DEX 費率差同一類，改歸這支檔案，不進 price.py。
 
 跨幣費率差（`compute_cross_coin_funding_diff.py`）暫不在此檔——它是雙幣比較題
 專用，跟 `relative.py` 一樣需要兩個幣種同時比較，不適合塞進單幣種
@@ -86,6 +90,14 @@ DEX_FUNDING_INTERVAL_HOURS = 1
 HOURS_PER_YEAR = 24 * 365
 CEX_DEX_DIVERGENCE_THRESHOLD_PCT = 5.0
 
+# Coinbase 溢價：Coinbase 現貨 vs Binance 現貨的價差。門檻取值方式跟上面
+# CEX_DEX_DIVERGENCE_THRESHOLD_PCT 一樣是刻意取捨的起始值——2026-07-23 五幣
+# 實測基準線落在 -0.09%~-0.12%（見 pipeline/流程紀錄.md），賽前如果覺得太鬆/
+# 太緊可以再跟 Ken 討論調整。
+COINBASE_URL = "https://api.exchange.coinbase.com/products/{coin}-USD/ticker"
+BINANCE_SPOT_URL = "https://api.binance.com/api/v3/ticker/price"
+COINBASE_PREMIUM_THRESHOLD_PCT = 0.15
+
 
 def percentile_rank(latest: float, series: list[float]) -> float:
     """window 內 <= 最新值 的比例，跟 pipeline/compute_relative_strength.py 同一套定義。"""
@@ -114,6 +126,14 @@ def move_direction(latest: float, prev: float) -> str:
 
 def ratio_direction(ratio: float) -> str:
     return "偏多" if ratio > 1 else "偏空"
+
+
+def coinbase_premium_label(premium_pct: float) -> str:
+    if premium_pct >= COINBASE_PREMIUM_THRESHOLD_PCT:
+        return "Coinbase 溢價明顯偏高（美系買壓較急）"
+    if premium_pct <= -COINBASE_PREMIUM_THRESHOLD_PCT:
+        return "Coinbase 溢價明顯偏低（美系賣壓較急）"
+    return "價差在正常雜訊範圍內，無明顯溢價訊號"
 
 
 def parse_option_instrument(symbol: str) -> tuple[str, float, str]:
@@ -165,6 +185,7 @@ class DerivativesCollector(BaseCollector):
                 (self._fetch_cme_cot, "cme_cot"),
                 (self._fetch_options_iv_skew, "options_iv_skew"),
                 (self._fetch_cex_dex_funding_diff, "cex_dex_funding_diff"),
+                (self._fetch_coinbase_premium, "coinbase_premium"),
             ):
                 try:
                     ev = await fetch_fn(client, coin, symbol)
@@ -528,5 +549,33 @@ class DerivativesCollector(BaseCollector):
                 f"（1h期，已依結算週期換算年化後比較）→ 差 {diff:+.2f}%（{label}）"
             ),
             related_claim=f"{coin} 中心化與去中心化交易場地的資金費率背離",
+            source_type="derivatives",
+        )
+
+    # --- 8. Coinbase 溢價：Coinbase 現貨 vs Binance 現貨價差（美系買壓代理） ---
+    async def _fetch_coinbase_premium(
+        self, client: httpx.AsyncClient, coin: str, symbol: str
+    ) -> EvidenceDraft | None:
+        cb_resp = await client.get(COINBASE_URL.format(coin=coin))
+        cb_resp.raise_for_status()
+        coinbase_price = float(cb_resp.json()["price"])
+
+        binance_resp = await client.get(BINANCE_SPOT_URL, params={"symbol": symbol})
+        binance_resp.raise_for_status()
+        binance_price = float(binance_resp.json()["price"])
+
+        premium_pct = (coinbase_price - binance_price) / binance_price * 100 if binance_price else 0.0
+        label = coinbase_premium_label(premium_pct)
+
+        return EvidenceDraft(
+            coin=coin,
+            source="Coinbase Exchange /products/{coin}-USD/ticker vs Binance Spot /api/v3/ticker/price",
+            source_url=COINBASE_URL.format(coin=coin),
+            fetched_at=now_iso(),
+            content_reference=(
+                f"Coinbase {coinbase_price} vs Binance {binance_price}（USDT 視為約當 USD，"
+                f"未校正匯率）→ 溢價 {premium_pct:+.4f}%（{label}）"
+            ),
+            related_claim=f"{coin} Coinbase 相對 Binance 現貨溢價（美系機構/散戶買壓代理指標）",
             source_type="derivatives",
         )

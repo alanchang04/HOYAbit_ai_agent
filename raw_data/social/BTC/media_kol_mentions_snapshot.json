@@ -1,0 +1,78 @@
+{
+  "coin": "BTC",
+  "mention_count": 10,
+  "items": [
+    {
+      "feed": "NEWS",
+      "title": "IMF警告巴西加密市场跨境资金超传统资本，呼吁加强监管",
+      "summary": "PANews 7月28日消息，据Bitcoin.com News报道，国际货币基金组织（IMF）在最新《金融体系稳定性评估》报告中指出，巴西加密市场跨境资金流已超过传统资本规模，主要由稳定币驱动，受S&amp;P 500、VIX及比特币价格等指数影响。报告呼吁巴西加强监管框架，全面实施反洗钱和反恐融资措施，并指出巴西在客户资产隔离和旅行规则执行方面仍存在缺口。报告还强调巴西加密系统与传统金融体系相互关联，监管机构需建立高级报告协议，与国内外监管部门合作以降低风险。",
+      "url": "https://www.panewslab.com/zh/articles/019fa7b5-99e1-736e-a937-9532f5ebdfea",
+      "published": "Tue, 28 Jul 2026 07:52:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "分析师：比特币现货交易量较2024年底暴跌75%，为2023年熊市以来最低",
+      "summary": "PANews 7月28日消息，CryptoQuant分析师Darkfost表示，主要交易所比特币现货交易量较2024年底跌幅超75%。币安7月交易量超350亿美元，远低于2024年11月的2,460亿美元；Bybit暴跌85%，Coinbase跌61%，OKX跌67%，为2023年熊市后期以来最低水平。分析师指出，美伊冲突加剧压制风险情绪，通胀引发高利率担忧，股市持续吸收流动性，均对投机资产不利。比特币回归看涨趋势需宏观格局转变和需求回归。",
+      "url": "https://www.panewslab.com/zh/articles/019fa7aa-898b-7532-bce4-42a616370b28",
+      "published": "Tue, 28 Jul 2026 07:39:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "澳大利亚上市公司DigitalX出售80枚比特币，总持仓降至283枚",
+      "summary": "PANews 7月28日消息，据BitcoinTreasuries.NET监测，澳大利亚上市公司DigitalX（DCC）已出售80枚比特币，将其现金储备增加至2100万美元，目前共持有283枚BTC，在比特币持仓排名中位列第79位。",
+      "url": "https://www.panewslab.com/zh/articles/019fa7a9-4c7a-74bb-969f-74bc26b88834",
+      "published": "Tue, 28 Jul 2026 07:38:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "币安将于7月31日移除ERA/BNB、MAGIC/USDC等多个现货交易对",
+      "summary": "PANews 7月28日消息，据官方公告，根据近期审核结果，币安将于2026年07月31日11:00（东八区时间）移除以下现货交易对并停止交易：ERA/BNB、MAGIC/USDC、MASK/USDC、MOVE/TRY、MOVE/USDC、POL/BTC、STORJ/TRY和SUSHI/USDC。上述交易对的现货交易机器人服务也将同时终止，建议用户提前更新或取消。现货交易对的下架不影响代币在币安现货的可用性，用户仍可通过其他交易对交易相关代币。",
+      "url": "https://www.panewslab.com/zh/articles/019fa7a2-756b-72dd-9ae6-b450f454800f",
+      "published": "Tue, 28 Jul 2026 07:30:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "江卓尔：BTC已跌破上升通道，做空目标从ETH切换至BTC",
+      "summary": "PANews 7月28日消息，莱比特矿池创始人江卓尔表示：“这一轮走完，我不空ETH了，改空BTC。”其解释称，此前策略为将ETH质押为WBETH作为保证金，在永续合约等量开空ETH，等效于卖出现货且无杠杆和强平风险，同时保留质押利息收益并收取多头资金费率，仅需存放少量ETH保证金以降低交易所风险。新策略改为以WBETH作为保证金，做空按汇率折算的等量BTC现货。",
+      "url": "https://www.panewslab.com/zh/articles/019fa797-90d7-7225-a3cb-2f5f7ee06f6d",
+      "published": "Tue, 28 Jul 2026 07:19:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "比特币现货ETF昨日总净流出1164.39万美元，持续3日净流出",
+      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）比特币现货 ETF 总净流出 1164.39 万美元。 昨日单日净流出最多的比特币现货 ETF 为贝莱德 (Blackrock） ETF IBIT，单日净流出为 882.02 万美元，目前 IBIT 历史总净流入达 603.86 亿美元。 其次为富达 (Fidelity） ETF FBTC，单日净流出为 282.37 万美元，目前 FBTC 历史总净流入达 100.02 亿美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa6e0-0977-730e-b132-78ac88788fb8",
+      "published": "Tue, 28 Jul 2026 03:58:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Upbit将在韩元、BTC、USDT市场上线RLUSD代币",
+      "summary": "PANews 7月28日消息，据官方公告，韩国加密交易所Upbit将在韩元、BTC、USDT市场上线RLUSD代币。",
+      "url": "https://www.panewslab.com/zh/articles/019fa692-c036-75cc-98de-3934b94a65f9",
+      "published": "Tue, 28 Jul 2026 02:34:21 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "分析：币安BTC散户流入约为巨鲸两倍，巨鲸流入较近期高点下降44.3%",
+      "summary": "PANews 7月28日消息，CryptoQuant分析指出，币安比特币流入数据出现显著分化。巨鲸30日总流入为39亿美元，较6月12日峰值约70亿美元下降44.3%；散户流入为78亿美元，较6月5日约100亿美元仅下降22%。散户流入目前约为巨鲸的两倍，差距达39亿美元。 分析指出，这种分化恰逢7月28-29日美联储FOMC会议前夕。联邦基金期货目前定价约36%概率加息25个基点，维持3.50-3.75%目标区间不变是更可能的情景。从比特币角度看，意外加息可能支撑美元和国债收益率，增加风险资产波动性；若加息暂停伴随偏鸽派指引，则可能部分缓解宏观压力。",
+      "url": "https://www.panewslab.com/zh/articles/019fa670-3d92-72fd-ab18-5830707da41a",
+      "published": "Tue, 28 Jul 2026 01:56:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "萨尔瓦多2027年大选：反对党候选人挑战Bukele，比特币战略存变数",
+      "summary": "PANews 7月28日消息，据BeInCrypto报道，萨尔瓦多两大反对党ARENA和FMLN已分别提名Maytee Iraheta和Rafael Aguirre为2027年2月总统选举候选人，挑战现任总统Nayib Bukele的连任竞选。两位候选人均未支持Bukele的比特币战略，反而公开批评其为财政失败。Bukele所属的新思想党已提名其本人参选，其民意支持率在近期民调中高达94%，但支持主要来自治安改善而非比特币政策——民调显示仅2.2%的萨尔瓦多人认为比特币是其最大失败。 比特币于2025年2月IMF贷款协议后已在该国不再是强制法定货币，美元恢复为日常商业唯一官方货币。",
+      "url": "https://www.panewslab.com/zh/articles/019fa667-22df-742a-a5d8-cc680d1991b7",
+      "published": "Tue, 28 Jul 2026 01:46:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
+      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
+      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
+      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-28T09:44:52Z"
+}

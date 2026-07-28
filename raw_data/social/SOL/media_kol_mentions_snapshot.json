@@ -1,0 +1,43 @@
+{
+  "coin": "SOL",
+  "mention_count": 5,
+  "items": [
+    {
+      "feed": "NEWS",
+      "title": "Across Protocol 攻击者退回331.8枚ETH被黑资金至以太坊多签",
+      "summary": "PANews 7月28日消息，据PeckShield 称，Across Protocol 此前在 Solana 上遭攻击，约360万美元加密资产被转出。最新链上数据显示，攻击者标记地址已向 Across Protocol Hub Pool Owner 多签地址退回331.8枚 ETH，价值约624万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa80d-44ca-768b-b37d-ab6a79ad011d",
+      "published": "Tue, 28 Jul 2026 09:25:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "美国SOL现货ETF单日总净流入103.37万美元",
+      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）SOL 现货 ETF 单日总净流入 103.37 万美元。 昨日仅 Bitwise Solana Staking ETF(BSOL) 净流入，单日净流入 103.37 万美元，目前历史总净流入达 9.09 亿美元。 截至发稿前，SOL 现货 ETF 总资产净值为 8.89 亿美元，SOL 净资产比率 2.01%，历史累计净流入已达 11.45 亿美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa67c-6d4b-72bf-be20-f85c64ce9f1c",
+      "published": "Tue, 28 Jul 2026 02:09:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Ark Invest昨日增持1414万美元SpaceX股票，减持116万美元Robinhood股票",
+      "summary": "PANews 7月28日消息，据ARK Invest官网数据显示，Cathie Wood旗下Ark Invest周一买入124543股SpaceX（SPCX）股票，价值约1414万美元；买入27864股Tesla（TSLA）股票，价值约862万美元；买入20000股Pony AI（PONY）股票，价值约15万美元；买入12772股Kodiak AI（KDK）股票，价值约5万美元；买入4799股3iQ Solana Staking ETF（SOLQ.U）股票，价值约3万美元；卖出12119股Robinhood（HOOD）股票，价值约116万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fa636-fd92-7741-8c3d-76b8e608132c",
+      "published": "Tue, 28 Jul 2026 00:54:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
+      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
+      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
+      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
+    },
+    {
+      "feed": "NEWS",
+      "title": "Bitwise：以太坊、Solana和Avalanche网络更活跃更便宜，即使代币价格下跌",
+      "summary": "PANews 7月28日消息，据The Block报道，以太坊、Solana和Avalanche在过去一年中网络活动增加且使用成本降低，但ETH、SOL和AVAX价格均下跌约50%或更多。Bitwise链上研究主管Kam Benbrik表示，网络基本面与市场情绪出现明显背离——链上活动实际在增长，但协议设计使区块空间更便宜，收入因此大幅下降。 Bitwise首次季度质押报告显示，二季度末以太坊质押量达4,020万枚ETH（占总供应量三分之一），新增质押主要来自机构。",
+      "url": "https://www.panewslab.com/zh/articles/019fa606-c388-719a-bb72-5796cde5c5dc",
+      "published": "Tue, 28 Jul 2026 00:02:00 GMT"
+    }
+  ],
+  "errors": [],
+  "fetched_at": "2026-07-28T09:44:52Z"
+}
