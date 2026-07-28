@@ -11,9 +11,10 @@
 | 詞彙 | 定義 |
 |---|---|
 | `horizon_class` | 單筆證據所代表的時間尺度分帶，五選一：`spot`／`short`／`medium`／`long`／`structural`（定義見 R2-1） |
-| 主視野（primary horizon） | 一次分析的主判斷尺度，本系統固定為 `medium`（8–30 天），對應命題「過去兩週」尺度 |
-| 當前訊號（current signal） | `spot`／`short`／`medium` 三帶的證據，正常參與看多/看空辯論與共識投票 |
-| 結構脈絡（structural context） | `long`／`structural` 兩帶的證據，職責是定位「本次判斷處在大週期何處」，**不參與**矛盾判定與共識投票 |
+| 主視野（primary horizon） | 一次分析的主判斷尺度，**由題目的時間範圍動態決定**（R7-2），未明示時預設 `medium` |
+| 當前訊號（current signal） | horizon **≤ 主視野**的證據，正常參與看多/看空辯論與共識投票 |
+| 結構脈絡（structural context） | horizon **> 主視野**的證據，職責是定位「本次判斷處在大週期何處」，**不參與**矛盾判定與共識投票 |
+| 五檔標準粒度 | 日／10 日／月／季／年，對應五個 horizon 帶的標準取樣點（R7-1） |
 | 假矛盾（pseudo-contradiction） | 不同 horizon 帶之間的正常尺度差異，被誤判為同尺度的訊號衝突 |
 | `as_of_date` | 本次分析的價格資料基準日＝補齊後 OHLCV 序列的最後一天（見 R1-1） |
 | 缺口補齊（gap-fill） | 官方基準 CSV 末日至執行日之間，以 Binance 公開日線補足的區段（見 R1-2） |
@@ -134,6 +135,14 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R1-8** WHERE 長歷史指標（MA120 歷史位置、波動率全歷史百分位）
   THEN 系統 SHALL 繼續以官方 CSV 全歷史為計算基礎，SHALL NOT 改用 Binance 資料
   （其僅回溯約 1000 日，不足以取代 5 年基準）。
+- **R1-9**（2026-07-28 新增，實作時發現的邊界；alanchang 已確認）
+  WHEN 判定均線的「站上／跌破」位置 THEN 系統 SHALL 以**補齊後的最新收盤價**判定，
+  SHALL NOT 以官方 CSV 末日收盤判定；均線**數值本身**仍依 R1-8 由官方 CSV 計算。
+  且 SHALL 在證據文字同時揭露兩者的基準日。
+  - **理由**：實測 BTC 的 MA120 = 72,613，用 CSV 末日收盤（73,674）判為「站上」，
+    但 2026-07-26 實際收盤 65,400 是「跌破」——**位置判定與現實相反**。
+    R1-8 的原意是保護長歷史指標的計算基準（共同基準語意），
+    不是要求用過期價格做當下判讀，兩者不衝突。
 
 ### R2 — Horizon 分帶：讓推理層看得見時間尺度
 
@@ -145,13 +154,17 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R2-1** WHEN 定義 `EvidenceDraft` THEN schema SHALL 包含 `window_start: str | None`、
   `window_end: str | None`、`horizon_class: HorizonClass`，其中 `HorizonClass` 為五值列舉：
 
-  | 值 | 窗長 | 角色 |
-  |---|---|---|
-  | `spot` | 當下快照 | 當前訊號 |
-  | `short` | ≤ 7 天 | 當前訊號 |
-  | `medium` | 8–30 天 | 當前訊號（**主視野**） |
-  | `long` | 31–180 天 | 結構脈絡 |
-  | `structural` | > 180 天 | 結構脈絡 |
+  | 值 | 窗長 | 標準粒度（R7-1） | 角色（相對主視野，見 R7-3） |
+  |---|---|---|---|
+  | `spot` | 當下快照或最近 1 日 | **日** | 依主視野動態判定 |
+  | `short` | ≤ 10 天 | **10 日** | 依主視野動態判定 |
+  | `medium` | 11–30 天 | **月** | 依主視野動態判定（**預設主視野**） |
+  | `long` | 31–180 天 | **季** | 依主視野動態判定 |
+  | `structural` | > 180 天 | **年** | 依主視野動態判定 |
+
+  > 角色（當前訊號／結構脈絡）**不再寫死綁定於特定帶**，改由 R7-3 依當次主視野推導。
+  > 當主視野為預設的 `medium` 時，推導結果與原設計完全相同
+  > （`spot`/`short`/`medium` 為當前訊號，`long`/`structural` 為結構脈絡）。
 
 - **R2-2** WHEN collector 產生 `EvidenceDraft` THEN 該 collector SHALL 自行標註
   `horizon_class` 與 `window_start`／`window_end`，且該標註 SHALL 為決定性的
@@ -163,7 +176,7 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R2-5** WHEN 執行 Step B THEN prompt SHALL 要求模型輸出三段而非兩段：
   `consistent_signals`、`contradictions`、`structural_context`。
 - **R2-6** WHEN 判定 `contradictions` THEN prompt SHALL 明確約束「僅同 horizon 帶內、
-  或同屬當前訊號三帶（`spot`/`short`/`medium`）之間的衝突才算矛盾」。
+  或同屬**當前訊號**（horizon ≤ 主視野，見 R7-3）的證據之間的衝突才算矛盾」。
 - **R2-7** WHEN 當前訊號與結構脈絡出現方向差異 THEN 模型 SHALL 將其寫入
   `structural_context` 而非 `contradictions`，並 SHALL 以「位置關係」措辭描述
   （例：「兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位，屬高位反彈而非底部啟動」）。
@@ -193,11 +206,14 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R3-3** WHEN 執行 Step B THEN prompt SHALL 額外要求輸出 `direction_matrix`，
   每筆為 `{"source_type": str, "direction": -1|0|1, "basis": [evidence_ids]}`，
   且模型輸出 SHALL 限縮於 `-1|0|1` 三值，SHALL NOT 允許自由文字或連續分數。
-- **R3-4** WHEN 計算 Signal Consensus THEN 系統 SHALL 僅納入
-  `spot`／`short`／`medium` 三帶的證據所對應的 source_type，
+- **R3-4** WHEN 計算 Signal Consensus THEN 系統 SHALL 僅納入**當前訊號**
+  （horizon ≤ 主視野，見 R7-3）的證據所對應的 source_type，
   SHALL NOT 納入結構脈絡（避免假矛盾由此路徑復活）。
 - **R3-5** WHEN 計算 Signal Consensus THEN 公式 SHALL 為
   `100 × (1 − stdev(directions) / 1.0)`，夾在 0–100。
+  - ⚠ **本條為暫定，鑑別度問題待拍板**（2026-07-28 alanchang 裁定「晚點做先標記」）。
+    設計階段已驗算出此線性映射與需求方期望值落差極大（見 design.md §3.6.2），
+    實作到 tasks.md Task 4.3 時必須停下回報，不得自行改公式。
 - **R3-6** WHEN 計算 Evidence Strength THEN 系統 SHALL 由既有 `source_weight`
   （R12 四因子產出）與各類覆蓋度推導，SHALL NOT 引入 LLM 主觀評分。
 - **R3-7** WHEN 計算 Base 信心 THEN 公式 SHALL 為
@@ -268,6 +284,53 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R6-4** WHEN 修改信心公式 THEN 舊的 `compute_confidence_score()` 相關測試
   SHALL 被改寫為新公式的等價驗證，SHALL NOT 直接刪除。
 
+### R7 — 多尺度資料供給與動態主視野
+
+> 2026-07-28 新增。來源：alanchang 決策⑥。
+> 起因是隊友 vic 盤點發現 `raw_data/`（Ken 落地的衍生品／期限結構／CME COT／
+> 鏈上歷史 CSV）**沒有任何一行程式讀它**，對 LLM 推理鏈一筆都沒進去（STATUS.md 第 10 項）。
+> alanchang 確認這是誤會而非刻意設計，並提出更根本的需求：
+> **agent 應該對同一個標的同時具備短／中／長期三種尺度的資料觀念**，
+> 這樣使用者問「最近兩週」或「最近一年」時，各自都有對應尺度的原始資料可參考。
+
+**User Story:** 作為使用者，當我問「最近一年 BTC 表現如何」時，
+我希望 agent 是用年尺度的資料回答，而不是拿兩週的資料硬套；
+反過來問「最近兩週」時也不該被五年的結構資料主導。
+
+#### Acceptance Criteria
+
+- **R7-1** WHEN 定義資料粒度 THEN 系統 SHALL 採用五檔標準粒度，並與 horizon 五帶一一對應：
+
+  | 標準粒度 | 回看天數 | `horizon_class` |
+  |---|---:|---|
+  | 日 | 1 | `spot` |
+  | 10 日 | 10 | `short` |
+  | 月 | 30 | `medium` |
+  | 季 | 90 | `long` |
+  | 年 | 365 | `structural` |
+
+- **R7-2** WHEN 分類題目 THEN 系統 SHALL 從題目文字決定性偵測時間範圍
+  並據此設定該次執行的**主視野**；IF 題目未明示時間範圍 THEN 主視野 SHALL 預設為 `medium`。
+  - 偵測 SHALL 為規則式（關鍵字 → 天數 → 帶），SHALL NOT 額外呼叫 LLM。
+- **R7-3** WHEN 判定證據角色 THEN 系統 SHALL 依當次主視野動態推導：
+  `horizon ≤ 主視野` → **當前訊號**；`horizon > 主視野` → **結構脈絡**。
+  SHALL NOT 將角色寫死綁定於特定帶。
+- **R7-4** WHERE `price` collector（資料來自本地 CSV，零 API 成本）
+  THEN 其 SHALL 覆蓋全部五檔標準粒度，各自產出獨立的序列摘要證據。
+- **R7-5** WHERE 其他 collector（受免費 API 額度與 15 分鐘時間預算限制）
+  THEN 其 SHALL 盡力覆蓋（僅覆蓋必要且成本可負擔的粒度），
+  且未覆蓋的粒度 SHALL 反映在 R3-1 的 Data Confidence 扣分，SHALL NOT 靜默忽略。
+- **R7-6** WHEN 主視野落在某個帶 THEN 該帶 SHALL 至少有一筆證據；
+  IF 該帶完全無證據 THEN 系統 SHALL 在報告明確揭露
+  「本次主視野為 {帶}，但該尺度無可用證據，判斷實際依據的是 {實際有資料的帶}」。
+- **R7-7** WHEN 產生報告 THEN 系統 SHALL 揭露本次的主視野與其判定依據
+  （題目中的哪段文字觸發了該判定）。
+- **R7-8** WHERE `raw_data/` 下已落地的歷史資料（Ken 的 prototype 產出）
+  THEN 系統 SHALL 定義明確的讀取介面契約供 collector 取用；
+  IF 檔案缺失或格式不符 THEN collector SHALL 降級為僅用即時 API，SHALL NOT 中斷（R6-1）。
+  - **範圍註記**：`raw_data/` 的接線由 alanchang 負責（決策⑥），
+    本規格只定義 agent 端需要什麼，不規範檔案產生流程。
+
 ## 非目標（Out of Scope）
 
 - 不改動 R12 四因子信譽公式本身（僅**使用**其產出的 `source_weight`）
@@ -278,11 +341,23 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 
 ## 待確認事項
 
-| # | 問題 | 對象 | 影響 |
+| # | 問題 | 對象 | 影響 | 狀態 |
+|---|---|---|---|---|
+| 1 | 比賽當日是否提供更新至比賽日的資料集？ | 主辦方 | 若是，R1-2 自動不觸發（R1-5 已涵蓋），無需改碼 | ⬜ 未問 |
+| 2 | 若否，自行補充公開來源近期 OHLCV 是否符合規則？ | 主辦方 | 若不允許，R1-2 需移除，改為僅在報告揭露斷層 | ⬜ 未問 |
+| 3 | 各類「完整」的判定門檻（R3-1 用） | Ken | 影響 Data Confidence 三檔評分的分界 | 🟡 暫用 design.md §3.6.1 暫定值 |
+| 4 | Signal Consensus 公式鑑別度（R3-5） | alanchang | 線性映射會讓分數塌到底部（見 design.md §3.6.2） | 🟡 已裁定「晚點做先標記」，做到 Task 4.3 時處理 |
+
+## 團隊決策記錄（2026-07-28）
+
+| # | 議題 | 裁定 | 影響本規格之處 |
 |---|---|---|---|
-| 1 | 比賽當日是否提供更新至比賽日的資料集？ | 主辦方 | 若是，R1-2 自動不觸發（R1-5 已涵蓋），無需改碼 |
-| 2 | 若否，自行補充公開來源近期 OHLCV 是否符合規則？ | 主辦方 | 若不允許，R1-2 需移除，改為僅在報告揭露 55 天斷層 |
-| 3 | `window_policy.md` 各類「完整」的判定門檻（R3-1 用） | Ken | 影響 Data Confidence 三檔評分的分界，暫用 design.md §4.1 暫定值 |
+| ① | vic 實作時發現均線位置判定會與現實相反 | **同意其解法** | 正式化為 **R1-9** |
+| ② | Ken 新增的子來源缺 horizon 標註 | **由 alanchang 補** | tasks.md Task 0.2；對照表見 design.md §3.2.1 |
+| ③ | `price.py` 合併衝突（Ken 波動率壓縮 vs vic 重構） | **兩邊都留，alanchang 手動解** | tasks.md Task 0.1 |
+| ④ | Ken 的權重公式 Layer A/B 改版 | **先做 Layer A，Layer B 保留說明不實作** | design.md ADR-4 補充；本規格僅消費 `source_weight`，不受 Layer A 改版阻塞 |
+| ⑤ | Signal Consensus 公式鑑別度 | **晚點做，先標記** | 待確認事項 #4；R3-5 已加註 |
+| ⑥ | `raw_data/` 未接進 agent | **確認是誤會，alanchang 處理**；並提出多尺度資料需求 | 新增 **R7** |
 
 > 待確認事項 1、2 應併入 `STATUS.md` 待辦第 8 項「向主辦方確認比賽當日執行環境」一併詢問。
 > 無論答案為何，R1-2 先做都不會白做——補齊邏輯為「有缺口才補」，主辦方若給新資料即自動不觸發。

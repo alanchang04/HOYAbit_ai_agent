@@ -1,25 +1,46 @@
 # Implementation Plan: Horizon-Aware 推理與可解釋信心
 
-> 對應 `requirements.md`（R1–R6）與 `design.md`（ADR-1~6、§3 詳細設計）。
-> 立案日：2026-07-25。執行者：Sonnet。設計已由 alanchang 拍板，**不需再徵詢方向**，
+> 對應 `requirements.md`（R1–R7）與 `design.md`（ADR-1~7、§3 詳細設計）。
+> 立案日：2026-07-25。最後更新：2026-07-28（納入團隊決策①~⑥）。
+> 設計已由 alanchang 拍板，**不需再徵詢方向**，
 > 但遇到 §3.6.2 標註的公式鑑別度問題（Task 4.3）必須停下回報，不得自行改公式。
+
+## 執行狀態一覽（2026-07-28）
+
+| Phase | 內容 | 狀態 | 執行者 |
+|---|---|---|---|
+| Phase 0 | 分支合併與標註補齊 | ⬜ 待做 | **alanchang** |
+| Phase 1 | Schema 地基 | ✅ 完成 | vic（`feat-horizon-aware-reasoning`） |
+| Phase 2 | Collector 標註／缺口補齊／序列化 | ✅ 完成（2.11 除外） | vic |
+| Phase 3 | Prompt 層 | ✅ 完成（3.8 除外） | vic |
+| Phase 4 | 信心公式重寫 | ⬜ 待做 | — |
+| Phase 5 | 報告與前端呈現 | ⬜ 待做 | — |
+| Phase 6 | 語氣模板 | ⬜ 待做 | — |
+| Phase 7 | 整合驗收 | ⬜ 待做 | — |
+| Phase 8 | 多尺度供給與動態主視野（R7） | ⬜ 待做 | — |
+
+> vic 的 Phase 1–3 成果在 `origin/feat-horizon-aware-reasoning`（1798 行，7 個測試檔），
+> **尚未合併進 main**，Phase 0 就是要處理這件事。
 
 ## Overview
 
 修復三個彼此扣連的結構性缺陷：資料時效斷層（R1）、時間尺度資訊遺失（R2）、
-信心分數不可解釋（R3），並補上權重進辯論（R4）與語氣模板（R5）。
+信心分數不可解釋（R3），並補上權重進辯論（R4）、語氣模板（R5）、
+多尺度資料供給與動態主視野（R7）。
 
 **Phase 1 是所有後續工作的地基**——`horizon_class` 欄位不存在時，Phase 3/4 無事可做。
 
 ## Task Dependency Graph
 
 ```
-Phase 1（schema 地基：HorizonClass + 三欄位）
-  ├─▶ Phase 2（collector 側：horizon 標註 + 缺口補齊 + 序列化）
-  │       └─▶ Phase 3（prompt 側：horizon/weight 進 prompt、Step B 三段輸出）
-  │               └─▶ Phase 4（信心公式重寫，需要 direction_matrix）
-  │                       └─▶ Phase 5（報告與前端呈現）
-  └─────────────────────────────────────────────┘
+Phase 0（合併 vic 分支 + 解衝突 + 補 Ken 新來源標註）
+  └─▶ Phase 1（schema 地基）✅ vic 已完成
+        ├─▶ Phase 2（collector 側）✅ vic 已完成（2.11 待補）
+        │       └─▶ Phase 3（prompt 側）✅ vic 已完成（3.8 待驗證）
+        │               └─▶ Phase 4（信心公式重寫，需要 direction_matrix）
+        │                       └─▶ Phase 5（報告與前端呈現）
+        │                               └─▶ Phase 7（整合驗收）
+        └─▶ Phase 8（R7 多尺度＋動態主視野）── 只依賴 Phase 1 的 schema
 
 Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 ```
@@ -27,12 +48,14 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 ```json
 {
   "waves": [
-    {"wave": 1, "phases": ["Phase 1"], "description": "Schema 地基，無依賴，必須最先完成"},
-    {"wave": 2, "phases": ["Phase 2"], "description": "Collector 側標註與資料補齊，依賴 Phase 1 的欄位定義"},
-    {"wave": 3, "phases": ["Phase 3"], "description": "Prompt 層，依賴 Phase 2 已產出正確的 horizon 標註"},
-    {"wave": 4, "phases": ["Phase 4"], "description": "信心公式重寫，依賴 Phase 3 的 direction_matrix 輸出"},
+    {"wave": 0, "phases": ["Phase 0"], "description": "合併 vic 的 Phase 1-3 成果並解衝突，所有後續工作的前提"},
+    {"wave": 1, "phases": ["Phase 1"], "description": "Schema 地基（vic 已完成）"},
+    {"wave": 2, "phases": ["Phase 2"], "description": "Collector 側（vic 已完成，2.11 待 alanchang 補）"},
+    {"wave": 3, "phases": ["Phase 3"], "description": "Prompt 層（vic 已完成，3.8 待真實 LLM 驗證）"},
+    {"wave": 4, "phases": ["Phase 4", "Phase 8"], "description": "Phase 4 信心公式依賴 Phase 3 的 direction_matrix；Phase 8 只依賴 Phase 1 schema——兩者互不依賴、可平行推進"},
     {"wave": 5, "phases": ["Phase 5"], "description": "報告與前端呈現，依賴 Phase 4 的 breakdown 結構"},
-    {"wave": 6, "phases": ["Phase 6"], "description": "語氣模板，獨立功能，最後做"}
+    {"wave": 6, "phases": ["Phase 6"], "description": "語氣模板，獨立功能"},
+    {"wave": 7, "phases": ["Phase 7"], "description": "整合驗收，依賴全部"}
   ]
 }
 ```
@@ -49,7 +72,37 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ## Tasks
 
+### Phase 0 — 分支合併與標註補齊（alanchang，2026-07-28 決策②③）
+
+> 這是所有後續工作的前提。vic 的 Phase 1–3 成果還在獨立分支上，
+> 且他從 Ken 的新工作之前分岔，合併時會撞到一個衝突、漏掉四筆標註。
+
+- [ ] **0.1** 合併 `origin/feat-horizon-aware-reasoning` 進主線，解 `price.py` 衝突
+  - 衝突原因：Ken 在 `d8e1b15` 加 `compute_volatility_compression()`，
+    vic 同時重構 `price.py` 做缺口補齊與序列摘要——**功能互補、邏輯不衝突，純文字碰撞**
+  - **裁定：兩邊都留**（決策③）。共 3 個衝突區塊：
+    | 位置 | HEAD（Ken） | 分支（vic） | 解法 |
+    |---|---|---|---|
+    | 常數區 | `VOL_COMPRESSION_WINDOW/PCTL_WINDOW` | `SERIES_WINDOW`、`BINANCE_KLINES_*`、`GAP_FILL_TRIGGER_DAYS` | 兩組都保留 |
+    | 函式區 | `compute_volatility_compression()` | `_rsi14()`／`_volatility_pct()` | 三個函式都保留 |
+    | 摘要輸出 | 波動壓縮描述字串 | MA 位置分離判定＋序列摘要 | 合併輸出，波動壓縮敘述併入 vic 的新格式 |
+  - 合併後 `pytest -q` 必須全綠（vic 分支 + main 各自的測試都要過）
+  - _Requirements: —（工程整合）_
+
+- [ ] **0.2** 補上 Ken 新增子來源的 horizon 標註（design.md §3.2.1 對照表）
+  - `price.py` 波動率壓縮 → **`structural`**（⚠ 最重要，錯標會製造假矛盾）
+  - `macro.py` 供給節奏日曆 → `long`
+  - `onchain.py` BTC/ETH 歷史趨勢 → `medium`（回看窗 >30 天則 `long`）
+  - `derivatives.py` Coinbase 溢價 → `spot`（顯式標註，不靠預設值）
+  - 同步在 `tests/test_collectors_horizon.py` 補對應斷言（該測試逐項比對 §3.2 表，
+    新子來源沒進表會被漏測）
+  - _Requirements: R2-2_
+
+- [ ] **0.3** 推送合併結果並通知 vic 與 Ken（避免各自分支繼續分岔）
+  - _Requirements: —（團隊協作）_
+
 ### Phase 1 — Schema 地基
+> ✅ **已由 vic 完成**（commit `7b2c2bd`）。以下保留原始驗收條件供對帳。
 
 - [ ] **1.1** 在 `agent/schemas.py` 新增 `HorizonClass` 列舉（五值）與三個常數集合
   `CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS`／`PRIMARY_HORIZON`
@@ -74,6 +127,8 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - _Requirements: R2-3, R6-1_
 
 ### Phase 2 — Collector 側：標註、補齊、序列化
+> ✅ **已由 vic 完成**（commit `52378bf`），惟 Ken 新增的四筆子來源標註移至 Task 0.2。
+> Task 2.8 的邊界問題已由 alanchang 拍板同意，正式化為 **R1-9**（design.md §3.4.1）。
 
 - [ ] **2.1** 依 design.md §3.2 對照表，為**所有** collector 的每筆 `EvidenceDraft`
   補上 `horizon_class`／`window_start`／`window_end`
@@ -118,7 +173,12 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 - [ ] **2.8** 確認長歷史指標仍以官方 CSV 全歷史計算（R1-8）：
   `compute_historical_volatility_percentile()` 與 MA120 的 `full_closes`
   **不得**改用併接後的序列
-  - _Requirements: R1-8_
+  - ⚠ vic 實作時發現邊界：均線**值**用 CSV 沒問題，但「站上／跌破」的**位置判定**
+    若也用 CSV 末日收盤，在 CSV 落後執行日 56 天時會判出與現實相反的結論
+    （實測 BTC：MA120=72,613，CSV 末日收盤判「站上」，但 2026-07-26 現價 65,400
+    其實是跌破）。他改為「均線值用 CSV、位置用補齊後現價」並揭露兩個基準日
+  - ✅ **2026-07-28 alanchang 已確認同意**，正式化為 **R1-9**（design.md §3.4.1）
+  - _Requirements: R1-8, R1-9_
 
 - [ ] **2.9** 新增 `tests/test_price_series_summary.py`：四種方向判定各一例、
   30 天資料不足時的降級行為
@@ -129,6 +189,8 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - _Requirements: R1-2, R1-4, R1-6_
 
 ### Phase 3 — Prompt 層：讓 LLM 看見尺度與權重
+> ✅ **已由 vic 完成**（commit `a7582a8`），惟 Task 3.8（真實 LLM 驗證）尚未執行。
+> `debate_adjustment_raw` 已在 `pipeline.py` 接住，等 Phase 4 夾值套用。
 
 - [ ] **3.1** 改寫 `agent/reasoning/prompts.py` 的 `_format_evidence_list()`：
   加入 `weight`＋分級標籤、`horizon`、`window` 三組欄位（design.md §3.5.1 格式）
@@ -161,6 +223,13 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 - [ ] **3.7** 擴充 `tests/test_prompts.py`：斷言清單含 horizon/window/weight、
   說明區塊存在、Step B prompt 含三段與 direction_matrix 規格、Step D prompt 含調整欄位
   - _Requirements: R2-4, R3-3, R3-8, R4-1_
+
+- [ ] **3.9** 確認辯論層 Step C1/C2 的 prompt 也帶到權重意識（R4-3）
+  - `SYSTEM_PROMPT` 第 8 條是全域規則，但辯論 prompt 應再明確要求：
+    正反方引用證據時不得把不同權重的證據當作勢均力敵
+  - vic 的 Phase 3 主要處理 `_format_evidence_list` 與 Step B/D，
+    **此條需合併後複查是否已涵蓋**，未涵蓋則補上
+  - _Requirements: R4-3_
 
 - [ ] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
   人工檢查 Step B 是否正確把跨尺度差異放進 `structural_context` 而非 `contradictions`
@@ -292,14 +361,74 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   併入 `STATUS.md` 待辦第 8 項「向主辦方確認比賽當日執行環境」
   - _Requirements: —（風險管理）_
 
+### Phase 8 — 多尺度資料供給與動態主視野（R7，2026-07-28 新增）
+
+> 只依賴 Phase 1 的 schema，**與 Phase 4 互不依賴、可平行推進**。
+> 這一 Phase 修的是原設計一個沒被發現的假設：把主視野寫死 `medium`，
+> 等於假設題目永遠問「兩週」。現場若抽到「最近一年」，五年結構資料
+> 會被歸成「結構脈絡」排除在共識投票外——**最該用的資料反而被降級**。
+
+- [ ] **8.1** 在 `agent/schemas.py` 新增 `HORIZON_ORDER` 排序清單與
+  `is_current_signal(h, primary)` 函式（design.md §3.1）
+  - 保留 vic 已實作的 `CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS` 不刪除
+    （primary=`medium` 時兩者結果相同，既有測試不會失敗）
+  - 調整 `short` 邊界由「≤7 天」為「≤10 天」以容納「10 日」標準粒度；
+    已核對**不影響任何一筆 vic 現有標註**
+  - _Requirements: R7-1, R7-3_
+
+- [ ] **8.2** 實作 `resolve_primary_horizon(question)`（design.md §3.1.1）
+  - 規則式關鍵字比對，**不呼叫 LLM**；由長詞到短詞避免「一年」被「年」搶先命中
+  - 回傳 `(主視野, 觸發判定的題目片段)`，片段供 R7-7 在報告揭露
+  - 無命中 → 回 `(MEDIUM, "")`
+  - _Requirements: R7-2_
+
+- [ ] **8.3** 新增 `tests/test_primary_horizon.py`：
+  七組關鍵字各一例、無命中的預設值、「一年」不被「年」誤搶、
+  天數→帶的邊界值（1／10／30／180）
+  - _Requirements: R7-1, R7-2_
+
+- [ ] **8.4** 把 `primary_horizon` 貫穿 pipeline：
+  `orchestrator` 判定後傳入 `run_reasoning()`，
+  並取代 `prompts.py`／`confidence.py` 中所有寫死的「當前訊號三帶」判斷
+  - _Requirements: R7-3_
+
+- [ ] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
+  - 日／10 日／季／年 四檔為新增（月已由 vic 的 `SERIES_WINDOW=30` 完成）
+  - 資料來自本地 CSV，**不得**新增任何 API 呼叫
+  - 各檔標註對應的 `horizon_class` 與 `window_start`/`window_end`
+  - _Requirements: R7-4_
+
+- [ ] **8.6** 其他 collector 依 R7-5「盡力而為」盤點：
+  列出各 collector 實際能覆蓋的粒度，未覆蓋者確認會反映在 Data Confidence 扣分
+  - **不要**為了湊滿五檔而製造假資料（news/social 本質上沒有「年」尺度）
+  - _Requirements: R7-5_
+
+- [ ] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
+  - _Requirements: R7-6, R7-7_
+
+- [ ] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）
+  - 只定義 agent 端需要什麼格式，**不規範檔案產生流程**（那是 alanchang 的範圍）
+  - 檔案缺失／格式不符 → collector 降級為僅用即時 API，不得中斷
+  - _Requirements: R7-8, R6-1_
+
+- [ ] **8.9** 新增 `tests/test_multiscale_supply.py`：
+  五檔粒度都有證據產出、動態主視野下的角色推導正確
+  （primary=`structural` 時 `long` 應為當前訊號而非結構脈絡）
+  - _Requirements: R7-3, R7-4_
+
 ---
 
 ## Notes
 
 ### 給執行者（Sonnet）的重點提醒
 
+0. **Phase 0 沒做完不要碰任何其他 Phase**（2026-07-28 新增）。vic 的 Phase 1–3
+   成果還在 `origin/feat-horizon-aware-reasoning` 分支上未合併。在合併前動
+   `agent/collectors/` 或 `agent/reasoning/prompts.py` 只會製造更多衝突。
+
 1. **Phase 1 不做完不要跳去 Phase 3/4**——沒有 `horizon_class` 欄位，
    prompt 與信心公式都無事可做，硬做會產生要重寫的程式碼。
+   （已由 vic 完成，此條保留供對帳。）
 
 2. **Task 3.8 是本規格的成敗關鍵**。整套設計的價值在於「LLM 真的不再把跨尺度差異
    判成矛盾」。若那次真實驗證顯示 LLM 仍然誤判，優先加強 prompt 約束措辭

@@ -118,6 +118,50 @@ Binance 公開日線僅補「CSV 末日 → 執行日」的缺口，供 `medium`
 **否決的替代方案**：
 - ❌ *LLM 給 0–100 強度分*：不可複現，且與 `source_weight` 語意重疊會互相矛盾。
 
+**與 Ken「權重公式 Layer A/B 改版」的關係（2026-07-28 補充，決策④）**：
+
+Ken 提案把四因子拆成 `w = Layer A（資料品質）× Layer B（市場影響力）`，
+並把 `static/source_reputation.json` 從 8 級改 3 級。團隊裁定：
+**先做 Layer A，Layer B 保留設計說明但不實作。**
+
+對本規格的影響：
+- **不阻塞**——ADR-4 只**消費** `source_weight` 的數值，不關心它怎麼算出來。
+  Layer A 落地後 Evidence Strength 的分數尺度會位移，但公式不用改。
+- **有一件事要注意**：Layer A 把 `social` 定為 0.5、把官方源定為 1.0，
+  級距比現行 8 級表更陡。這會讓 Evidence Strength 的類別間差異放大，
+  屬預期行為，但 Layer A 落地後應重跑一次 §3.6.3 的分數分佈確認合理。
+- Layer B（歷史回測相關性）若未來要做，會引入「市場影響力」這個**新維度**，
+  屆時需要重新檢視它與 Evidence Strength 是否語意重疊——但目前不做，不需處理。
+
+---
+
+### ADR-7：動態主視野與多尺度資料供給（2026-07-28 新增，決策⑥）
+
+**決策**：主視野由**題目時間範圍動態決定**（非寫死 `medium`）；
+證據的「當前訊號／結構脈絡」角色改為**相對主視野推導**；
+`price` collector 覆蓋五檔標準粒度（日／10 日／月／季／年）。
+
+**理由**：
+1. **原設計有個沒被發現的假設**——把主視野寫死 `medium` 等於假設題目永遠問「兩週」。
+   若現場抽到「最近一年 BTC 表現如何」，五年結構資料會被歸為「結構脈絡」而排除在
+   共識投票外，**反而是最該用的資料被降級**，這是原設計會在賽場上翻車的地方。
+2. **角色推導規則可以優雅泛化**：`horizon ≤ 主視野` = 當前訊號、`> 主視野` = 結構脈絡。
+   當主視野 = `medium` 時，推導結果與原設計**完全相同**，是嚴格的超集，不破壞既有行為。
+3. **五檔粒度與五帶天然一一對應**（日/10日/月/季/年 → spot/short/medium/long/structural），
+   不需要新造分類體系。
+4. **`price` 全覆蓋幾乎免費**——資料來自本地 CSV，只是多算幾個窗口的純 Python 運算，
+   不增加任何 API 呼叫，不吃 15 分鐘預算。
+
+**否決的替代方案**：
+- ❌ *讓 LLM 判斷題目的時間範圍*：可規則化的事不該花 LLM 呼叫，且不可複現。
+- ❌ *所有 collector 都做五檔*：news/social 本質上沒有「年」尺度的資料
+  （RSS 不會給你一年前的新聞情緒），硬做會產生假資料。故 R7-5 只要求「盡力而為」，
+  缺口誠實反映在 Data Confidence 扣分。
+
+**band 邊界的微調**：`short` 由「≤ 7 天」放寬為「≤ 10 天」以容納「10 日」標準粒度。
+已核對 vic 已實作的標註，此調整**不影響任何一筆現有標註**
+（social 7 天仍是 `short`，news 14 天仍是 `medium`）。
+
 ---
 
 ### ADR-5：信心 = 可複現 Base ＋ 不對稱辯論調整（−15 ~ +5）
@@ -177,12 +221,43 @@ class HorizonClass(str, Enum):
     STRUCTURAL = "structural"  # >180 天
 
 
-# 當前訊號三帶：參與辯論、矛盾判定與共識投票
-CURRENT_SIGNAL_HORIZONS = {HorizonClass.SPOT, HorizonClass.SHORT, HorizonClass.MEDIUM}
-# 結構脈絡兩帶：只定位大週期位置，不參與上述三者
-STRUCTURAL_HORIZONS = {HorizonClass.LONG, HorizonClass.STRUCTURAL}
-PRIMARY_HORIZON = HorizonClass.MEDIUM
+# 由短到長的排序，角色推導與比較大小都以此為準（ADR-7）
+HORIZON_ORDER = [SPOT, SHORT, MEDIUM, LONG, STRUCTURAL]
+
+# 預設主視野；實際主視野由 resolve_primary_horizon() 依題目動態決定（R7-2）
+DEFAULT_PRIMARY_HORIZON = HorizonClass.MEDIUM
+
+
+def is_current_signal(h: HorizonClass, primary: HorizonClass) -> bool:
+    """horizon ≤ 主視野 → 當前訊號；> 主視野 → 結構脈絡（R7-3）。"""
+    return HORIZON_ORDER.index(h) <= HORIZON_ORDER.index(primary)
 ```
+
+> **相容性**：`CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS` 兩個常數集合
+> （vic 於 Phase 1 已實作）保留作為「主視野 = `medium`」時的預設分組，
+> 但**所有新程式碼應改用 `is_current_signal()`**。當 primary = `medium` 時，
+> 兩者結果完全相同，故既有測試不會失敗。
+
+### 3.1.1 主視野判定（R7-2，決定性規則，不呼叫 LLM）
+
+```python
+# 關鍵字 → 回看天數；first-match-wins，比對順序由長詞到短詞避免「一年」被「年」搶先
+QUESTION_HORIZON_KEYWORDS = [
+    (r"過去一年|近一年|最近一年|12\s*個月|一整年", 365),
+    (r"過去半年|近半年|最近半年|6\s*個月",         180),
+    (r"過去一季|近一季|最近一季|3\s*個月|季度",      90),
+    (r"過去一個?月|近一個?月|最近一個?月|30\s*天",   30),
+    (r"過去兩週|近兩週|最近兩週|兩個?星期|14\s*天",  14),
+    (r"過去一週|近一週|最近一週|7\s*天",             7),
+    (r"今天|當前|目前|現在|即時",                    1),
+]
+
+def resolve_primary_horizon(question: str) -> tuple[HorizonClass, str]:
+    """回傳 (主視野, 觸發判定的題目片段)。無命中則回 (MEDIUM, "")。"""
+```
+
+天數 → 帶的映射沿用 R2-1 的邊界（`≤1`→spot、`≤10`→short、`≤30`→medium、
+`≤180`→long、其餘→structural）。回傳的片段供 R7-7 在報告揭露判定依據。
 
 `EvidenceDraft` 新增三欄位（皆有預設值，滿足 R2-9 向後相容）：
 
@@ -222,6 +297,35 @@ PRIMARY_HORIZON = HorizonClass.MEDIUM
 
 > **標註重點**：`price` 的 MA120／波動率全歷史百分位與 `derivatives` 的 CME COT
 > 是最主要的假矛盾來源（D2/D4），務必正確標為 `structural`／`long`。
+
+#### 3.2.1 Ken 於 `d8e1b15` 新增、尚未標註的子來源（2026-07-28，決策②）
+
+vic 的 Phase 2 標註是從 `0a40297` 分岔，早於 Ken 這批 prototype 併回，
+因此下列四筆合併後會吃預設值 `spot`。**由 alanchang 補標（tasks.md Task 2.11）**：
+
+| Collector | 子來源 | 正確標註 | 錯標成 `spot` 的後果 |
+|---|---|---|---|
+| `price` | 波動率壓縮（20 天標準差 vs 近 90 天滾動分佈） | **`structural`** | ⚠ **最嚴重**——90 天滾動窗被當成當下訊號，正是本規格要修的那類假矛盾 |
+| `macro` | 供給節奏日曆（halving／unlock 等排定事件） | `long` | 未來事件被當成當下訊號進共識投票 |
+| `onchain` | BTC/ETH 歷史趨勢序列 | `medium`（依實際回看窗決定，>30 天則 `long`） | 歷史趨勢被當成即時快照 |
+| `derivatives` | Coinbase 溢價（Coinbase vs Binance 現貨價差） | `spot` ✅ | 無（預設值剛好正確，仍建議顯式標註） |
+
+> 補標時一併確認 vic 的 `tests/test_collectors_horizon.py` 是否需要新增對應斷言——
+> 該測試逐 collector 比對本表，新增子來源若沒進表會被漏測。
+
+#### 3.2.2 `price` 的五檔標準粒度（R7-4）
+
+`price` 資料來自本地 CSV，多算幾個窗口不增加任何 API 呼叫，故要求全覆蓋：
+
+| 標準粒度 | 回看 | `horizon_class` | 產出內容 |
+|---|---:|---|---|
+| 日 | 1 | `spot` | 最新一日 OHLCV 與當日漲跌 |
+| 10 日 | 10 | `short` | 10 日走勢摘要＋短期動能 |
+| 月 | 30 | `medium` | 30 日序列摘要（§3.4 的主要輸出） |
+| 季 | 90 | `long` | 季線位置、90 日區間位置 |
+| 年 | 365 | `structural` | 年度區間位置、MA120／全歷史百分位 |
+
+其餘 collector 依 R7-5「盡力而為」，未覆蓋的粒度誠實反映在 Data Confidence 扣分。
 
 ### 3.3 缺口補齊設計（R1-2，`agent/collectors/price.py`）
 
@@ -276,6 +380,25 @@ GET https://api.binance.com/api/v3/klines
 
 **Token 預算**：4 個指標 × 約 60 字 ≈ 240 字/幣，較現行單點版增加約 150 字，
 遠低於直接丟 30×4=120 個數字（約 800 字）。
+
+#### 3.4.1 均線位置判定的基準日分離（R1-9，2026-07-28 決策①）
+
+實作時發現的邊界：**均線「值」與「站上／跌破」的判定基準必須分開**。
+
+| 項目 | 基準 | 理由 |
+|---|---|---|
+| 均線數值（MA20/60/120） | 官方 CSV 全歷史 | R1-8，維護共同基準語意 |
+| 站上／跌破位置 | **補齊後的最新收盤價** | 用 CSV 末日收盤會判出與現實相反的結論 |
+
+實測佐證：BTC 的 MA120 = 72,613。以 CSV 末日收盤 73,674 判為「站上」，
+但 2026-07-26 實際收盤 65,400 是「跌破」。R1-8 的原意是保護長歷史指標的**計算基準**，
+不是要求用過期價格做**當下判讀**，兩者不衝突。
+
+證據文字須同時揭露兩個基準日，例如：
+```
+MA120=72613.44（現價跌破）（位置以 2026-07-26 收盤 65400.00 判定；
+均線值依官方基準資料集計算至 2026-05-31）
+```
 
 ### 3.5 Prompt 變更（`agent/reasoning/prompts.py`）
 
@@ -382,8 +505,10 @@ DATA_COMPLETENESS_THRESHOLD = {
 #### 3.6.2 Signal Consensus（R3-4/R3-5）
 
 ```python
+# 「當前訊號」依當次主視野動態判定（ADR-7 / R7-3），不是寫死三帶
 dirs = [d["direction"] for d in direction_matrix
-        if d["source_type"] 在當前訊號三帶內有證據]
+        if any(is_current_signal(e.horizon_class, primary)
+               for e in evidences if e.source_type == d["source_type"])]
 if len(dirs) < 2:
     consensus = 50.0          # 樣本不足以談共識，中性處理
 else:
@@ -398,13 +523,22 @@ else:
 | `[1, -1, 0, 1]` | 0.83 | **17** ⚠ |
 | `[1, -1, -1, 1]` | 1.00 | **0** ⚠ |
 
-> ⚠ **實作注意**：以 `stdev_max = 1.0` 為分母時，需求方預期的
-> 「65 / 40」與公式實得的「17 / 0」落差極大——因為 4 個來源的
-> 母體標準差在 `[1,-1,0,1]` 已達 0.83，接近理論極大值 1.0。
-> **本設計採用 `stdev_max = 1.0` 的線性映射（R3-5 原文）**，
-> 但 tasks.md 第 3.4 項要求實作後用真實資料驗算並回報分佈；
-> 若實測顯示分數普遍過低而失去鑑別度，需回頭與需求方確認是否改用
-> 平均絕對方向 `100 × |mean(dirs)|` 或非線性映射。**不得自行改公式，須先確認。**
+> ⚠ **未決事項（2026-07-28 alanchang 裁定「晚點做，先標記」）**：
+> 以 `stdev_max = 1.0` 為分母時，需求方預期的「65 / 40」與公式實得的「17 / 0」
+> 落差極大——因為 4 個來源的母體標準差在 `[1,-1,0,1]` 已達 0.83，接近理論極大值 1.0。
+>
+> **現行決定**：暫採 `stdev_max = 1.0` 的線性映射（R3-5 原文），
+> 做到 tasks.md Task 4.3 時用真實 `direction_matrix` 驗算分佈再拍板。
+>
+> **候選替代方案**（屆時擇一，不得自行決定）：
+>
+> | 方案 | `[1,1,1,1]` | `[1,-1,0,1]` | `[1,-1,-1,1]` | 特性 |
+> |---|---:|---:|---:|---|
+> | A. 線性 stdev（現行） | 100 | 17 | 0 | 對分歧極敏感，鑑別度集中在「幾乎全一致」 |
+> | B. `100 × \|mean(dirs)\|` | 100 | 25 | 0 | 反映淨方向，但全中性 `[0,0,0,0]` 也得 0（語意錯） |
+> | C. `100 × (1 − stdev/stdev_max)`，`stdev_max` 依樣本數動態算 | 100 | ~35 | 0 | 較貼近直覺，但公式較難解釋 |
+>
+> **不得自行改公式，須先與 alanchang 確認。**
 
 #### 3.6.3 Evidence Strength（R3-6，決定性）
 
