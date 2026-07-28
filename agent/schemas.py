@@ -26,26 +26,73 @@ class HorizonClass(str, Enum):
     位置，不參與上述三者，避免不同尺度的正常差異被誤判成矛盾（假矛盾）。
     """
 
-    SPOT = "spot"              # 當下快照
-    SHORT = "short"            # ≤7 天
-    MEDIUM = "medium"          # 8–30 天（主視野）
-    LONG = "long"              # 31–180 天
-    STRUCTURAL = "structural"  # >180 天
+    SPOT = "spot"              # 當下快照或最近 1 日 —— 標準粒度「日」
+    SHORT = "short"            # ≤10 天 —— 標準粒度「10 日」
+    MEDIUM = "medium"          # 11–30 天 —— 標準粒度「月」（預設主視野）
+    LONG = "long"              # 31–180 天 —— 標準粒度「季」
+    STRUCTURAL = "structural"  # >180 天 —— 標準粒度「年」
 
 
-# 當前訊號三帶：參與辯論、矛盾判定與共識投票
+# 由短到長排序；角色推導與大小比較都以此為準（R7-3）
+HORIZON_ORDER: list[HorizonClass] = [
+    HorizonClass.SPOT,
+    HorizonClass.SHORT,
+    HorizonClass.MEDIUM,
+    HorizonClass.LONG,
+    HorizonClass.STRUCTURAL,
+]
+
+# 五檔標準粒度 → 回看天數（R7-1）。與上面五帶一一對應。
+HORIZON_STANDARD_DAYS: dict[HorizonClass, int] = {
+    HorizonClass.SPOT: 1,
+    HorizonClass.SHORT: 10,
+    HorizonClass.MEDIUM: 30,
+    HorizonClass.LONG: 90,
+    HorizonClass.STRUCTURAL: 365,
+}
+
+# 分帶上界（天）：用於「回看 N 天 → 哪一帶」的換算，與 R2-1 的邊界一致。
+_HORIZON_UPPER_BOUND_DAYS: list[tuple[int, HorizonClass]] = [
+    (1, HorizonClass.SPOT),
+    (10, HorizonClass.SHORT),
+    (30, HorizonClass.MEDIUM),
+    (180, HorizonClass.LONG),
+]
+
+# 預設主視野。實際主視野由 `resolve_primary_horizon()` 依題目動態決定（R7-2）。
+DEFAULT_PRIMARY_HORIZON: HorizonClass = HorizonClass.MEDIUM
+
+# 相容性別名：主視野為 medium 時的預設分組。**新程式碼請改用 `is_current_signal()`**——
+# 角色不再寫死綁定於特定帶（R7-3），問「最近一年」時 long/structural 也是當前訊號。
 CURRENT_SIGNAL_HORIZONS: set[HorizonClass] = {
     HorizonClass.SPOT,
     HorizonClass.SHORT,
     HorizonClass.MEDIUM,
 }
-# 結構脈絡兩帶：只定位大週期位置，不參與矛盾判定與共識投票
 STRUCTURAL_HORIZONS: set[HorizonClass] = {
     HorizonClass.LONG,
     HorizonClass.STRUCTURAL,
 }
-# 主視野：一次分析的主判斷尺度，固定為 medium（8–30 天），對應命題「過去兩週」尺度
-PRIMARY_HORIZON: HorizonClass = HorizonClass.MEDIUM
+PRIMARY_HORIZON: HorizonClass = DEFAULT_PRIMARY_HORIZON
+
+
+def horizon_for_days(days: int) -> HorizonClass:
+    """回看天數 → horizon 分帶（R7-1）。"""
+    for upper, horizon in _HORIZON_UPPER_BOUND_DAYS:
+        if days <= upper:
+            return horizon
+    return HorizonClass.STRUCTURAL
+
+
+def is_current_signal(horizon: HorizonClass, primary: HorizonClass | None = None) -> bool:
+    """`horizon ≤ 主視野` → 當前訊號；`>` → 結構脈絡（R7-3）。
+
+    角色相對主視野推導而非寫死綁帶：題目問「最近一年」時主視野是 structural，
+    此時 long/structural 帶才是當前訊號，五年結構資料不該被排除在共識投票外。
+    `primary=None` 時退回預設 medium，行為與動態主視野接線前完全相同。
+    """
+    target = primary or DEFAULT_PRIMARY_HORIZON
+    return HORIZON_ORDER.index(horizon) <= HORIZON_ORDER.index(target)
 
 
 class PipelineLayer(str, Enum):

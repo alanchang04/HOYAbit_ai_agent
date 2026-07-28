@@ -17,7 +17,7 @@
 | Phase 5 | 報告與前端呈現 | ✅ 完成（2026-07-28） | Claude |
 | Phase 6 | 語氣模板 | ⬜ 待做 | — |
 | Phase 7 | 整合驗收 | ⬜ 待做 | — |
-| Phase 8 | 多尺度供給與動態主視野（R7） | ⬜ 待做 | — |
+| Phase 8 | 多尺度供給與動態主視野（R7） | 🟡 8.1-8.4/8.7 完成；8.5/8.6/8.8/8.9 待做 | Claude |
 
 > vic 的 Phase 1–3 成果在 `origin/feat-horizon-aware-reasoning`（1798 行，7 個測試檔），
 > **尚未合併進 main**，Phase 0 就是要處理這件事。
@@ -368,7 +368,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 > 等於假設題目永遠問「兩週」。現場若抽到「最近一年」，五年結構資料
 > 會被歸成「結構脈絡」排除在共識投票外——**最該用的資料反而被降級**。
 
-- [ ] **8.1** 在 `agent/schemas.py` 新增 `HORIZON_ORDER` 排序清單與
+- [x] **8.1** 在 `agent/schemas.py` 新增 `HORIZON_ORDER` 排序清單與
   `is_current_signal(h, primary)` 函式（design.md §3.1）
   - 保留 vic 已實作的 `CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS` 不刪除
     （primary=`medium` 時兩者結果相同，既有測試不會失敗）
@@ -376,18 +376,18 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     已核對**不影響任何一筆 vic 現有標註**
   - _Requirements: R7-1, R7-3_
 
-- [ ] **8.2** 實作 `resolve_primary_horizon(question)`（design.md §3.1.1）
+- [x] **8.2** 實作 `resolve_primary_horizon(question)`（design.md §3.1.1）
   - 規則式關鍵字比對，**不呼叫 LLM**；由長詞到短詞避免「一年」被「年」搶先命中
   - 回傳 `(主視野, 觸發判定的題目片段)`，片段供 R7-7 在報告揭露
   - 無命中 → 回 `(MEDIUM, "")`
   - _Requirements: R7-2_
 
-- [ ] **8.3** 新增 `tests/test_primary_horizon.py`：
+- [x] **8.3** 新增 `tests/test_primary_horizon.py`：
   七組關鍵字各一例、無命中的預設值、「一年」不被「年」誤搶、
   天數→帶的邊界值（1／10／30／180）
   - _Requirements: R7-1, R7-2_
 
-- [ ] **8.4** 把 `primary_horizon` 貫穿 pipeline：
+- [x] **8.4** 把 `primary_horizon` 貫穿 pipeline：
   `orchestrator` 判定後傳入 `run_reasoning()`，
   並取代 `prompts.py`／`confidence.py` 中所有寫死的「當前訊號三帶」判斷
   - _Requirements: R7-3_
@@ -403,7 +403,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - **不要**為了湊滿五檔而製造假資料（news/social 本質上沒有「年」尺度）
   - _Requirements: R7-5_
 
-- [ ] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
+- [x] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
   - _Requirements: R7-6, R7-7_
 
 - [ ] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）

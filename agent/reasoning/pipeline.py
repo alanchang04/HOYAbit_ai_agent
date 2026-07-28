@@ -12,7 +12,9 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from agent.collectors.horizon import resolve_primary_horizon
 from agent.logging_utils import ExecutionLogger
+from agent.reasoning.confidence import compute_confidence
 from agent.reasoning.llm_client import LLMClient
 from agent.reasoning.prompts import (
     SYSTEM_PROMPT,
@@ -26,12 +28,11 @@ from agent.reasoning.prompts import (
     classify_question_type,
     extract_json,
 )
+from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
 
 # 辯論輪數上限。多智能體辯論的增益在第 2 輪後大致飽和，再往上主要是燒 token 與延遲，
 # 因此預設 2 輪（= 7 次 LLM 呼叫）。反方自報無新論點時會更早收斂。
 MAX_DEBATE_ROUNDS = 2
-from agent.reasoning.confidence import compute_confidence
-from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
 
 
 @dataclass
@@ -48,6 +49,10 @@ class ReasoningResult:
     # 三維信心的完整分項（R3-12/R3-13）。report.md 與四面板都要呈現「88 分是怎麼
     # 算出來的」，不能只給最終數字——分項留在 log metrics 裡的話報告層拿不到。
     confidence_breakdown: dict = field(default_factory=dict)
+    # 本次的主判斷尺度與其判定依據（R7-2/R7-7）。報告要揭露「為什麼判成這個尺度」，
+    # 讀者才能檢查系統有沒有誤解題目的時間範圍。
+    primary_horizon: str = "medium"
+    primary_horizon_basis: str = ""
 
 
 class ReasoningStepError(RuntimeError):
@@ -62,6 +67,7 @@ def _dry_run_reasoning(
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
 ) -> ReasoningResult:
+    primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
         by_type.setdefault(ev.source_type.value, []).append(ev)
@@ -129,6 +135,7 @@ def _dry_run_reasoning(
         cross_validation,
         debate_adjustment=conclusion.get("debate_adjustment_raw"),
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
+        primary_horizon=primary_horizon,
     )
     if logger:
         logger.log(
@@ -161,6 +168,8 @@ def _dry_run_reasoning(
         coin2=coin2,
         confidence_score=score,
         confidence_breakdown=breakdown,
+        primary_horizon=primary_horizon.value,
+        primary_horizon_basis=primary_horizon_basis,
     )
 
 
@@ -360,10 +369,19 @@ def _real_reasoning(
     deadline: float | None = None,
 ) -> ReasoningResult:
     known_ids = {e.id for e in evidences}
+    # 主視野由題目的時間範圍決定（R7-2）：問「最近一年」時 long/structural 才是
+    # 當前訊號，五年結構資料不該被排除在共識投票外。未明示時沿用預設 medium。
+    primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
 
     def _log(step: str, status: str, detail: str = "") -> None:
         if log_step:
             log_step(step, status, detail)
+
+    _log(
+        "primary_horizon",
+        "ok",
+        f"primary_horizon={primary_horizon.value}, basis={primary_horizon_basis or '（題目未明示，用預設）'}",
+    )
 
     # Step A：事實層
     step_a_raw = _call_json_step(
@@ -643,6 +661,7 @@ def _real_reasoning(
         cross_validation,
         debate_adjustment=conclusion.get("debate_adjustment_raw"),
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
+        primary_horizon=primary_horizon,
     )
     if logger:
         logger.log(
@@ -670,6 +689,8 @@ def _real_reasoning(
         coin2=coin2,
         confidence_score=score,
         confidence_breakdown=breakdown,
+        primary_horizon=primary_horizon.value,
+        primary_horizon_basis=primary_horizon_basis,
     )
 
 

@@ -121,6 +121,27 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     return lines
 
 
+HORIZON_LABEL: dict[str, str] = {
+    "spot": "當日（日尺度）",
+    "short": "近 10 日（短期）",
+    "medium": "近一個月（中期）",
+    "long": "近一季（長期）",
+    "structural": "近一年以上（結構）",
+}
+
+
+def _describe_primary_horizon(result: ReasoningResult) -> str:
+    """揭露本次的主判斷尺度與判定依據（R7-7）。
+
+    讓讀者能檢查系統有沒有誤解題目的時間範圍——問「最近一年」卻判成中期，
+    讀者一眼就能看出結論的尺度不對，這比默默用錯尺度分析好得多。
+    """
+    label = HORIZON_LABEL.get(result.primary_horizon, result.primary_horizon)
+    if result.primary_horizon_basis:
+        return f"{label}（依題目「{result.primary_horizon_basis}」判定）"
+    return f"{label}（題目未明示時間範圍，採預設）"
+
+
 def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     """信心分項表＋「這個分數怎麼來的」（R3-12/R3-13）。
 
@@ -194,6 +215,7 @@ def build_report_markdown(
     lines.append("")
     lines.append(f"> 題目：{question}")
     lines.append(f"> 題型分類：{result.question_type}")
+    lines.append(f"> 主判斷尺度：{_describe_primary_horizon(result)}")
     lines.append("")
 
     lines.extend(_build_executive_summary_lines(result))
