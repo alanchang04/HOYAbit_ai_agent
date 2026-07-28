@@ -216,3 +216,120 @@ def test_dry_run_comparison_with_explicit_coin2_override(tmp_path):
     )
     # 題目文字沒有比較關鍵字，所以會被分類成 multi_source，coin2 不會被採用
     assert result.reasoning.coin2 is None
+
+
+def _result_with_breakdown(**overrides):
+    """帶三維信心分項的 ReasoningResult（R3-12/R3-13 呈現測試用）。"""
+    breakdown = {
+        "data_confidence": 83.3,
+        "signal_consensus": 85.0,
+        "evidence_strength": 76.2,
+        "weights": {"data_confidence": 0.4, "signal_consensus": 0.4, "evidence_strength": 0.2},
+        "base": 82.5,
+        "debate_adjustment": -5,
+        "debate_adjustment_reason": "反方對鏈上活躍度的批評成立",
+        "final": 78,
+        "why": ["✅ price 資料完整（3 筆，最長窗長 30 天）", "⚠ 辯論後下修 5 分：反方批評成立"],
+        "signal_consensus_detail": {"degraded": False},
+    }
+    breakdown.update(overrides.pop("breakdown", {}))
+    base = dict(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        confidence_score=78,
+        confidence_breakdown=breakdown,
+    )
+    base.update(overrides)
+    return ReasoningResult(**base)
+
+
+def test_report_confidence_section_shows_three_dimension_breakdown():
+    """R3-12：第 4 節要攤開三維分數、權重、基底、辯論調整、最終分，可逐項對帳。"""
+    md = build_report_markdown("BTC", "題目", _result_with_breakdown(), [make_evidence("ev-001")])
+    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+
+    assert "資料品質" in section and "83.3" in section
+    assert "訊號一致性" in section and "85.0" in section
+    assert "證據強度" in section and "76.2" in section
+    assert "40%" in section and "20%" in section
+    assert "基底" in section and "82.5" in section
+    assert "-5" in section and "反方對鏈上活躍度的批評成立" in section
+    assert "78" in section
+
+
+def test_report_confidence_section_shows_why_lines():
+    """R3-13：不能只有分數，要有「這個分數怎麼來的」。"""
+    md = build_report_markdown("BTC", "題目", _result_with_breakdown(), [make_evidence("ev-001")])
+    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    assert "這個分數怎麼來的" in section
+    assert "price 資料完整" in section
+
+
+def test_report_discloses_consensus_degradation():
+    """R3-15：Step B 沒產出 direction_matrix 時，報告要講明共識是中性代入的，
+    不能讓讀者以為 50 分是真的算出來的。"""
+    md = build_report_markdown(
+        "BTC",
+        "題目",
+        _result_with_breakdown(
+            breakdown={
+                "signal_consensus": 50.0,
+                "signal_consensus_detail": {
+                    "degraded": True,
+                    "degraded_reason": "當前訊號帶的表態來源不足 2 個，訊號共識以中性 50 計算",
+                },
+            }
+        ),
+        [make_evidence("ev-001")],
+    )
+    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    assert "訊號共識以中性 50 計算" in section
+
+
+def test_report_without_breakdown_says_so_honestly():
+    """舊格式結果／fallback 路徑沒有分項時，誠實標示而不是假裝有表格。"""
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "判斷", "confidence": "低", "evidence_ids": ["ev-001"]},
+        confidence_score=40,
+    )
+    md = build_report_markdown("BTC", "題目", result, [make_evidence("ev-001")])
+    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    assert "未產出分項計算明細" in section
+    assert "| 資料品質 |" not in section
+
+
+def test_structural_context_rendered_separately_from_contradictions():
+    """R2-7/R2-8：跨尺度的位置關係不是矛盾，兩者必須分開呈現——
+    混在一起會讓讀者以為資料在打架。"""
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        cross_validation={
+            "consistent_signals": ["兩週價量同步走強"],
+            "contradictions": ["社群情緒與鏈上流向不一致"],
+            "structural_context": ["兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位"],
+        },
+        conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        confidence_score=60,
+    )
+    md = build_report_markdown("BTC", "題目", result, [make_evidence("ev-001")])
+    section = md.split("## 3. ")[1].split("## 4.")[0]
+
+    assert "### 矛盾訊號" in section
+    assert "### 結構脈絡" in section
+    assert "不計入矛盾" in section
+    # 結構脈絡的內容不得出現在矛盾訊號段落裡
+    contradiction_block = section.split("### 矛盾訊號")[1].split("###")[0]
+    assert "5 年分佈第 88 百分位" not in contradiction_block
+
+
+def test_executive_summary_splits_base_and_debate_adjustment():
+    """R3-12：執行摘要第一眼就要看得出分數有沒有因辯論被下修。"""
+    md = build_report_markdown("BTC", "題目", _result_with_breakdown(), [make_evidence("ev-001")])
+    exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
+    assert "基底" in exec_section
+    assert "-5" in exec_section
+    assert "辯論調整" in exec_section

@@ -288,12 +288,30 @@ def _build_panel3(
             "stopped_reason": debate.get("stopped_reason", ""),
             "stopped_reason_label": STOP_REASON_LABEL.get(debate.get("stopped_reason", ""), ""),
         },
+        # 三維可解釋信心（R3-12）。舊制的 auth_bonus／contradiction_penalty／
+        # gap_penalty 已隨公式改版移除，對應關係見 tests/test_confidence_score.py 的
+        # 對照表；這裡直接改用新欄位，不保留舊鍵避免前端顯示恆為 0 的假資料。
         "confidence_breakdown": {
-            "base": l5_metrics.get("base", 35),
-            "auth_bonus": l5_metrics.get("auth_bonus", 0),
-            "contradiction_penalty": l5_metrics.get("contradiction_penalty", 0),
-            "gap_penalty": l5_metrics.get("gap_penalty", 0),
+            "data_confidence": l5_metrics.get("data_confidence", 0),
+            "signal_consensus": l5_metrics.get("signal_consensus", 0),
+            "evidence_strength": l5_metrics.get("evidence_strength", 0),
+            "weights": l5_metrics.get(
+                "weights",
+                {"data_confidence": 0.4, "signal_consensus": 0.4, "evidence_strength": 0.2},
+            ),
+            "base": l5_metrics.get("base", 0),
+            "debate_adjustment": l5_metrics.get("debate_adjustment", 0),
+            "debate_adjustment_reason": l5_metrics.get("debate_adjustment_reason", ""),
             "final": l5_metrics.get("final", reasoning_result.confidence_score),
+            "why": l5_metrics.get("why", []),
+            # Step B 沒產出 direction_matrix 時要讓讀者知道共識是中性代入的（R3-15）
+            "consensus_degraded": bool(
+                l5_metrics.get("signal_consensus_detail", {}).get("degraded", False)
+            ),
+            "consensus_degraded_reason": l5_metrics.get("signal_consensus_detail", {}).get(
+                "degraded_reason", ""
+            ),
+            "primary_horizon": l5_metrics.get("primary_horizon", "medium"),
         },
     }
 

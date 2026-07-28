@@ -948,6 +948,84 @@ a {
   margin: 0.2rem 0;
 }
 
+/* 三維信心 breakdown 表（R3-12）：讓 88 分不是憑空冒出來的一個數字 */
+.confidence-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.confidence-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0.25rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.confidence-table th:not(:first-child),
+.confidence-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.confidence-table td {
+  padding: 0.28rem 0.4rem;
+  vertical-align: top;
+}
+
+.confidence-table .cb-subtotal td {
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.confidence-table .cb-final td {
+  border-top: 2px solid var(--border);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* 說明文字換行排在指標名稱下方，避免把表格撐寬 */
+.cb-hint {
+  display: block;
+  font-family: var(--font-sans, system-ui), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+.cb-flag {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+}
+
+.confidence-why {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+.cb-why-title {
+  font-weight: 600;
+  margin-bottom: 0.3rem !important;
+}
+
+.confidence-why ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-family: var(--font-sans, system-ui), sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.confidence-why li {
+  margin: 0.15rem 0;
+}
+
 .debate-details {
   margin-top: 0.75rem;
 }

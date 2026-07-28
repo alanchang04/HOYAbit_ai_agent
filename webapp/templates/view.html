@@ -199,12 +199,64 @@
               {% endif %}
 
             {% elif layer.layer == "L5_conclusion" %}
+              {% set cb = layer.confidence_breakdown %}
               <div class="confidence-breakdown">
-                <p>基礎值：{{ layer.confidence_breakdown.base }}</p>
-                <p>權威加成：+{{ layer.confidence_breakdown.auth_bonus }}</p>
-                <p>矛盾扣減：-{{ layer.confidence_breakdown.contradiction_penalty }}</p>
-                <p>缺口扣減：-{{ layer.confidence_breakdown.gap_penalty }}</p>
-                <p><strong>最終信心：{{ layer.confidence_breakdown.final }}%</strong></p>
+                <table class="confidence-table">
+                  <thead>
+                    <tr><th>組成</th><th>分數</th><th>權重</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>資料品質<span class="cb-hint">六類來源的完整度</span></td>
+                      <td class="num">{{ "%.1f"|format(cb.data_confidence) }}</td>
+                      <td class="num">{{ (cb.weights.data_confidence * 100)|round|int }}%</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        訊號一致性<span class="cb-hint">來源之間的兩兩一致度</span>
+                        {%- if cb.consensus_degraded %} <span class="cb-flag">降級</span>{% endif -%}
+                      </td>
+                      <td class="num">{{ "%.1f"|format(cb.signal_consensus) }}</td>
+                      <td class="num">{{ (cb.weights.signal_consensus * 100)|round|int }}%</td>
+                    </tr>
+                    <tr>
+                      <td>證據強度<span class="cb-hint">來源權威度 × 類別覆蓋度</span></td>
+                      <td class="num">{{ "%.1f"|format(cb.evidence_strength) }}</td>
+                      <td class="num">{{ (cb.weights.evidence_strength * 100)|round|int }}%</td>
+                    </tr>
+                    <tr class="cb-subtotal">
+                      <td>基底（三維加權）</td>
+                      <td class="num">{{ "%.1f"|format(cb.base) }}</td>
+                      <td></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        辯論後調整
+                        {%- if cb.debate_adjustment_reason %}
+                          <span class="cb-hint">{{ cb.debate_adjustment_reason }}</span>
+                        {% endif -%}
+                      </td>
+                      <td class="num">{{ "%+d"|format(cb.debate_adjustment) }}</td>
+                      <td></td>
+                    </tr>
+                    <tr class="cb-final">
+                      <td>最終信心</td>
+                      <td class="num">{{ cb.final }}</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+                {% if cb.consensus_degraded and cb.consensus_degraded_reason %}
+                  <p class="data-missing">⚠ {{ cb.consensus_degraded_reason }}</p>
+                {% endif %}
+                {% if cb.why %}
+                  <div class="confidence-why">
+                    <p class="cb-why-title">這個分數怎麼來的？</p>
+                    <ul>
+                      {% for line in cb.why %}<li>{{ line }}</li>{% endfor %}
+                    </ul>
+                  </div>
+                {% endif %}
               </div>
               {% if layer.debate.rounds %}
                 <details class="debate-details" open>

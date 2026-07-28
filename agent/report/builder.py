@@ -49,10 +49,21 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     lines.append("")
 
     confidence_label = conclusion.get("confidence", "未知")
-    lines.append(
-        f"> 信心：{result.confidence_score}%（{confidence_label}）"
-        "── 分項計算方式見「4. 信心說明」"
-    )
+    breakdown = result.confidence_breakdown or {}
+    if breakdown:
+        # 執行摘要就把「基底 vs 辯論調整」拆開，讀者第一眼就知道這個分數有沒有
+        # 因為辯論而被下修，不用翻到第 4 節（R3-12）。
+        adjustment = breakdown.get("debate_adjustment", 0)
+        lines.append(
+            f"> 信心：{result.confidence_score}%（{confidence_label}）"
+            f"＝ 基底 {breakdown.get('base', 0):.0f} {adjustment:+d} 辯論調整"
+            " ── 分項計算方式見「4. 信心說明」"
+        )
+    else:
+        lines.append(
+            f"> 信心：{result.confidence_score}%（{confidence_label}）"
+            "── 分項計算方式見「4. 信心說明」"
+        )
     lines.append("")
 
     market_judgment = conclusion.get("market_judgment", "")
@@ -107,6 +118,62 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
         lines.append(f"**{watchpoint_label}：** {watchpoint}")
         lines.append("")
 
+    return lines
+
+
+def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
+    """信心分項表＋「這個分數怎麼來的」（R3-12/R3-13）。
+
+    很多 AI 報告只給一個「High Confidence」就結束，讀者無從判斷該不該相信。
+    這裡把三維分數、權重、辯論調整、以及每個未滿分項的具體原因全部攤開，
+    讓讀者能逐項對帳。條列由 `confidence.build_why_lines()` 決定性生成，不經 LLM。
+    """
+    lines: list[str] = []
+    breakdown = result.confidence_breakdown or {}
+
+    if not breakdown:
+        # 舊格式結果（或 fallback 路徑）沒有分項，誠實標示而不是假裝有。
+        lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
+        lines.append("")
+        lines.append(f"本次信心分數：{result.confidence_score}%（未產出分項計算明細）")
+        lines.append("")
+        return lines
+
+    weights = breakdown.get("weights", {})
+    lines.append(f"### 信心分數：{breakdown.get('final', result.confidence_score)} / 100")
+    lines.append("")
+    lines.append("| 組成 | 分數 | 權重 | 說明 |")
+    lines.append("|---|---:|---:|---|")
+    for key, label, note in (
+        ("data_confidence", "資料品質", "六類來源的完整度（筆數與窗長）"),
+        ("signal_consensus", "訊號一致性", "來源之間的兩兩一致度"),
+        ("evidence_strength", "證據強度", "來源權威度 × 類別覆蓋度"),
+    ):
+        weight_pct = f"{round(weights.get(key, 0) * 100)}%" if weights else "—"
+        lines.append(f"| {label} | {breakdown.get(key, 0):.1f} | {weight_pct} | {note} |")
+    lines.append(f"| **基底（三維加權）** | **{breakdown.get('base', 0):.1f}** | | |")
+
+    adjustment = breakdown.get("debate_adjustment", 0)
+    adjustment_reason = breakdown.get("debate_adjustment_reason", "") or "（本次未調整）"
+    lines.append(f"| 辯論後調整 | {adjustment:+d} | | {adjustment_reason} |")
+    lines.append(f"| **最終信心** | **{breakdown.get('final', result.confidence_score)}** | | |")
+    lines.append("")
+
+    if breakdown.get("signal_consensus_detail", {}).get("degraded"):
+        reason = breakdown["signal_consensus_detail"].get("degraded_reason", "")
+        lines.append(f"> ⚠ {reason}")
+        lines.append("")
+
+    why_lines = breakdown.get("why", [])
+    if why_lines:
+        lines.append("### 這個分數怎麼來的？")
+        lines.append("")
+        for line in why_lines:
+            lines.append(f"- {line}")
+        lines.append("")
+
+    lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
+    lines.append("")
     return lines
 
 
@@ -168,6 +235,17 @@ def build_report_markdown(
         lines.append("- 本次未偵測到明顯矛盾訊號")
     lines.append("")
 
+    # 結構脈絡與矛盾訊號**必須分開呈現**（R2-7/R2-8）。跨時間尺度的差異
+    # （如「兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位」）是位置關係，
+    # 不是訊號衝突；混在矛盾裡會讓讀者以為資料在打架，也會讓信心被錯誤扣分。
+    structural_context = result.cross_validation.get("structural_context", [])
+    if structural_context:
+        lines.append("### 結構脈絡（跨時間尺度的位置關係，不計入矛盾）")
+        lines.append("")
+        for item in structural_context:
+            lines.append(f"- {item}")
+        lines.append("")
+
     if result.debate:
         # 多輪辯論逐輪呈現；沒有 rounds 的舊單輪結構則收斂成一輪處理。
         debate_rounds = result.debate.get("rounds") or [
@@ -227,8 +305,7 @@ def build_report_markdown(
 
     lines.append("## 4. 信心說明")
     lines.append("")
-    lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
-    lines.append("")
+    lines.extend(_build_confidence_breakdown_lines(result))
     lines.append("### 已知限制")
     lines.append("")
     for lim in result.conclusion.get("limitations", []):

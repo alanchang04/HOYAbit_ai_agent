@@ -45,6 +45,9 @@ class ReasoningResult:
     debate: dict = field(default_factory=dict)
     coin2: str | None = None
     confidence_score: int = 0
+    # 三維信心的完整分項（R3-12/R3-13）。report.md 與四面板都要呈現「88 分是怎麼
+    # 算出來的」，不能只給最終數字——分項留在 log metrics 裡的話報告層拿不到。
+    confidence_breakdown: dict = field(default_factory=dict)
 
 
 class ReasoningStepError(RuntimeError):
@@ -157,6 +160,7 @@ def _dry_run_reasoning(
         follow_up_watchpoints=["（dry-run 假資料）此為流程驗證用，非真實觀察重點"],
         coin2=coin2,
         confidence_score=score,
+        confidence_breakdown=breakdown,
     )
 
 
@@ -665,6 +669,7 @@ def _real_reasoning(
         debate=debate,
         coin2=coin2,
         confidence_score=score,
+        confidence_breakdown=breakdown,
     )
 
 

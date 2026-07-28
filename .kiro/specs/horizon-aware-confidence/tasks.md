@@ -14,7 +14,7 @@
 | Phase 2 | Collector 標註／缺口補齊／序列化 | ✅ 完成 | vic ＋ Phase 0.2 補齊 |
 | Phase 3 | Prompt 層 | ✅ 完成（3.8 除外） | vic |
 | Phase 4 | 信心公式重寫 | ✅ 完成（2026-07-28） | Claude |
-| Phase 5 | 報告與前端呈現 | ⬜ 待做 | — |
+| Phase 5 | 報告與前端呈現 | ✅ 完成（2026-07-28） | Claude |
 | Phase 6 | 語氣模板 | ⬜ 待做 | — |
 | Phase 7 | 整合驗收 | ⬜ 待做 | — |
 | Phase 8 | 多尺度供給與動態主視野（R7） | ⬜ 待做 | — |
@@ -286,31 +286,31 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ### Phase 5 — 報告與前端呈現
 
-- [ ] **5.1** 在 `agent/report/builder.py` 第 4 節改為 Confidence Breakdown 表
+- [x] **5.1** 在 `agent/report/builder.py` 第 4 節改為 Confidence Breakdown 表
   （三維分數＋權重＋Base＋Debate Adjustment＋Final）
   - _Requirements: R3-12_
 
-- [ ] **5.2** 在報告加入「Why this confidence?」條列區塊（承 Task 4.6 的輸出）
+- [x] **5.2** 在報告加入「Why this confidence?」條列區塊（承 Task 4.6 的輸出）
   - _Requirements: R3-13_
 
-- [ ] **5.3** 在報告第 3 節新增「結構脈絡（不計入矛盾）」小節，
+- [x] **5.3** 在報告第 3 節新增「結構脈絡（不計入矛盾）」小節，
   呈現 `structural_context`，與「矛盾訊號」明確區分
   - _Requirements: R2-7, R2-8_
 
-- [ ] **5.4** 在執行摘要的信心行補上 Base/Adjustment 的拆解，
+- [x] **5.4** 在執行摘要的信心行補上 Base/Adjustment 的拆解，
   並在 `agent/report/view_builder.py` 的面板④ summary 帶上新的 breakdown 欄位
   - _Requirements: R3-12_
 
-- [ ] **5.5** 前端（`webapp/templates/view.html`／`result.html`）呈現 breakdown 表與 why 條列；
+- [x] **5.5** 前端（`webapp/templates/view.html`／`result.html`）呈現 breakdown 表與 why 條列；
   面板①證據列表加上 horizon 標籤
   - 沿用既有 `render_longtext` filter 與 `.llm-longtext` 樣式，不新造渲染機制
   - _Requirements: R2-4, R3-12, R3-13_
 
-- [ ] **5.6** 若 Step B 未產出 `direction_matrix`（降級路徑），
+- [x] **5.6** 若 Step B 未產出 `direction_matrix`（降級路徑），
   報告需明確揭露「訊號共識以中性 50 計算」
   - _Requirements: R3-15_
 
-- [ ] **5.7** 擴充 `tests/test_view_builder.py`／`tests/test_report_evidence_mapping.py`：
+- [x] **5.7** 擴充 `tests/test_view_builder.py`／`tests/test_report_evidence_mapping.py`：
   breakdown 表欄位齊全、why 條列出現、structural_context 與 contradictions 分開呈現
   - _Requirements: R2-8, R3-12, R3-13_
 
