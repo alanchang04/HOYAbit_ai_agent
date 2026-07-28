@@ -18,7 +18,7 @@ from agent.filters.source_weights import (
 )
 from agent.filters.trust_config import load_reputation_config
 from agent.logging_utils import ExecutionLogger
-from agent.reasoning.confidence import compute_confidence_score
+from agent.reasoning.confidence import compute_confidence
 from agent.schemas import Evidence, PipelineLayer, SourceType
 
 
@@ -321,18 +321,21 @@ class TestCoverageVsCoverageRateNotConflated:
         # 覆蓋度變動 → 權重變動
         assert b_many.final_weight > b_single.final_weight
 
-        # 信心公式只看 source_type 是否到齊（覆蓋率維度），與 dedup 統計無關：
-        # 相同證據集合下，無論 dedup 統計如何，分數完全一致
+        # 信心公式只看 source_type 是否到齊與筆數/窗長（覆蓋率維度），與 dedup 統計無關：
+        # 相同證據集合下，無論 dedup 統計如何，分數完全一致。
+        # （新制的對應項是 Data Confidence，取代舊制的 gap_penalty——見
+        #  horizon-aware-confidence R3-1／tests/test_confidence_score.py 的對照表）
         evidences = [
             _make_evidence(source="CoinGecko", source_type=SourceType.PRICE, ev_id="ev-001"),
             _make_evidence(source="CoinDesk RSS", source_type=SourceType.NEWS, ev_id="ev-002"),
         ]
-        score_a, breakdown_a = compute_confidence_score("中", evidences, 0)
+        score_a, breakdown_a = compute_confidence(evidences, {})
         for e in evidences:
             e.dedup_raw_count, e.dedup_rate = 10, 0.9  # 模擬極端灌水統計
-        score_b, breakdown_b = compute_confidence_score("中", evidences, 0)
+        score_b, breakdown_b = compute_confidence(evidences, {})
         assert score_a == score_b
-        assert breakdown_a["gap_penalty"] == breakdown_b["gap_penalty"]
+        assert breakdown_a["data_confidence"] == breakdown_b["data_confidence"]
+        assert breakdown_a["data_confidence_detail"] == breakdown_b["data_confidence_detail"]
 
 
 class TestReputationAppendix:

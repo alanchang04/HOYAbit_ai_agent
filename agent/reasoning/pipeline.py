@@ -30,7 +30,7 @@ from agent.reasoning.prompts import (
 # 辯論輪數上限。多智能體辯論的增益在第 2 輪後大致飽和，再往上主要是燒 token 與延遲，
 # 因此預設 2 輪（= 7 次 LLM 呼叫）。反方自報無新論點時會更早收斂。
 MAX_DEBATE_ROUNDS = 2
-from agent.reasoning.confidence import compute_confidence_score
+from agent.reasoning.confidence import compute_confidence
 from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
 
 
@@ -120,20 +120,22 @@ def _dry_run_reasoning(
         "evidence_ids": all_ids,
     }
 
-    # L5：數值信心分數
-    contradictions_count = len(cross_validation.get("contradictions", []))
-    score, breakdown = compute_confidence_score(
-        conclusion.get("confidence", "低"),
+    # L5：三維可解釋信心分數（R3）
+    score, breakdown = compute_confidence(
         evidences,
-        contradictions_count,
+        cross_validation,
+        debate_adjustment=conclusion.get("debate_adjustment_raw"),
+        debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
     )
     if logger:
         logger.log(
             phase=LogPhase.REASON,
             action="l5_confidence_score",
             detail=(
-                f"score={score}, base={breakdown['base']}, auth_bonus={breakdown['auth_bonus']}, "
-                f"contradiction_penalty={breakdown['contradiction_penalty']}, gap_penalty={breakdown['gap_penalty']}"
+                f"score={score}, base={breakdown['base']}, "
+                f"data={breakdown['data_confidence']}, consensus={breakdown['signal_consensus']}, "
+                f"strength={breakdown['evidence_strength']}, "
+                f"debate_adjustment={breakdown['debate_adjustment']}"
             ),
             status=LogStatus.OK,
             layer=PipelineLayer.CONCLUSION,
@@ -631,20 +633,22 @@ def _real_reasoning(
     )
     _log("step_d_conclusion", "ok", f"confidence={conclusion['confidence']}")
 
-    # L5：數值信心分數
-    contradictions_count = len(cross_validation.get("contradictions", []))
-    score, breakdown = compute_confidence_score(
-        conclusion.get("confidence", "低"),
+    # L5：三維可解釋信心分數（R3）
+    score, breakdown = compute_confidence(
         evidences,
-        contradictions_count,
+        cross_validation,
+        debate_adjustment=conclusion.get("debate_adjustment_raw"),
+        debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
     )
     if logger:
         logger.log(
             phase=LogPhase.REASON,
             action="l5_confidence_score",
             detail=(
-                f"score={score}, base={breakdown['base']}, auth_bonus={breakdown['auth_bonus']}, "
-                f"contradiction_penalty={breakdown['contradiction_penalty']}, gap_penalty={breakdown['gap_penalty']}"
+                f"score={score}, base={breakdown['base']}, "
+                f"data={breakdown['data_confidence']}, consensus={breakdown['signal_consensus']}, "
+                f"strength={breakdown['evidence_strength']}, "
+                f"debate_adjustment={breakdown['debate_adjustment']}"
             ),
             status=LogStatus.OK,
             layer=PipelineLayer.CONCLUSION,
