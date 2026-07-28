@@ -18,6 +18,36 @@ class SourceType(str, Enum):
     DERIVATIVES = "derivatives"
 
 
+class HorizonClass(str, Enum):
+    """單筆證據代表的時間尺度分帶。由 collector 決定性標註（spec ADR-2），不由 LLM 推斷。
+
+    分帶依實際查詢參數／資料範圍推導（limit／interval／t=week／days 這些自己傳出去的值）。
+    「當前訊號」三帶正常參與辯論、矛盾判定與共識投票；「結構脈絡」兩帶只用來定位大週期
+    位置，不參與上述三者，避免不同尺度的正常差異被誤判成矛盾（假矛盾）。
+    """
+
+    SPOT = "spot"              # 當下快照
+    SHORT = "short"            # ≤7 天
+    MEDIUM = "medium"          # 8–30 天（主視野）
+    LONG = "long"              # 31–180 天
+    STRUCTURAL = "structural"  # >180 天
+
+
+# 當前訊號三帶：參與辯論、矛盾判定與共識投票
+CURRENT_SIGNAL_HORIZONS: set[HorizonClass] = {
+    HorizonClass.SPOT,
+    HorizonClass.SHORT,
+    HorizonClass.MEDIUM,
+}
+# 結構脈絡兩帶：只定位大週期位置，不參與矛盾判定與共識投票
+STRUCTURAL_HORIZONS: set[HorizonClass] = {
+    HorizonClass.LONG,
+    HorizonClass.STRUCTURAL,
+}
+# 主視野：一次分析的主判斷尺度，固定為 medium（8–30 天），對應命題「過去兩週」尺度
+PRIMARY_HORIZON: HorizonClass = HorizonClass.MEDIUM
+
+
 class PipelineLayer(str, Enum):
     """信任提煉管線各層標記。"""
 
@@ -82,6 +112,14 @@ class EvidenceDraft(BaseModel):
     dedup_deduped_count: int | None = None
     dedup_rate: float | None = None
     duplicate_of: str | None = None  # 被去重剔除時，指向保留的那筆證據 id
+
+    # horizon-aware R2: 時間尺度標註（由 collector 決定性填入，見 .kiro/steering/horizon-annotation.md）
+    # window_end ≠ fetched_at：前者是「觀察涵蓋到哪一天」，後者是「何時抓的」。
+    # 官方 CSV 證據的 fetched_at 是執行日，但 window_end 是 CSV 末日——這兩個值不同正是本欄位存在的理由。
+    # 皆有預設值以滿足向後相容（舊 evidence.json 無這三欄位仍可正常載入，R2-9）。
+    window_start: str | None = None
+    window_end: str | None = None
+    horizon_class: HorizonClass = HorizonClass.SPOT
 
     @field_validator("fetched_at")
     @classmethod

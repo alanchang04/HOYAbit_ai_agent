@@ -78,6 +78,25 @@
    目前團隊裁定走**雙軌**（官方 CSV 為長歷史基準 + Binance 公開日線補缺口 + 報告揭露接縫）。
    無論答案為何先做都不會白做——補齊邏輯是「有缺口才補」，主辦方若給新資料即自動不觸發。
 
+9. **辯論機制待 LLM 驗證的項目**（原記於 `HANDOFF_debate-dev.md`，該檔已於 2026-07-27
+   刪除，內容過時；以下是刪除時仍未解決的部分）：
+   - **收斂判定缺客觀後備**：目前完全信任反方自報 `has_new_points`
+     （`agent/reasoning/pipeline.py` 的 `_coerce_bool`）。反方是被指派立場的對抗方，
+     自評「還有沒有話講」本身有利益衝突；且正方沒有對等的收斂權。可用
+     `agent/filters/content.py` 既有的 Jaccard 比對前後輪論證強制收斂，
+     **但建議先看真實模型行為再決定**，避免解決不存在的問題
+   - **辯論品質需重驗**：反方是否濫用收斂權、第 2 輪正方是真反駁還是換句話說、
+     實際延遲是否合乎時間預算的 1.5 倍係數、`has_new_points` 的格式遵從度。
+     PR #8 改過 Step B/D 的 prompt，先前用 Bedrock 驗過的三題型結果已失效，需重跑
+
+10. **`raw_data/` 與 `pipeline/*.py` 沒有接進 agent**（2026-07-27 複查仍成立）：
+    `agent/collectors/*.py` 自己用 httpx 打即時 API，`pipeline/fetch_*.py` 是獨立腳本
+    把資料寫進 `raw_data/`。`agent/` 底下只有兩處**註解**提到 `raw_data`
+    （`collectors/horizon.py`、`collectors/news.py` 指向 `_meta/window_policy.md`），
+    **沒有任何一行程式讀它**。也就是 2026-07-22 merge 進來的衍生品／期限結構／
+    CME COT／鏈上歷史 CSV，對 LLM 推理鏈一筆都沒進去。這可能是刻意的 prototype
+    階段安排，但若團隊以為那些資料已在餵 agent，需要及早澄清
+
 ## 開發過程中的重要修正紀錄
 
 - CoinDesk RSS 308 redirect → 加 `follow_redirects=True`

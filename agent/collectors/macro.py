@@ -10,7 +10,8 @@ from datetime import date
 import httpx
 
 from agent.collectors.base import BaseCollector
-from agent.schemas import EvidenceDraft, LogStatus, now_iso
+from agent.collectors.horizon import window_back
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
 FNG_WINDOW = 30
@@ -213,6 +214,8 @@ class MacroCollector(BaseCollector):
                 item = data[0]
                 values = [int(d["value"]) for d in data]
                 percentile = compute_fng_percentile(values, int(item["value"]))
+                # 窗長用實得筆數而非 FNG_WINDOW：API 少回幾天時不該宣稱涵蓋 30 天
+                fng_start, fng_end = window_back(len(values))
                 evidences.append(
                     EvidenceDraft(
                         coin=coin,
@@ -226,6 +229,9 @@ class MacroCollector(BaseCollector):
                         ),
                         related_claim="整體加密市場情緒指標（近 30 天百分位）",
                         source_type="macro",
+                        window_start=fng_start,
+                        window_end=fng_end,
+                        horizon_class=HorizonClass.MEDIUM,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -249,6 +255,7 @@ class MacroCollector(BaseCollector):
                         content_reference=f"date={data.get('date')}, USD/EUR={rates.get('EUR')}, USD/JPY={rates.get('JPY')}, USD/GBP={rates.get('GBP')}",
                         related_claim="美元相對強弱走勢（總經背景，加密市場常呈負相關）",
                         source_type="macro",
+                        horizon_class=HorizonClass.SPOT,  # /latest 只給最新一日匯率，非序列
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -277,6 +284,7 @@ class MacroCollector(BaseCollector):
                             content_reference=f"date={obs.get('date')}, value={obs.get('value')}",
                             related_claim="美債殖利率走勢（總經背景）",
                             source_type="macro",
+                            horizon_class=HorizonClass.SPOT,  # limit=1，只取最新一筆觀測
                         )
                     )
                 except Exception as exc:  # noqa: BLE001

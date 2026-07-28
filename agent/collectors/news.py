@@ -13,7 +13,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from agent.collectors.base import BaseCollector
-from agent.schemas import EvidenceDraft, LogStatus, now_iso
+from agent.collectors.horizon import window_back
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
 MAX_ITEMS_PER_SOURCE = 5
@@ -225,6 +226,9 @@ class NewsCollector(BaseCollector):
         sources = OFFICIAL_SOURCES.get(coin.upper(), [])
         evidences: list[EvidenceDraft] = []
         now = datetime.now(timezone.utc)
+        # 標的是「本 collector 的涵蓋窗口」（近 14 天），不是個別文章的發布日：超出窗口的
+        # 項目不濾除、只在 content_reference 由 _recency_note() 標「非近期」（見上方註解）。
+        window_start, window_end = window_back(NEWS_RECENCY_WINDOW_DAYS, end=now.date())
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}, follow_redirects=True
@@ -255,6 +259,9 @@ class NewsCollector(BaseCollector):
                                     ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",
+                                    window_start=window_start,
+                                    window_end=window_end,
+                                    horizon_class=HorizonClass.MEDIUM,
                                 )
                             )
                     else:
@@ -278,6 +285,9 @@ class NewsCollector(BaseCollector):
                                     ),
                                     related_claim=f"{coin} 官方發布新聞事件",
                                     source_type="news",
+                                    window_start=window_start,
+                                    window_end=window_end,
+                                    horizon_class=HorizonClass.MEDIUM,
                                 )
                             )
                 except Exception as exc:  # noqa: BLE001

@@ -6,11 +6,14 @@ import httpx
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
-from agent.schemas import EvidenceDraft, LogStatus, now_iso
+from agent.collectors.horizon import window_back
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
 MAX_POSTS_PER_SUBREDDIT = 5
 REDDIT_USER_AGENT = "hoyabit-crypto-agent/1.0 (hackathon research bot)"
+# 搜尋帶 t=week，Reddit 只回近 7 天貼文 → horizon 由這個查詢參數決定性推導（ADR-2）
+REDDIT_WINDOW_DAYS = 7
 
 
 class SocialCollector(BaseCollector):
@@ -20,6 +23,7 @@ class SocialCollector(BaseCollector):
     async def fetch(self, coin: str, **kwargs) -> list[EvidenceDraft]:
         info = get_coin_info(coin)
         evidences: list[EvidenceDraft] = []
+        window_start, window_end = window_back(REDDIT_WINDOW_DAYS)
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT, headers={"User-Agent": REDDIT_USER_AGENT}, follow_redirects=True
@@ -45,6 +49,9 @@ class SocialCollector(BaseCollector):
                                 ),
                                 related_claim=f"{coin} 社群討論熱度與情緒",
                                 source_type="social",
+                                window_start=window_start,
+                                window_end=window_end,
+                                horizon_class=HorizonClass.SHORT,
                             )
                         )
                 except Exception as exc:  # noqa: BLE001

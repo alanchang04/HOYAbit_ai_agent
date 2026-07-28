@@ -14,7 +14,7 @@ import httpx
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
-from agent.schemas import EvidenceDraft, LogStatus, now_iso
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
 
@@ -117,6 +117,7 @@ class OnchainCollector(BaseCollector):
                     ),
                     related_claim=f"{coin} 鏈上活躍度（交易量、mempool、算力）",
                     source_type="onchain",
+                    horizon_class=HorizonClass.SPOT,
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -170,6 +171,7 @@ class OnchainCollector(BaseCollector):
                         content_reference=f"method=eth_blockNumber,eth_gasPrice | 最新區塊 {block_number}，Gas Price {gas_price_gwei:.2f} Gwei",
                         related_claim=f"{coin} 鏈上網路即時活動（區塊高度、Gas 費用）",
                         source_type="onchain",
+                        horizon_class=HorizonClass.SPOT,
                     )
                 )
                 last_exc = None
@@ -197,6 +199,7 @@ class OnchainCollector(BaseCollector):
                         content_reference=f"result={data.get('result')}",
                         related_claim=f"{coin} 鏈上總供給量（補充資料）",
                         source_type="onchain",
+                        horizon_class=HorizonClass.SPOT,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -263,6 +266,7 @@ class OnchainCollector(BaseCollector):
                     content_reference=f"method=getRecentPerformanceSamples,limit=5 | 近期平均 TPS 約 {avg_tps:.1f}",
                     related_claim=f"{coin} 鏈上網路即時活躍度（TPS）",
                     source_type="onchain",
+                    horizon_class=HorizonClass.SPOT,
                 )
             ]
         except Exception as exc:  # noqa: BLE001
@@ -290,6 +294,7 @@ class OnchainCollector(BaseCollector):
                         ),
                         related_claim=f"{coin} XRPL 網路狀態（帳本高度、費率負載）",
                         source_type="onchain",
+                        horizon_class=HorizonClass.SPOT,
                     )
                 ]
             except Exception as exc:  # noqa: BLE001
