@@ -442,7 +442,10 @@ def _real_reasoning(
     def _fallback_inference() -> list[dict]:
         step_c_raw = _call_json_step(
             llm_client,
-            build_step_c_prompt(coin, question, question_type, facts, cross_validation, coin2=coin2),
+            build_step_c_prompt(
+                coin, question, question_type, facts, cross_validation,
+                coin2=coin2, evidences=evidences,
+            ),
             "step_c_inference_fallback",
         )
         hypotheses = _sanitize_inference(step_c_raw.get("inference", []), known_ids)
@@ -453,12 +456,13 @@ def _real_reasoning(
         step = f"step_c1_bull_r{round_no}"
         if round_no == 1:
             prompt = build_step_c1_bull_prompt(
-                coin, question, question_type, facts, cross_validation, coin2=coin2
+                coin, question, question_type, facts, cross_validation,
+                coin2=coin2, evidences=evidences,
             )
         else:
             prompt = build_step_c1_bull_rebuttal_prompt(
                 coin, question, question_type, facts, cross_validation, prior_rounds,
-                coin2=coin2, round_no=round_no,
+                coin2=coin2, round_no=round_no, evidences=evidences,
             )
         raw = _call_json_step(llm_client, prompt, step)
         argument = raw.get("argument", "")
@@ -472,7 +476,7 @@ def _real_reasoning(
             llm_client,
             build_step_c2_bear_prompt(
                 coin, question, question_type, facts, cross_validation, bull_arg,
-                coin2=coin2, rounds=prior_rounds, round_no=round_no,
+                coin2=coin2, rounds=prior_rounds, round_no=round_no, evidences=evidences,
             ),
             step,
         )

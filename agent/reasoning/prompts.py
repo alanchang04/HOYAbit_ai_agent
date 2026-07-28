@@ -130,6 +130,44 @@ def _format_evidence_list(evidences: list[Evidence]) -> str:
     return "\n".join(lines) if lines else "（本次無可用證據）"
 
 
+# 辯論層的權重意識規則（R4-3）。SYSTEM_PROMPT 第 8 條是全域規則，但辯論是對抗場景，
+# 雙方都有動機把對己方不利的高權重證據輕描淡寫帶過，因此在角色 prompt 內再明確一次。
+DEBATE_WEIGHT_RULE = (
+    "引用證據時必須意識到權重差距，不可把不同權重的證據當成勢均力敵："
+    "以高權重證據（>0.8）支撐的論點，份量大於僅以低權重證據（<0.5）支撐的論點。"
+    "若你要用低權重證據推翻高權重證據，必須具體說明該高權重來源在此情境下為何不適用。"
+)
+
+
+def format_evidence_weight_index(evidences: list[Evidence] | None) -> str:
+    """辯論層專用的精簡證據索引：只有 id／權重／尺度，不含 content。
+
+    C1/C2 拿到的只有 `facts` 與 `cross_validation` 這兩份 LLM 產出的摘要，裡面
+    只帶 evidence id，沒有權重也沒有 horizon。要求辯士「意識到權重差距」卻不給他
+    權重，模型只能自行臆測——所以補這份索引。不重貼 content 是因為內容本身已在
+    事實層摘要裡，而辯論會跑多輪且逐輪累積逐字稿，prompt 長度得省著用。
+    """
+    if not evidences:
+        return ""
+    lines = []
+    for e in evidences:
+        grade = _grade_label(e)
+        horizon = getattr(e, "horizon_class", None)
+        horizon_value = horizon.value if horizon is not None else "spot"
+        weight_field = f"weight={e.source_weight:.2f}" + (f" [{grade}]" if grade else "")
+        lines.append(f"- {e.id} | {weight_field} | horizon={horizon_value}")
+    return (
+        "證據權重與尺度索引（內容見上方事實層／交叉驗證層，此處只列可信度與時間尺度）：\n"
+        + "\n".join(lines)
+    )
+
+
+def _weight_index_section(evidences: list[Evidence] | None) -> str:
+    """把索引包成 prompt 區塊；沒有證據可列時整段省略（降級不中斷，R6-1）。"""
+    index = format_evidence_weight_index(evidences)
+    return f"\n{index}\n" if index else ""
+
+
 def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coin2: str | None = None) -> str:
     coin_note = (
         f"本題涉及兩個幣種：{coin} 與 {coin2}。每筆證據都已標註 coin 欄位，"
@@ -214,6 +252,7 @@ def build_step_c_prompt(
     facts: list[dict],
     cross_validation: dict,
     coin2: str | None = None,
+    evidences: list[Evidence] | None = None,
 ) -> str:
     """單模型推論層 prompt（正反方辯論失敗時的 fallback，不分角色，一次產出多個假設）。"""
     framing = _resolve_framing(question_type, coin, coin2)
@@ -226,9 +265,10 @@ def build_step_c_prompt(
 
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
-
+{_weight_index_section(evidences)}
 請執行【推論層】分析：根據以上事實與交叉驗證結果，提出 1-3 個市場狀態假設。
 每個假設都必須同時列出支持它的 evidence id 與反對/削弱它的 evidence id（若真的沒有反對證據可留空陣列，但不可省略欄位）。
+{DEBATE_WEIGHT_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -247,6 +287,7 @@ def build_step_c1_bull_prompt(
     facts: list[dict],
     cross_validation: dict,
     coin2: str | None = None,
+    evidences: list[Evidence] | None = None,
 ) -> str:
     """推論層 Step C1：正方分析師，只准建構最有利的論證。"""
     framing = _resolve_bull_framing(question_type, coin, coin2)
@@ -260,11 +301,12 @@ def build_step_c1_bull_prompt(
 
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
-
+{_weight_index_section(evidences)}
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
 2. 你的論證必須誠實：若證據其實薄弱、樣本數少、或有明顯反例，要在論證中承認，不要誇大成過度肯定的語氣。
 3. 必須引用 evidence id 支撐你的論點。
+4. {DEBATE_WEIGHT_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -298,6 +340,7 @@ def build_step_c1_bull_rebuttal_prompt(
     rounds: list[dict],
     coin2: str | None = None,
     round_no: int = 2,
+    evidences: list[Evidence] | None = None,
 ) -> str:
     """推論層 Step C1（第二輪起）：正方看過反方的批評後反駁並修正自己的論證。"""
     framing = _resolve_bull_framing(question_type, coin, coin2)
@@ -311,7 +354,7 @@ def build_step_c1_bull_rebuttal_prompt(
 
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
-
+{_weight_index_section(evidences)}
 先前的辯論紀錄：
 {format_debate_transcript(rounds)}
 
@@ -323,6 +366,7 @@ def build_step_c1_bull_rebuttal_prompt(
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
 2. 必須引用 evidence id 支撐你的論點。
+3. {DEBATE_WEIGHT_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -342,6 +386,7 @@ def build_step_c2_bear_prompt(
     coin2: str | None = None,
     rounds: list[dict] | None = None,
     round_no: int = 1,
+    evidences: list[Evidence] | None = None,
 ) -> str:
     """推論層 Step C2：反方分析師，可看到正方論證，任務是批評它並建構反向論證。
 
@@ -365,7 +410,7 @@ def build_step_c2_bear_prompt(
 
 交叉驗證層：
 {json.dumps(cross_validation, ensure_ascii=False, indent=2)}
-{transcript_section}
+{_weight_index_section(evidences)}{transcript_section}
 正方分析師本輪（第 {round_no} 輪）的論證如下：
 {bull_argument}
 
@@ -381,6 +426,8 @@ def build_step_c2_bear_prompt(
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
 2. 必須引用 evidence id 支撐你的論點。
+3. {DEBATE_WEIGHT_RULE}
+   批評正方時同樣適用：指出正方「證據薄弱」前，先確認他引用的是高權重還是低權重證據。
 
 請只輸出以下 JSON 格式：
 {{

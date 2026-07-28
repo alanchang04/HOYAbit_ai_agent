@@ -224,12 +224,22 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   說明區塊存在、Step B prompt 含三段與 direction_matrix 規格、Step D prompt 含調整欄位
   - _Requirements: R2-4, R3-3, R3-8, R4-1_
 
-- [ ] **3.9** 確認辯論層 Step C1/C2 的 prompt 也帶到權重意識（R4-3）
+- [x] **3.9** 確認辯論層 Step C1/C2 的 prompt 也帶到權重意識（R4-3）
   - `SYSTEM_PROMPT` 第 8 條是全域規則，但辯論 prompt 應再明確要求：
     正反方引用證據時不得把不同權重的證據當作勢均力敵
   - vic 的 Phase 3 主要處理 `_format_evidence_list` 與 Step B/D，
     **此條需合併後複查是否已涵蓋**，未涵蓋則補上
   - _Requirements: R4-3_
+  - **複查結果（vic，2026-07-28）：未涵蓋，已補**。原本只有 Step A/B 拿得到
+    `_format_evidence_list()` 的完整清單；C1/C2 只收到 `facts` 與 `cross_validation`
+    這兩份 LLM 產出的摘要，裡面只有 evidence id，**沒有 weight 也沒有 horizon**。
+    只加規則等於要模型憑空猜權重，因此同時補上兩件事：
+    1. `DEBATE_WEIGHT_RULE` 規則文字，進 C1 首輪／C1 反駁輪／C2／單模型 fallback
+    2. `format_evidence_weight_index()` 精簡索引（只有 `id | weight [分級] | horizon`，
+       不重貼 content——內容已在事實層，且辯論多輪累積逐字稿，prompt 長度要省）
+  - 單模型 fallback（`build_step_c_prompt`）超出 R4-3 字面的 C1/C2 範圍，但它是
+    辯論失敗時的替代路徑，不補會讓降級路徑失去權重意識，故一併加入
+  - `evidences` 參數預設 `None`，取不到清單時只省略索引、規則仍在（R6-1）
 
 - [ ] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
   人工檢查 Step B 是否正確把跨尺度差異放進 `structural_context` 而非 `contradictions`
