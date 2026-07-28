@@ -136,17 +136,12 @@ class TestSignalConsensus:
         "directions, expected",
         [
             ([1, 1, 1, 1], 100.0),
-            ([1, -1, 0, 1], 17.0),
-            ([1, -1, -1, 1], 0.0),
+            ([1, -1, 0, 1], 41.67),
+            ([1, -1, -1, 1], 33.33),
         ],
     )
     def test_design_doc_worked_examples(self, directions, expected):
-        """design.md §3.6.2 的三組驗算值。
-
-        ⚠ 需求方原本期望 100/65/40，線性映射實得 100/17/0——鑑別度問題是
-        已知未決事項（requirements.md 待確認 #4）。這裡先鎖定現行公式的行為，
-        改公式時這三個值會紅，提醒必須先跟 alanchang 確認再動。
-        """
+        """design.md §3.6.2 的三組驗算值（兩兩一致度，2026-07-28 定案）。"""
         types = ["price", "onchain", "news", "social"]
         evidences = [
             _make_evidence(source_type=SourceType(t), eid=f"ev-{i:03d}")
@@ -154,6 +149,32 @@ class TestSignalConsensus:
         ]
         score, _ = compute_signal_consensus(_matrix(*zip(types, directions)), evidences)
         assert score == pytest.approx(expected, abs=0.5)
+
+    @pytest.mark.parametrize(
+        "name, directions, expected",
+        [
+            ("全部看多", [1, 1, 1, 1, 1, 1], 100.0),
+            ("五多一空", [1, 1, 1, 1, 1, -1], 66.67),
+            ("四多兩空", [1, 1, 1, 1, -1, -1], 46.67),
+            ("三多三空", [1, 1, 1, -1, -1, -1], 40.0),
+            # 全部中性＝完美一致、只是沒方向，必須是高分。
+            # 候選方案 100×|mean| 在這裡會給 0，語意錯誤，是它被否決的主因之一。
+            ("全部中性", [0, 0, 0, 0, 0, 0], 100.0),
+        ],
+    )
+    def test_practical_scenarios_keep_discrimination(self, name, directions, expected):
+        """六來源實務情境：分數要開展、不能全擠在低分區。
+
+        原設計的線性 stdev 映射在「五多一空」只給 25 分——6 個來源裡 5 個同向
+        卻被判成低共識，這是它被否決的主因（實算 729 種組合有 35.7% 落在 0-20）。
+        """
+        types = [t.value for t in sorted(SOURCE_TYPE_CATEGORIES, key=lambda x: x.value)]
+        evidences = [
+            _make_evidence(source_type=SourceType(t), eid=f"ev-{i:03d}")
+            for i, t in enumerate(types, 1)
+        ]
+        score, _ = compute_signal_consensus(_matrix(*zip(types, directions)), evidences)
+        assert score == pytest.approx(expected, abs=0.5), name
 
     def test_structural_evidence_excluded_from_vote(self):
         """R3-4：結構脈絡不參與共識投票，否則假矛盾會從這條路徑復活。"""

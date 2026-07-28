@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-import statistics
+import itertools
 from datetime import date
 
 from agent.schemas import (
@@ -131,14 +131,21 @@ def compute_signal_consensus(
     evidences: list[Evidence],
     primary_horizon: HorizonClass | None = None,
 ) -> tuple[float, dict]:
-    """訊號一致性（R3-4/R3-5）：各來源方向的離散程度。
+    """訊號一致性（R3-4/R3-5）：來源之間的兩兩一致度。
+
+        Consensus = 100 × (1 − 所有來源配對的方向差異平均 / 2)
+
+    白話：**隨便抓兩個來源出來，它們意見相同的機率有多高。**
 
     **只納入當前訊號**——結構脈絡（長於主視野的帶）不參與投票，否則本規格
     要修的假矛盾會從這條路徑復活（design.md §3.6.2）。
 
-    ⚠ 公式鑑別度為未決事項（requirements.md 待確認 #4）：線性映射會讓分數
-    塌到底部（`[1,-1,0,1]` 實得 17，需求方期望 65）。三個候選方案的實算值見
-    design.md §3.6.2，做到這裡時應停下與 alanchang 確認，不得自行改公式。
+    公式選型（2026-07-28 alanchang 拍板，實算 729 種組合後定案）：
+    原設計的線性 stdev 映射有兩個致命傷——6 個來源裡 5 個看多只給 25 分
+    （實際上是相當強的共識），且 35.7% 的情境擠在 0-20 分區間、失去鑑別度。
+    候選的 `100×|mean|` 更差（53.9% 擠在低分區），且「全部中性」會給 0 分，
+    但那其實是完美一致、只是沒方向。兩兩一致度三個問題都沒有，分佈開展在
+    整個區間（0-20 佔 0%），語意也最好解釋。逐案比較見 design.md §3.6.2。
     """
     current_types = {
         e.source_type.value
@@ -165,12 +172,14 @@ def compute_signal_consensus(
             "degraded_reason": "當前訊號帶的表態來源不足 2 個，訊號共識以中性 50 計算",
         }
 
-    spread = statistics.pstdev(dirs)
-    consensus = max(0.0, min(100.0, 100 * (1 - spread / 1.0)))
+    # 方向值域是 {-1, 0, 1}，任兩者的差異最大為 2，故除以 2 正規化到 0-1。
+    pair_diffs = [abs(a - b) for a, b in itertools.combinations(dirs, 2)]
+    mean_diff = sum(pair_diffs) / len(pair_diffs)
+    consensus = max(0.0, min(100.0, 100 * (1 - mean_diff / 2)))
     return round(consensus, 2), {
         "sample_size": len(dirs),
         "directions": used,
-        "stdev": round(spread, 4),
+        "mean_pairwise_diff": round(mean_diff, 4),
         "degraded": False,
     }
 

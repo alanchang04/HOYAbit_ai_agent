@@ -13,7 +13,7 @@
 | Phase 1 | Schema 地基 | ✅ 完成 | vic（`feat-horizon-aware-reasoning`） |
 | Phase 2 | Collector 標註／缺口補齊／序列化 | ✅ 完成 | vic ＋ Phase 0.2 補齊 |
 | Phase 3 | Prompt 層 | ✅ 完成（3.8 除外） | vic |
-| Phase 4 | 信心公式重寫 | ⬜ 待做 | — |
+| Phase 4 | 信心公式重寫 | ✅ 完成（2026-07-28） | Claude |
 | Phase 5 | 報告與前端呈現 | ⬜ 待做 | — |
 | Phase 6 | 語氣模板 | ⬜ 待做 | — |
 | Phase 7 | 整合驗收 | ⬜ 待做 | — |
@@ -238,31 +238,31 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ### Phase 4 — 信心公式重寫
 
-- [ ] **4.1** 重寫 `agent/reasoning/confidence.py`，新介面
+- [x] **4.1** 重寫 `agent/reasoning/confidence.py`，新介面
   `compute_confidence(evidences, cross_validation, debate_adjustment, debate_adjustment_reason)`
   - 保留舊的 `compute_confidence_score()` 為 deprecated wrapper 或直接移除
     （若移除，Task 4.6 必須把既有測試改寫成新公式的等價驗證，**不得刪測試**）
   - _Requirements: R3-7, R3-11, R6-4_
 
-- [ ] **4.2** 實作 Data Confidence（design.md §3.6.1）：
+- [x] **4.2** 實作 Data Confidence（design.md §3.6.1）：
   - `DATA_COMPLETENESS_THRESHOLD` 常數表放檔案頂部，六類（**含 derivatives**，修 D7）
   - 三檔評分：完整 100%／部分 60%／缺失 0%
   - 純統計，**不得**呼叫 LLM
   - _Requirements: R3-1, R3-2_
 
-- [ ] **4.3** 實作 Signal Consensus（design.md §3.6.2）：
+- [x] **4.3** 實作 Signal Consensus（design.md §3.6.2）：
   - 只納入當前訊號三帶對應的 source_type
   - 公式 `100 × (1 - pstdev(dirs) / 1.0)`，樣本 < 2 時回 50
-  - ⚠ **完成後必須驗算並回報**：用 §3.6.2 的三組範例與一次真實執行的 direction_matrix，
-    確認分數分佈是否有鑑別度。若普遍落在 0–20 而失去鑑別度，**停下來回報 alanchang**，
-    不得自行改成 `100 × |mean|` 或其他映射
+  - ✅ **已驗算並回報**（2026-07-28）：實算全部 729 種六來源組合，線性 stdev 有
+    35.7% 落在 0–20 失去鑑別度、且「五多一空」只給 25 分。alanchang 拍板改採
+    **兩兩一致度**（方案 D），逐案比較與否決理由見 design.md §3.6.2
   - _Requirements: R3-4, R3-5_
 
-- [ ] **4.4** 實作 Evidence Strength（design.md §3.6.3）：
+- [x] **4.4** 實作 Evidence Strength（design.md §3.6.3）：
   各類平均 `source_weight` × 覆蓋度折減。**不得**引入 LLM 主觀評分
   - _Requirements: R3-6_
 
-- [ ] **4.5** 實作組合、夾值與 breakdown（design.md §3.6.4/§3.6.5）：
+- [x] **4.5** 實作組合、夾值與 breakdown（design.md §3.6.4/§3.6.5）：
   - `base = 0.4·data + 0.4·consensus + 0.2·strength`
   - `adj`：無理由強制 0（R3-10）、超界夾到 −15/+5 並 log 原始值（R3-9）
   - `final = clamp(round(base + adj), 5, 95)`
@@ -270,12 +270,12 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - **確認 `structural_context` 完全不進入任何扣分路徑**（R2-8）
   - _Requirements: R2-8, R3-9, R3-10, R3-11, R3-12, R3-14_
 
-- [ ] **4.6** 實作「Why this confidence?」決定性生成（design.md §3.6.6 觸發表）
+- [x] **4.6** 實作「Why this confidence?」決定性生成（design.md §3.6.6 觸發表）
   - 新增 `agent/reasoning/confidence_why.py` 或放在 `confidence.py` 內
   - **不得**呼叫 LLM；同輸入必須同輸出
   - _Requirements: R3-13_
 
-- [ ] **4.7** 改寫 `tests/test_confidence.py`（既有測試改為新公式的等價驗證，**不刪案例**）
+- [x] **4.7** 改寫 `tests/test_confidence.py`（既有測試改為新公式的等價驗證，**不刪案例**）
   ＋新增 `tests/test_confidence_why.py`：
   - 六類三檔評分、derivatives 已納入（D7 回歸測試）
   - §3.6.2 三組驗算值

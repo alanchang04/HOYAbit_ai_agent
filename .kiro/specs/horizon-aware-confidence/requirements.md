@@ -209,11 +209,14 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - **R3-4** WHEN 計算 Signal Consensus THEN 系統 SHALL 僅納入**當前訊號**
   （horizon ≤ 主視野，見 R7-3）的證據所對應的 source_type，
   SHALL NOT 納入結構脈絡（避免假矛盾由此路徑復活）。
-- **R3-5** WHEN 計算 Signal Consensus THEN 公式 SHALL 為
-  `100 × (1 − stdev(directions) / 1.0)`，夾在 0–100。
-  - ⚠ **本條為暫定，鑑別度問題待拍板**（2026-07-28 alanchang 裁定「晚點做先標記」）。
-    設計階段已驗算出此線性映射與需求方期望值落差極大（見 design.md §3.6.2），
-    實作到 tasks.md Task 4.3 時必須停下回報，不得自行改公式。
+- **R3-5** WHEN 計算 Signal Consensus THEN 公式 SHALL 為**兩兩一致度**：
+  `100 × (1 − mean(|dᵢ − dⱼ| for all pairs) / 2)`，夾在 0–100。
+  - ✅ **2026-07-28 定案**（原暫定的線性 stdev 映射已否決）。實算 729 種組合後，
+    線性映射有兩個致命傷：6 來源中 5 個同向只給 25 分、且 35.7% 的情境擠在
+    0–20 分區間失去鑑別度。候選 `100×|mean|` 更差（53.9% 擠低分區，且「全部中性」
+    給 0 分但那其實是完美一致）。逐案比較見 design.md §3.6.2。
+  - WHEN 所有來源皆為中性（direction 全 0） THEN 分數 SHALL 為 100
+    （一致無方向仍是一致），SHALL NOT 視為零共識。
 - **R3-6** WHEN 計算 Evidence Strength THEN 系統 SHALL 由既有 `source_weight`
   （R12 四因子產出）與各類覆蓋度推導，SHALL NOT 引入 LLM 主觀評分。
 - **R3-7** WHEN 計算 Base 信心 THEN 公式 SHALL 為
@@ -346,7 +349,7 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 | 1 | 比賽當日是否提供更新至比賽日的資料集？ | 主辦方 | 若是，R1-2 自動不觸發（R1-5 已涵蓋），無需改碼 | ⬜ 未問 |
 | 2 | 若否，自行補充公開來源近期 OHLCV 是否符合規則？ | 主辦方 | 若不允許，R1-2 需移除，改為僅在報告揭露斷層 | ⬜ 未問 |
 | 3 | 各類「完整」的判定門檻（R3-1 用） | Ken | 影響 Data Confidence 三檔評分的分界 | 🟡 暫用 design.md §3.6.1 暫定值 |
-| 4 | Signal Consensus 公式鑑別度（R3-5） | alanchang | 線性映射會讓分數塌到底部（見 design.md §3.6.2） | 🟡 已裁定「晚點做先標記」，做到 Task 4.3 時處理 |
+| 4 | Signal Consensus 公式鑑別度（R3-5） | alanchang | 線性映射會讓分數塌到底部 | ✅ **2026-07-28 定案採兩兩一致度**，逐案比較見 design.md §3.6.2 |
 
 ## 團隊決策記錄（2026-07-28）
 
@@ -356,7 +359,7 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 | ② | Ken 新增的子來源缺 horizon 標註 | **由 alanchang 補** | tasks.md Task 0.2；對照表見 design.md §3.2.1 |
 | ③ | `price.py` 合併衝突（Ken 波動率壓縮 vs vic 重構） | **兩邊都留，alanchang 手動解** | tasks.md Task 0.1 |
 | ④ | Ken 的權重公式 Layer A/B 改版 | **先做 Layer A，Layer B 保留說明不實作** | design.md ADR-4 補充；本規格僅消費 `source_weight`，不受 Layer A 改版阻塞 |
-| ⑤ | Signal Consensus 公式鑑別度 | **晚點做，先標記** | 待確認事項 #4；R3-5 已加註 |
+| ⑤ | Signal Consensus 公式鑑別度 | **2026-07-28 實算 729 種組合後定案採兩兩一致度** | R3-5 改寫；design.md §3.6.2 留完整選型紀錄 |
 | ⑥ | `raw_data/` 未接進 agent | **確認是誤會，alanchang 處理**；並提出多尺度資料需求 | 新增 **R7** |
 
 > 待確認事項 1、2 應併入 `STATUS.md` 待辦第 8 項「向主辦方確認比賽當日執行環境」一併詢問。
