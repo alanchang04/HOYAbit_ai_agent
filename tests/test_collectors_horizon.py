@@ -81,18 +81,73 @@ async def test_price_csv_evidences_split_medium_and_structural(logger):
         evidences = await collector.fetch("BTC")
 
     grouped = _by_horizon(evidences)
-    assert set(grouped) == {HorizonClass.MEDIUM, HorizonClass.STRUCTURAL}
-    assert len(grouped[HorizonClass.MEDIUM]) == 2
-    assert len(grouped[HorizonClass.STRUCTURAL]) == 1
+    # R7-4 之後 price 會另外產出五檔標準粒度的區間統計，故不再是只有兩帶；
+    # 這裡驗的是「技術指標本身」有沒有被正確拆成當前動能 vs 長期結構。
+    indicator_evidences = [e for e in evidences if "指標計算" in e.source]
+    indicator_bands = _by_horizon(indicator_evidences)
+    assert set(indicator_bands) == {HorizonClass.MEDIUM, HorizonClass.STRUCTURAL}
+    assert len(indicator_bands[HorizonClass.STRUCTURAL]) == 1
 
-    structural = grouped[HorizonClass.STRUCTURAL][0]
+    structural = indicator_bands[HorizonClass.STRUCTURAL][0]
     assert "MA120" in structural.content_reference
     assert "全歷史" in structural.content_reference
     # 結構帶窗口自 CSV 首日起算，遠長於 medium 帶
     assert structural.window_start == "2021-06-01"
-    for ev in grouped[HorizonClass.MEDIUM]:
+    for ev in indicator_bands[HorizonClass.MEDIUM]:
         assert "MA120" not in ev.content_reference
         assert ev.window_start > structural.window_start
+
+    # 近兩週走勢摘要（非指標）仍是 medium
+    assert any(
+        e.horizon_class == HorizonClass.MEDIUM and "共同基準資料集" in e.source
+        for e in evidences
+    )
+
+
+@pytest.mark.asyncio
+async def test_price_covers_five_standard_granularities(logger):
+    """R7-4：price 資料來自本地 CSV，多算窗口零 API 成本，故要求五檔全覆蓋。
+
+    使用者問「最近兩週」或「最近一年」時，各自都要有對應尺度的證據可用；
+    缺了哪一檔，主視野落在該帶時就會無據可用（R7-6）。
+    """
+    async def failing_get(url, **kwargs):
+        raise RuntimeError("只驗本地計算，外部 API 一律失敗")
+
+    collector = PriceCollector(logger)
+    with patch("agent.collectors.price.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=failing_get)
+        evidences = await collector.fetch("BTC")
+
+    bands = _by_horizon(evidences)
+    for band in (
+        HorizonClass.SPOT,
+        HorizonClass.SHORT,
+        HorizonClass.MEDIUM,
+        HorizonClass.LONG,
+        HorizonClass.STRUCTURAL,
+    ):
+        assert band in bands, f"{band.value} 帶無任何 price 證據"
+
+    ranges = {e.related_claim: e for e in evidences if "區間統計" in e.source}
+    assert len(ranges) == 4, f"應有日/10日/季/年四檔區間統計，實得 {list(ranges)}"
+
+    # 每檔的窗長要與宣告的粒度相符，不能標了帶卻給錯窗
+    from datetime import date as _date
+
+    for ev in ranges.values():
+        span = (
+            _date.fromisoformat(ev.window_end) - _date.fromisoformat(ev.window_start)
+        ).days + 1
+        assert ev.horizon_class == _horizon_for_span(span), (
+            f"{ev.related_claim} 窗長 {span} 天與標註 {ev.horizon_class.value} 不符"
+        )
+
+
+def _horizon_for_span(span_days: int) -> HorizonClass:
+    from agent.schemas import horizon_for_days
+
+    return horizon_for_days(span_days)
 
 
 @pytest.mark.asyncio
@@ -109,10 +164,21 @@ async def test_price_realtime_quote_and_perp_basis_are_spot(logger):
         cls.return_value = _client(get=mock_get)
         evidences = await collector.fetch("BTC")
 
-    spot = [e for e in evidences if e.horizon_class == HorizonClass.SPOT]
-    assert len(spot) == 2  # CoinGecko 報價 + 永續基差
-    for ev in spot:
+    # 即時類 spot 證據（不含 R7-4 的「最近一日」區間統計——那是本地 K 棒，有窗口）
+    live = [
+        e
+        for e in evidences
+        if e.horizon_class == HorizonClass.SPOT and "區間統計" not in e.source
+    ]
+    assert len(live) == 2  # CoinGecko 報價 + 永續基差
+    for ev in live:
         _assert_no_window(ev)
+
+    # 「最近一日」也是 spot，但它有明確的單日窗口——標 spot 帶窗口是允許的，
+    # 只要窗長不超過 orchestrator 的 SPOT_MAX_WINDOW_DAYS 容許值。
+    daily = next(e for e in evidences if "最近一日" in e.related_claim)
+    assert daily.horizon_class == HorizonClass.SPOT
+    assert daily.window_start == daily.window_end
 
 
 # --- onchain -------------------------------------------------------------

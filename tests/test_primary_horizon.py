@@ -162,3 +162,17 @@ class TestReportDisclosure:
     def test_medium_question_says_monthly_scale(self):
         md = self._report("分析 BTC 最近兩週的整體市場狀態")
         assert "近一個月（中期）" in md
+
+    def test_discloses_when_primary_band_has_no_evidence(self):
+        """R7-6：問「最近一年」但一年尺度一筆資料都沒有時，必須講明白。
+
+        否則讀者會以為結論真的建立在他問的那個時間尺度上——dry-run fixture
+        只有 spot/short/medium 三帶，正好是這個情境。
+        """
+        md = self._report("過去一年 BTC 表現如何")
+        assert "無可用證據" in md
+        assert "實際依據的是" in md
+
+    def test_no_gap_note_when_primary_band_covered(self):
+        md = self._report("分析 BTC 最近兩週的整體市場狀態")
+        assert "無可用證據" not in md

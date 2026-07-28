@@ -142,6 +142,29 @@ def _describe_primary_horizon(result: ReasoningResult) -> str:
     return f"{label}（題目未明示時間範圍，採預設）"
 
 
+def _primary_horizon_gap_note(result: ReasoningResult, evidences: list[Evidence]) -> str | None:
+    """主視野帶完全無證據時的揭露（R7-6）。
+
+    問「最近一年」但一年尺度一筆資料都沒有，系統實際上是用別的尺度回答的——
+    這件事必須講明，否則讀者會以為結論真的建立在他問的那個時間尺度上。
+    """
+    primary = result.primary_horizon
+    if any(e.horizon_class.value == primary for e in evidences):
+        return None
+    available = sorted(
+        {e.horizon_class.value for e in evidences},
+        key=lambda v: list(HORIZON_LABEL).index(v) if v in HORIZON_LABEL else 99,
+    )
+    if not available:
+        return None
+    label = HORIZON_LABEL.get(primary, primary)
+    available_labels = "、".join(HORIZON_LABEL.get(v, v) for v in available)
+    return (
+        f"> ⚠ 本次主判斷尺度為{label}，但該尺度**無可用證據**；"
+        f"以下判斷實際依據的是{available_labels}的資料，請據此調整對結論適用範圍的預期。"
+    )
+
+
 def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     """信心分項表＋「這個分數怎麼來的」（R3-12/R3-13）。
 
@@ -217,6 +240,10 @@ def build_report_markdown(
     lines.append(f"> 題型分類：{result.question_type}")
     lines.append(f"> 主判斷尺度：{_describe_primary_horizon(result)}")
     lines.append("")
+    horizon_gap = _primary_horizon_gap_note(result, evidences)
+    if horizon_gap:
+        lines.append(horizon_gap)
+        lines.append("")
 
     lines.extend(_build_executive_summary_lines(result))
 

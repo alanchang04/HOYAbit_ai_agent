@@ -17,7 +17,7 @@
 | Phase 5 | 報告與前端呈現 | ✅ 完成（2026-07-28） | Claude |
 | Phase 6 | 語氣模板 | ⬜ 待做 | — |
 | Phase 7 | 整合驗收 | ⬜ 待做 | — |
-| Phase 8 | 多尺度供給與動態主視野（R7） | 🟡 8.1-8.4/8.7 完成；8.5/8.6/8.8/8.9 待做 | Claude |
+| Phase 8 | 多尺度供給與動態主視野（R7） | ✅ 完成（2026-07-28） | Claude |
 
 > vic 的 Phase 1–3 成果在 `origin/feat-horizon-aware-reasoning`（1798 行，7 個測試檔），
 > **尚未合併進 main**，Phase 0 就是要處理這件事。
@@ -392,13 +392,13 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   並取代 `prompts.py`／`confidence.py` 中所有寫死的「當前訊號三帶」判斷
   - _Requirements: R7-3_
 
-- [ ] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
+- [x] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
   - 日／10 日／季／年 四檔為新增（月已由 vic 的 `SERIES_WINDOW=30` 完成）
   - 資料來自本地 CSV，**不得**新增任何 API 呼叫
   - 各檔標註對應的 `horizon_class` 與 `window_start`/`window_end`
   - _Requirements: R7-4_
 
-- [ ] **8.6** 其他 collector 依 R7-5「盡力而為」盤點：
+- [x] **8.6** 其他 collector 依 R7-5「盡力而為」盤點：
   列出各 collector 實際能覆蓋的粒度，未覆蓋者確認會反映在 Data Confidence 扣分
   - **不要**為了湊滿五檔而製造假資料（news/social 本質上沒有「年」尺度）
   - _Requirements: R7-5_
@@ -406,12 +406,12 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 - [x] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
   - _Requirements: R7-6, R7-7_
 
-- [ ] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）
+- [x] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）
   - 只定義 agent 端需要什麼格式，**不規範檔案產生流程**（那是 alanchang 的範圍）
   - 檔案缺失／格式不符 → collector 降級為僅用即時 API，不得中斷
   - _Requirements: R7-8, R6-1_
 
-- [ ] **8.9** 新增 `tests/test_multiscale_supply.py`：
+- [x] **8.9** 新增 `tests/test_multiscale_supply.py`：
   五檔粒度都有證據產出、動態主視野下的角色推導正確
   （primary=`structural` 時 `long` 應為當前訊號而非結構脈絡）
   - _Requirements: R7-3, R7-4_
