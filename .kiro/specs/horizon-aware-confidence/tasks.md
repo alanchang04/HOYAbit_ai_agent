@@ -16,8 +16,8 @@
 | Phase 4 | 信心公式重寫 | ✅ 完成（2026-07-28） | Claude |
 | Phase 5 | 報告與前端呈現 | ✅ 完成（2026-07-28） | Claude |
 | Phase 6 | 語氣模板 | ⬜ 待做 | — |
-| Phase 7 | 整合驗收 | ⬜ 待做 | — |
-| Phase 8 | 多尺度供給與動態主視野（R7） | ⬜ 待做 | — |
+| Phase 7 | 整合驗收 | 🟡 7.1/7.2 完成；文件同步待做 | Claude |
+| Phase 8 | 多尺度供給與動態主視野（R7） | ✅ 完成（2026-07-28） | Claude |
 
 > vic 的 Phase 1–3 成果在 `origin/feat-horizon-aware-reasoning`（1798 行，7 個測試檔），
 > **尚未合併進 main**，Phase 0 就是要處理這件事。
@@ -241,9 +241,14 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     辯論失敗時的替代路徑，不補會讓降級路徑失去權重意識，故一併加入
   - `evidences` 參數預設 `None`，取不到清單時只省略索引、規則仍在（R6-1）
 
-- [ ] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
+- [x] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
   人工檢查 Step B 是否正確把跨尺度差異放進 `structural_context` 而非 `contradictions`
-  - 這是本規格**最核心的驗證點**，若 LLM 仍把跨尺度判成矛盾，需回頭加強 §3.5.3 的約束措辭
+  - ✅ **2026-07-28 驗證通過**（Claude Sonnet 4.5，ap-northeast-1，27 筆證據）。
+    contradictions 3 條全是同尺度衝突（RSI vs 價格皆 30 天／多空比 vs OI 皆即時／
+    Mempool vs 交易筆數皆 30 天鏈上）；structural_context 5 條全是跨尺度定位，
+    其中第一條「兩週 -1.98% vs 一季 -15.87% vs 一年 -46%」正是設計時舉的例子，
+    且引用了 Phase 8.5 新增的 ev-004（近一季）/ev-005（近一年）粒度證據。
+    舊制會把這 5 條全丟進 contradictions 扣滿 -15。
   - _Requirements: R2-6, R2-7_
 
 ### Phase 4 — 信心公式重寫
@@ -345,11 +350,29 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 
 ### Phase 7 — 整合驗收
 
-- [ ] **7.1** 全套測試 `pytest -q` 通過，且既有 269 個案例無刪除
+- [x] **7.1** 全套測試 `pytest -q` 通過，且既有 269 個案例無刪除
   - _Requirements: R6-3, R6-4_
 
-- [ ] **7.2** 【需 LLM 額度】三題型各跑一次真實 Bedrock，記錄耗時，
+- [x] **7.2** 【需 LLM 額度】三題型各跑一次真實 Bedrock，記錄耗時，
   確認總時長仍在 10 分鐘內（新增 Binance 呼叫預估 < 5 秒）
+  - ✅ **2026-07-28 三題型全數通過**（Claude Sonnet 4.5，ap-northeast-1）：
+
+    | 題型 | 題目 | 證據 | 耗時 | 矛盾/結構 | 信心 |
+    |---|---|---:|---:|---|---|
+    | 多源整合 | BTC 最近兩週市場狀態 | 27 | 232s | 3／5 | 64 = 74 −10 |
+    | 假設驗證 | ETH 鏈上活躍度是否回升 | 27 | 207s | 4／4 | 56 = 68 −12 |
+    | 比較分析 | BTC vs SOL 流動性與風險敞口 | 51 | 291s | 4／8 | 70 = 77 −6 |
+
+    三題皆 8 個推理步驟零失敗，最長 291 秒（4.9 分），遠低於 10 分鐘目標與
+    15 分鐘硬限。比較題 51 筆證據是最壞情況，修正後的 max_tokens=8192 足夠。
+
+    **品質觀察**：LLM 已內化 horizon 詞彙，會主動寫出「這兩個訊號在 spot 視野內
+    形成矛盾」「處於 long 視野（近一季）下跌 -15.87% 的脈絡中」——代表 §3.5.1 的
+    分帶說明區塊真的傳達到位，不只是形式上填了欄位。
+
+    **Consensus 公式鑑別度實證**：假設驗證題方向為 [0,0,0,-1,1] → 60 分（分歧但
+    多數中性），比較題 [-1,-1,0,-1,-1] → 80 分（高度一致偏空）。舊的線性 stdev
+    對前者只會給 37 分。兩兩一致度在真實資料上的鑑別度符合預期。
   - _Requirements: R6-2_
 
 - [ ] **7.3** 人工驗收核心成效：對照修改前後同一題目的報告，確認
@@ -378,7 +401,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 > 等於假設題目永遠問「兩週」。現場若抽到「最近一年」，五年結構資料
 > 會被歸成「結構脈絡」排除在共識投票外——**最該用的資料反而被降級**。
 
-- [ ] **8.1** 在 `agent/schemas.py` 新增 `HORIZON_ORDER` 排序清單與
+- [x] **8.1** 在 `agent/schemas.py` 新增 `HORIZON_ORDER` 排序清單與
   `is_current_signal(h, primary)` 函式（design.md §3.1）
   - 保留 vic 已實作的 `CURRENT_SIGNAL_HORIZONS`／`STRUCTURAL_HORIZONS` 不刪除
     （primary=`medium` 時兩者結果相同，既有測試不會失敗）
@@ -386,42 +409,42 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     已核對**不影響任何一筆 vic 現有標註**
   - _Requirements: R7-1, R7-3_
 
-- [ ] **8.2** 實作 `resolve_primary_horizon(question)`（design.md §3.1.1）
+- [x] **8.2** 實作 `resolve_primary_horizon(question)`（design.md §3.1.1）
   - 規則式關鍵字比對，**不呼叫 LLM**；由長詞到短詞避免「一年」被「年」搶先命中
   - 回傳 `(主視野, 觸發判定的題目片段)`，片段供 R7-7 在報告揭露
   - 無命中 → 回 `(MEDIUM, "")`
   - _Requirements: R7-2_
 
-- [ ] **8.3** 新增 `tests/test_primary_horizon.py`：
+- [x] **8.3** 新增 `tests/test_primary_horizon.py`：
   七組關鍵字各一例、無命中的預設值、「一年」不被「年」誤搶、
   天數→帶的邊界值（1／10／30／180）
   - _Requirements: R7-1, R7-2_
 
-- [ ] **8.4** 把 `primary_horizon` 貫穿 pipeline：
+- [x] **8.4** 把 `primary_horizon` 貫穿 pipeline：
   `orchestrator` 判定後傳入 `run_reasoning()`，
   並取代 `prompts.py`／`confidence.py` 中所有寫死的「當前訊號三帶」判斷
   - _Requirements: R7-3_
 
-- [ ] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
+- [x] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
   - 日／10 日／季／年 四檔為新增（月已由 vic 的 `SERIES_WINDOW=30` 完成）
   - 資料來自本地 CSV，**不得**新增任何 API 呼叫
   - 各檔標註對應的 `horizon_class` 與 `window_start`/`window_end`
   - _Requirements: R7-4_
 
-- [ ] **8.6** 其他 collector 依 R7-5「盡力而為」盤點：
+- [x] **8.6** 其他 collector 依 R7-5「盡力而為」盤點：
   列出各 collector 實際能覆蓋的粒度，未覆蓋者確認會反映在 Data Confidence 扣分
   - **不要**為了湊滿五檔而製造假資料（news/social 本質上沒有「年」尺度）
   - _Requirements: R7-5_
 
-- [ ] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
+- [x] **8.7** 實作主視野無證據時的揭露（R7-6）與主視野判定依據的揭露（R7-7）
   - _Requirements: R7-6, R7-7_
 
-- [ ] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）
+- [x] **8.8** 定義 `raw_data/` 讀取介面契約（R7-8）
   - 只定義 agent 端需要什麼格式，**不規範檔案產生流程**（那是 alanchang 的範圍）
   - 檔案缺失／格式不符 → collector 降級為僅用即時 API，不得中斷
   - _Requirements: R7-8, R6-1_
 
-- [ ] **8.9** 新增 `tests/test_multiscale_supply.py`：
+- [x] **8.9** 新增 `tests/test_multiscale_supply.py`：
   五檔粒度都有證據產出、動態主視野下的角色推導正確
   （primary=`structural` 時 `long` 應為當前訊號而非結構脈絡）
   - _Requirements: R7-3, R7-4_

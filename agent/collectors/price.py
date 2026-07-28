@@ -138,6 +138,43 @@ def summarize_ohlcv(rows: list[dict]) -> str:
     )
 
 
+# R7-4：五檔標準粒度。price 的資料來自本地 CSV，多算幾個窗口是純 Python 運算，
+# **不增加任何 API 呼叫**，不吃 15 分鐘時間預算——所以這一類要求全覆蓋。
+# 月（30 日）與年（全歷史）已由既有的技術指標／長期結構兩筆證據涵蓋，
+# 這裡補的是缺的日／10 日／季／年度區間四檔。
+STANDARD_GRANULARITIES: list[tuple[int, HorizonClass, str]] = [
+    (1, HorizonClass.SPOT, "最近一日"),
+    (10, HorizonClass.SHORT, "近 10 日"),
+    (90, HorizonClass.LONG, "近一季"),
+    (365, HorizonClass.STRUCTURAL, "近一年"),
+]
+
+
+def summarize_single_bar(row: dict) -> str:
+    """單一日 K 棒摘要。
+
+    不能直接套 `summarize_ohlcv`——那個函式比較 `rows[0]` 與 `rows[-1]`，
+    只有一列時兩者是同一根 K 棒，會算出恆為 0% 的漲跌幅。
+    """
+    open_price, close = float(row["open"]), float(row["close"])
+    pct = (close - open_price) / open_price * 100 if open_price else 0.0
+    return (
+        f"{row['date']}（單日）：開盤 {open_price:.2f} → 收盤 {close:.2f} USDT（{pct:+.2f}%），"
+        f"最高 {float(row['high']):.2f}／最低 {float(row['low']):.2f}，"
+        f"成交量 {float(row['volume']):.2f}"
+    )
+
+
+def summarize_granularity(rows: list[dict], days: int, label: str) -> str | None:
+    """某一檔標準粒度的區間摘要；資料不足該窗長時回 None（不硬湊）。"""
+    if len(rows) < days:
+        return None
+    window = rows[-days:]
+    if days == 1:
+        return f"{label}｜{summarize_single_bar(window[-1])}"
+    return f"{label}｜{summarize_ohlcv(window)}"
+
+
 def compute_historical_volatility_percentile(
     full_closes: list[float],
     window: int = VOL_PERCENTILE_WINDOW,
@@ -570,6 +607,37 @@ class PriceCollector(BaseCollector):
                 horizon_class=HorizonClass.MEDIUM,
             )
         )
+
+        # --- 五檔標準粒度（R7-4）：讓 agent 對同一標的同時具備日／10日／季／年的視角 ---
+        # 使用者問「最近兩週」或「最近一年」時，各自都要有對應尺度的證據可用；
+        # 主視野落在哪一帶，那一帶就必須有東西（R7-6）。全部由本地序列計算，零 API 成本。
+        for days, horizon, label in STANDARD_GRANULARITIES:
+            # 全部用補齊後序列，含「近一年」。R1-8 限制的是長歷史**指標**
+            # （MA120 值、全歷史百分位）必須以官方基準計算，不是區間摘要——
+            # 問「過去一年表現」卻回一個止於兩個月前的區間，是比接縫更嚴重的誤導。
+            # 接縫已由 gap_note 揭露，可回溯性不受影響。
+            summary = summarize_granularity(spliced_rows, days, label)
+            if summary is None:
+                self.log_subsource(
+                    f"granularity_{days}d", coin, LogStatus.SKIPPED,
+                    f"資料不足 {days} 日（實有 {len(spliced_rows)} 日）",
+                )
+                continue
+            window = spliced_rows[-days:]
+            evidences.append(
+                EvidenceDraft(
+                    coin=coin,
+                    source=f"本地區間統計（依 {coin} 日線 {label}，非外部資料）",
+                    source_url=None,
+                    fetched_at=now_iso(),
+                    content_reference=summary + gap_note,
+                    related_claim=f"{coin} {label}的價格區間表現（{horizon.value} 尺度）",
+                    source_type="price",
+                    window_start=window[0]["date"],
+                    window_end=window[-1]["date"],
+                    horizon_class=horizon,
+                )
+            )
 
         # --- 技術指標：純 Python 決定性運算，不依賴 LLM，不會因額度失敗 ---
         indicators = compute_technical_indicators(indicator_rows)

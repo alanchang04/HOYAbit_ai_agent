@@ -7,7 +7,8 @@
 「透過辯論後才知道信心」，兩者有張力。分層讓兩者都成立且各自可稽核。
 
 取代舊制 `compute_confidence_score()`（base 來自 LLM 自報的高/中/低，佔最終分數
-70-80%，既非資料信心也非可複現）。舊函式保留為 deprecated wrapper，見檔案底部。
+70-80%，既非資料信心也非可複現）。舊函式已移除，其測試依 R6-4 改寫為新公式的
+等價驗證而非刪除——對照關係見 `tests/test_confidence_score.py` 檔頭表格。
 
 公式各項 SHALL 寫入 log metrics 可對帳（layer=L5_conclusion）。
 """
@@ -18,10 +19,11 @@ import itertools
 from datetime import date
 
 from agent.schemas import (
-    CURRENT_SIGNAL_HORIZONS,
+    DEFAULT_PRIMARY_HORIZON,
     Evidence,
     HorizonClass,
     SourceType,
+    is_current_signal,
 )
 
 # 六類來源完整集合（含 derivatives——舊制漏了它，Ken 的衍生品資料再完整也不會
@@ -150,7 +152,7 @@ def compute_signal_consensus(
     current_types = {
         e.source_type.value
         for e in evidences
-        if _is_current_signal(e.horizon_class, primary_horizon)
+        if is_current_signal(e.horizon_class, primary_horizon)
     }
 
     used: list[dict] = []
@@ -209,18 +211,6 @@ def compute_evidence_strength(evidences: list[Evidence]) -> tuple[float, dict]:
         "coverage": round(coverage, 4),
         "avg_weight": round(avg_weight, 4),
     }
-
-
-def _is_current_signal(horizon: HorizonClass, primary: HorizonClass | None) -> bool:
-    """horizon ≤ 主視野 → 當前訊號（R7-3）。
-
-    `primary=None` 時退回 Phase 1 的預設分組（spot/short/medium），
-    行為與動態主視野尚未接線前完全相同。
-    """
-    if primary is None:
-        return horizon in CURRENT_SIGNAL_HORIZONS
-    order = list(HorizonClass)
-    return order.index(horizon) <= order.index(primary)
 
 
 def _coerce_adjustment(raw) -> int | None:
@@ -304,12 +294,23 @@ def compute_confidence(
         "debate_adjustment_raw": raw_adjustment,
         "debate_adjustment_reason": debate_adjustment_reason or "",
         "debate_adjustment_note": clamp_note,
-        "primary_horizon": (primary_horizon or HorizonClass.MEDIUM).value,
+        "primary_horizon": (primary_horizon or DEFAULT_PRIMARY_HORIZON).value,
         "structural_context_count": len(cross_validation.get("structural_context", []) or []),
         "final": final,
     }
     breakdown["why"] = build_why_lines(breakdown)
     return final, breakdown
+
+
+WHY_REASON_MAX_CHARS = 100
+
+
+def _summarize_reason(reason: str) -> str:
+    """把辯論理由壓成適合放進條列的一行。"""
+    flat = " ".join(reason.split())
+    if len(flat) <= WHY_REASON_MAX_CHARS:
+        return flat
+    return flat[:WHY_REASON_MAX_CHARS] + "…（完整理由見信心說明）"
 
 
 def build_why_lines(breakdown: dict) -> list[str]:
@@ -344,7 +345,9 @@ def build_why_lines(breakdown: dict) -> list[str]:
             lines.append(f"⚠ 來源方向分歧（{summary}），市場缺乏共識")
 
     adjustment = breakdown.get("debate_adjustment", 0)
-    reason = breakdown.get("debate_adjustment_reason", "")
+    # why 是條列摘要，理由過長會把整份清單淹掉（實測 LLM 回過 700+ 字的評析）。
+    # 這裡截短，完整理由由報告層另外整段呈現。
+    reason = _summarize_reason(breakdown.get("debate_adjustment_reason", ""))
     if adjustment < 0:
         lines.append(f"⚠ 辯論後下修 {abs(adjustment)} 分：{reason}")
     elif adjustment > 0:

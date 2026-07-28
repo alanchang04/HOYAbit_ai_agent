@@ -18,7 +18,12 @@
 - `news`：每幣官方發布源優先，BTC/ETH/SOL 走官方 RSS，BNB/XRP 無官方 RSS 退階解析官方頁面
 - `social`：Reddit 公開 `.json` 搜尋端點
 - `macro`：Fear & Greed Index（近 30 天百分位）＋ Frankfurter 匯率（美元強弱代理），有 FRED key 時疊加美債殖利率
-- 已知限制：**Reddit 會封鎖部分雲端/機房 IP（403），與程式碼無關**，會被正確標記 skipped 並在報告中揭露
+- `social`：Reddit 搜尋。**2026-07-28 改版**——Reddit 已全面封鎖未認證的 `.json` 端點
+  （實測 `www`／`old` 子網域、自訂 UA 與瀏覽器 UA 一律 403，本機直連同樣被擋，
+  非先前記錄的「雲端 IP 封鎖」），改走仍開放的 `.rss`（Atom）端點，實測可穩定取得
+  10 筆／幣。代價是 RSS 不含 score／留言數，熱度降級為「則數＋標題＋時間分布」，
+  已在 `source` 欄誠實標示。若 `.env` 設 `REDDIT_CLIENT_ID`／`REDDIT_CLIENT_SECRET`
+  則自動改走 OAuth 取回完整欄位（免費申請，額度也較寬），沒設定就用 RSS，不中斷
 
 ### Stage 3：LLM backend 抽象層與四步推理鏈（含多輪辯論）
 - `agent/reasoning/llm_client.py`：`LLMClient` 介面 ＋ `build_llm_client()` 工廠，依 `.env` 的 `LLM_BACKEND` 切換

@@ -121,6 +121,62 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     return lines
 
 
+# markdown 表格儲存格放得下的字數上限；超過就改放摘要＋表格下方列完整版
+TABLE_CELL_MAX_CHARS = 80
+
+
+def _table_safe(text: str) -> str:
+    """把可能含換行／過長的文字壓成適合放進 markdown 表格儲存格的單行摘要。"""
+    flat = " ".join(text.split()).replace("|", "｜")
+    if len(flat) <= TABLE_CELL_MAX_CHARS:
+        return flat
+    return flat[:TABLE_CELL_MAX_CHARS] + "…（完整理由見下方）"
+
+
+HORIZON_LABEL: dict[str, str] = {
+    "spot": "當日（日尺度）",
+    "short": "近 10 日（短期）",
+    "medium": "近一個月（中期）",
+    "long": "近一季（長期）",
+    "structural": "近一年以上（結構）",
+}
+
+
+def _describe_primary_horizon(result: ReasoningResult) -> str:
+    """揭露本次的主判斷尺度與判定依據（R7-7）。
+
+    讓讀者能檢查系統有沒有誤解題目的時間範圍——問「最近一年」卻判成中期，
+    讀者一眼就能看出結論的尺度不對，這比默默用錯尺度分析好得多。
+    """
+    label = HORIZON_LABEL.get(result.primary_horizon, result.primary_horizon)
+    if result.primary_horizon_basis:
+        return f"{label}（依題目「{result.primary_horizon_basis}」判定）"
+    return f"{label}（題目未明示時間範圍，採預設）"
+
+
+def _primary_horizon_gap_note(result: ReasoningResult, evidences: list[Evidence]) -> str | None:
+    """主視野帶完全無證據時的揭露（R7-6）。
+
+    問「最近一年」但一年尺度一筆資料都沒有，系統實際上是用別的尺度回答的——
+    這件事必須講明，否則讀者會以為結論真的建立在他問的那個時間尺度上。
+    """
+    primary = result.primary_horizon
+    if any(e.horizon_class.value == primary for e in evidences):
+        return None
+    available = sorted(
+        {e.horizon_class.value for e in evidences},
+        key=lambda v: list(HORIZON_LABEL).index(v) if v in HORIZON_LABEL else 99,
+    )
+    if not available:
+        return None
+    label = HORIZON_LABEL.get(primary, primary)
+    available_labels = "、".join(HORIZON_LABEL.get(v, v) for v in available)
+    return (
+        f"> ⚠ 本次主判斷尺度為{label}，但該尺度**無可用證據**；"
+        f"以下判斷實際依據的是{available_labels}的資料，請據此調整對結論適用範圍的預期。"
+    )
+
+
 def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     """信心分項表＋「這個分數怎麼來的」（R3-12/R3-13）。
 
@@ -154,10 +210,20 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     lines.append(f"| **基底（三維加權）** | **{breakdown.get('base', 0):.1f}** | | |")
 
     adjustment = breakdown.get("debate_adjustment", 0)
-    adjustment_reason = breakdown.get("debate_adjustment_reason", "") or "（本次未調整）"
-    lines.append(f"| 辯論後調整 | {adjustment:+d} | | {adjustment_reason} |")
+    full_reason = breakdown.get("debate_adjustment_reason", "")
+    # 表格儲存格必須是單行短文字。prompt 已限 80 字，但 LLM 不保證遵守——
+    # 實測有回過 700+ 字的評析把表格整個撐爆，所以呈現層也要防守：
+    # 表格放摘要，完整理由改列在表格下方。
+    cell_reason = _table_safe(full_reason) if full_reason else "（本次未調整）"
+    lines.append(f"| 辯論後調整 | {adjustment:+d} | | {cell_reason} |")
     lines.append(f"| **最終信心** | **{breakdown.get('final', result.confidence_score)}** | | |")
     lines.append("")
+
+    if full_reason and len(full_reason) > TABLE_CELL_MAX_CHARS:
+        lines.append("**辯論調整的完整理由：**")
+        lines.append("")
+        lines.append(normalize_embedded_lists(full_reason))
+        lines.append("")
 
     if breakdown.get("signal_consensus_detail", {}).get("degraded"):
         reason = breakdown["signal_consensus_detail"].get("degraded_reason", "")
@@ -194,7 +260,12 @@ def build_report_markdown(
     lines.append("")
     lines.append(f"> 題目：{question}")
     lines.append(f"> 題型分類：{result.question_type}")
+    lines.append(f"> 主判斷尺度：{_describe_primary_horizon(result)}")
     lines.append("")
+    horizon_gap = _primary_horizon_gap_note(result, evidences)
+    if horizon_gap:
+        lines.append(horizon_gap)
+        lines.append("")
 
     lines.extend(_build_executive_summary_lines(result))
 

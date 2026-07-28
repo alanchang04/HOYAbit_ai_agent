@@ -461,3 +461,38 @@ class TestHandCalculatedSample:
         assert plain < 95, "前提：未夾值，否則下面的算術不成立"
         assert adjusted == plain - 10
         assert bd_adj["final"] == round(bd_adj["base"] - 10)
+
+
+class TestLongDebateReasonDoesNotBreakOutput:
+    """回歸測試（2026-07-28 真實 Bedrock 執行發現）：prompt 雖限 80 字，
+    但 LLM 不保證遵守——實測回過 700+ 字的辯論評析，把報告的信心分項表格整個撐爆。
+    呈現層必須自己防守，不能假設模型會聽話。"""
+
+    LONG_REASON = "反方對正方論證的五大批評全部成立且具毀滅性：" + "（詳細論述）" * 120
+
+    def test_why_line_is_truncated(self):
+        _, bd = compute_confidence(
+            _full_coverage_evidences(),
+            {},
+            debate_adjustment=-12,
+            debate_adjustment_reason=self.LONG_REASON,
+        )
+        line = next(l for l in bd["why"] if "辯論後下修" in l)
+        assert len(line) < 200, f"why 條列被長理由淹掉：{len(line)} 字"
+        assert "完整理由見" in line
+
+    def test_full_reason_still_preserved_in_breakdown(self):
+        """截斷只發生在呈現，breakdown 必須保留完整原文供稽核。"""
+        _, bd = compute_confidence(
+            _full_coverage_evidences(),
+            {},
+            debate_adjustment=-12,
+            debate_adjustment_reason=self.LONG_REASON,
+        )
+        assert bd["debate_adjustment_reason"] == self.LONG_REASON
+
+    def test_reason_with_pipe_does_not_break_markdown_table(self):
+        """理由含 | 會把 markdown 表格的欄位切錯。"""
+        from agent.report.builder import _table_safe
+
+        assert "|" not in _table_safe("理由 A | 理由 B")

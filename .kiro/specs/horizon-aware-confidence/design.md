@@ -635,6 +635,38 @@ TONE_PROFILES = {
 `debate` 任何欄位內容，不改變信心計算，不改變證據引用。
 → 這保證同一次執行切換 tone 不會產生不同的分析結論。
 
+## 3.8 `raw_data/` 讀取介面契約（R7-8）
+
+> 2026-07-28 補。起因是 vic 盤點發現 `agent/` 底下**沒有任何一行程式讀 `raw_data/`**
+> ——Ken 落地的衍生品／期限結構／CME COT／鏈上歷史 CSV 對 LLM 推理鏈一筆都沒進去。
+> alanchang 確認這是誤會而非刻意設計，接線工作由他負責；本節只定義 **agent 端需要
+> 什麼**，不規範檔案怎麼產生。
+
+### 契約
+
+collector 若要改讀 `raw_data/`，必須滿足三件事：
+
+1. **標註責任不變**：讀進來的資料一樣要由 collector 依實際窗口標
+   `horizon_class`／`window_start`／`window_end`（ADR-2）。檔案裡有什麼窗口，
+   標註就要對得上，不可套用預設值了事。
+2. **缺檔即降級，不得中斷**（R6-1）：檔案不存在／格式不符／欄位缺漏時，
+   collector 應 `log_subsource(..., LogStatus.SKIPPED, ...)` 並改用即時 API，
+   最壞情況是該子來源沒有證據，**絕不可讓例外往上拋**。
+   比賽只有一次執行機會，這條優先於資料完整性。
+3. **時效必須揭露**：`raw_data/` 是賽前落地的快照，與執行日必然有落差。
+   證據文字要寫明快照日期，比照 `price.py` 的 `gap_note` 作法——
+   這正是 R1 資料時效斷層問題在另一個資料源上的同一個坑。
+
+### 建議的目錄約定
+
+```
+raw_data/{source_type}/{COIN}/{indicator}_snapshot.json   # 單點快照
+raw_data/{source_type}/{COIN}/{indicator}_series.csv      # 時間序列
+raw_data/_meta/window_policy.md                           # 窗口政策（權威來源）
+```
+
+序列檔至少需有日期欄，供 collector 推導 `window_start`/`window_end`。
+
 ## 4. 相容性與降級矩陣（R6-1）
 
 | 失敗點 | 降級行為 | 揭露方式 |
