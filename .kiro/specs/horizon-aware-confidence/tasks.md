@@ -9,9 +9,9 @@
 
 | Phase | 內容 | 狀態 | 執行者 |
 |---|---|---|---|
-| Phase 0 | 分支合併與標註補齊 | ⬜ 待做 | **alanchang** |
+| Phase 0 | 分支合併與標註補齊 | ✅ 完成（2026-07-28） | alanchang／Claude |
 | Phase 1 | Schema 地基 | ✅ 完成 | vic（`feat-horizon-aware-reasoning`） |
-| Phase 2 | Collector 標註／缺口補齊／序列化 | ✅ 完成（2.11 除外） | vic |
+| Phase 2 | Collector 標註／缺口補齊／序列化 | ✅ 完成 | vic ＋ Phase 0.2 補齊 |
 | Phase 3 | Prompt 層 | ✅ 完成（3.8 除外） | vic |
 | Phase 4 | 信心公式重寫 | ⬜ 待做 | — |
 | Phase 5 | 報告與前端呈現 | ⬜ 待做 | — |
@@ -77,7 +77,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 > 這是所有後續工作的前提。vic 的 Phase 1–3 成果還在獨立分支上，
 > 且他從 Ken 的新工作之前分岔，合併時會撞到一個衝突、漏掉四筆標註。
 
-- [ ] **0.1** 合併 `origin/feat-horizon-aware-reasoning` 進主線，解 `price.py` 衝突
+- [x] **0.1** 合併 `origin/feat-horizon-aware-reasoning` 進主線，解 `price.py` 衝突
   - 衝突原因：Ken 在 `d8e1b15` 加 `compute_volatility_compression()`，
     vic 同時重構 `price.py` 做缺口補齊與序列摘要——**功能互補、邏輯不衝突，純文字碰撞**
   - **裁定：兩邊都留**（決策③）。共 3 個衝突區塊：
@@ -89,7 +89,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - 合併後 `pytest -q` 必須全綠（vic 分支 + main 各自的測試都要過）
   - _Requirements: —（工程整合）_
 
-- [ ] **0.2** 補上 Ken 新增子來源的 horizon 標註（design.md §3.2.1 對照表）
+- [x] **0.2** 補上 Ken 新增子來源的 horizon 標註（design.md §3.2.1 對照表）
   - `price.py` 波動率壓縮 → **`structural`**（⚠ 最重要，錯標會製造假矛盾）
   - `macro.py` 供給節奏日曆 → `long`
   - `onchain.py` BTC/ETH 歷史趨勢 → `medium`（回看窗 >30 天則 `long`）
@@ -98,7 +98,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     新子來源沒進表會被漏測）
   - _Requirements: R2-2_
 
-- [ ] **0.3** 推送合併結果並通知 vic 與 Ken（避免各自分支繼續分岔）
+- [x] **0.3** 推送合併結果並通知 vic 與 Ken（避免各自分支繼續分岔）
   - _Requirements: —（團隊協作）_
 
 ### Phase 1 — Schema 地基

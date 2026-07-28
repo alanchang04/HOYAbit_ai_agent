@@ -305,6 +305,10 @@ class MacroCollector(BaseCollector):
                         content_reference=summary,
                         related_claim=f"{coin} 供給面事件日曆（減半／銷毀／解鎖等）",
                         source_type="macro",
+                        # 供給節奏是年級別的結構性因子（BTC 減半週期約 4 年，實測輸出
+                        # 「上次 2024-04-20／下次 2028-04-17」跨度逾 4 年），屬 structural。
+                        # 事件日曆不是連續觀察窗（同時往回看與往前看），故 window 留 None。
+                        horizon_class=HorizonClass.STRUCTURAL,
                     )
                 )
             else:
@@ -324,6 +328,11 @@ class MacroCollector(BaseCollector):
                     content_reference=event_calendar_summary(coin, today),
                     related_claim=f"{coin} 總經事件時間點（FOMC／CPI，判斷近期波動是否有總經背景）",
                     source_type="macro",
+                    # 雖然靜態表涵蓋 2026 全年，實際輸出只報「最近一次＋下一次」，
+                    # 實測跨度約 41 天前 ~ 15 天後 ≈ 兩個月，且語意是近期事件背景
+                    # （「下次 FOMC 在 1 天後」是當前訊號不是結構脈絡），故標 medium。
+                    # 同上，日曆非連續觀察窗，window 留 None。
+                    horizon_class=HorizonClass.MEDIUM,
                 )
             )
         except Exception as exc:  # noqa: BLE001

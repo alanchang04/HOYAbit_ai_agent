@@ -4,13 +4,16 @@
       "source": "HOYA BIT 共同基準資料集 (data/{coin}_daily_ohlcv.csv)",
       "source_url": null,
       "content_reference": "近 14 日收盤價與成交量摘要（dry-run 假資料，非真實查詢結果）",
-      "related_claim": "{coin} 近期價格走勢與成交量變化"
+      "related_claim": "{coin} 近期價格走勢與成交量變化",
+      "horizon_class": "medium",
+      "window_days": 14
     },
     {
       "source": "CoinGecko (dry-run fixture)",
       "source_url": "https://api.coingecko.com/api/v3/simple/price",
       "content_reference": "{coin} 即時價格與 24h 漲跌幅（dry-run 假資料）",
-      "related_claim": "{coin} 當前即時報價"
+      "related_claim": "{coin} 當前即時報價",
+      "horizon_class": "spot"
     }
   ],
   "onchain": [
@@ -18,7 +21,8 @@
       "source": "鏈上資料來源 (dry-run fixture)",
       "source_url": null,
       "content_reference": "{coin} 近期鏈上活躍地址數／交易量摘要（dry-run 假資料）",
-      "related_claim": "{coin} 鏈上活躍度"
+      "related_claim": "{coin} 鏈上活躍度",
+      "horizon_class": "spot"
     }
   ],
   "news": [
@@ -26,7 +30,9 @@
       "source": "{coin} 官方發布源 (dry-run fixture)",
       "source_url": null,
       "content_reference": "{coin} 官方發布源公告標題摘要（dry-run 假資料，非真實查詢結果；正式執行時依幣種讀取對應官方源，見 agent/collectors/news.py 的 OFFICIAL_SOURCES）",
-      "related_claim": "{coin} 官方發布新聞事件"
+      "related_claim": "{coin} 官方發布新聞事件",
+      "horizon_class": "medium",
+      "window_days": 14
     }
   ],
   "social": [
@@ -34,7 +40,9 @@
       "source": "Reddit r/CryptoCurrency (dry-run fixture)",
       "source_url": "https://www.reddit.com/r/CryptoCurrency/search.json",
       "content_reference": "{coin} 相關討論串標題與熱度摘要（dry-run 假資料）",
-      "related_claim": "{coin} 社群討論熱度與情緒"
+      "related_claim": "{coin} 社群討論熱度與情緒",
+      "horizon_class": "short",
+      "window_days": 7
     }
   ],
   "macro": [
@@ -42,7 +50,9 @@
       "source": "Fear & Greed Index (dry-run fixture)",
       "source_url": "https://api.alternative.me/fng/",
       "content_reference": "value=45, classification=Fear, 30日百分位=60.0%, 30日範圍=25-72",
-      "related_claim": "整體加密市場情緒指標"
+      "related_claim": "整體加密市場情緒指標",
+      "horizon_class": "medium",
+      "window_days": 30
     }
   ],
   "derivatives": [
@@ -50,7 +60,9 @@
       "source": "Binance Futures /fapi/v1/fundingRate (dry-run fixture)",
       "source_url": "https://fapi.binance.com/fapi/v1/fundingRate",
       "content_reference": "{coin} 近 30 天資金費率百分位摘要（dry-run 假資料，非真實查詢結果）",
-      "related_claim": "{coin} 永續合約資金費率擁擠度"
+      "related_claim": "{coin} 永續合約資金費率擁擠度",
+      "horizon_class": "medium",
+      "window_days": 30
     }
   ]
 }

@@ -261,6 +261,105 @@ async def test_derivatives_intraday_spot_windows_stay_short(logger):
         assert span <= 2, f"{keyword} 窗長 {span} 天，超過 spot 容許值"
 
 
+# --- Ken 於 d8e1b15 併入的子來源（design.md §3.2.1，Task 0.2）-----------------
+
+
+@pytest.mark.asyncio
+async def test_macro_calendars_horizon(logger):
+    """供給節奏日曆＝structural（BTC 減半週期逾 4 年）；
+    FOMC/CPI 事件日曆＝medium（實際只報最近一次＋下一次，跨度約兩個月）。
+    兩者都是「同時往回看與往前看」的日曆，不是連續觀察窗，故 window 為 None。"""
+
+    async def mock_get(url, **kwargs):
+        if "fng" in url:
+            return _resp({"data": [{"value": "50", "value_classification": "Neutral"}]})
+        return _resp({"date": "2026-07-25", "rates": {"EUR": 0.92}})
+
+    collector = MacroCollector(logger)
+    with patch("agent.collectors.macro.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC")
+
+    supply = next(e for e in evidences if "供給節奏日曆" in e.source)
+    assert supply.horizon_class == HorizonClass.STRUCTURAL
+    _assert_no_window(supply)
+
+    events = next(e for e in evidences if "事件日曆" in e.source)
+    assert events.horizon_class == HorizonClass.MEDIUM
+    _assert_no_window(events)
+
+
+@pytest.mark.asyncio
+async def test_onchain_history_trend_is_medium(logger):
+    """鏈上歷史趨勢：原始序列雖有 5 年，但實際判讀窗是 HISTORY_TREND_DAYS=30 天。
+    標註依「實際使用的窗口」而非「拉回來的資料長度」，否則會被誤判成結構脈絡。"""
+    from agent.collectors.onchain import HISTORY_TREND_DAYS
+
+    series = [[i, float(100 + i)] for i in range(60)]
+
+    async def mock_get(url, **kwargs):
+        if "charts" in url:
+            return _resp({"values": [{"x": 1700000000 + i * 86400, "y": 100.0 + i} for i in range(60)]})
+        return _resp({"data": {"blocks": [{"height": 900000}]}})
+
+    collector = OnchainCollector(logger)
+    with patch("agent.collectors.onchain.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC")
+
+    history = next((e for e in evidences if "Charts API" in e.source), None)
+    if history is None:
+        pytest.skip("mock 未產出歷史趨勢證據（子來源失敗被隔離）")
+    assert history.horizon_class == HorizonClass.MEDIUM
+    assert (history.window_start, history.window_end) == window_back(HISTORY_TREND_DAYS)
+
+
+@pytest.mark.asyncio
+async def test_derivatives_coinbase_premium_is_spot(logger):
+    """Coinbase 溢價是兩間交易所當下 ticker 的橫斷面價差，不是時間序列。"""
+    mock_get, mock_post = _build_router()
+    collector = DerivativesCollector(logger)
+
+    with patch("agent.collectors.derivatives.httpx.AsyncClient") as cls:
+        cls.return_value = _patched_client(mock_get, mock_post)
+        evidences = await collector.fetch("BTC")
+
+    premium = next((e for e in evidences if "Coinbase" in e.source), None)
+    if premium is None:
+        pytest.skip("mock router 未涵蓋 Coinbase 溢價端點")
+    assert premium.horizon_class == HorizonClass.SPOT
+
+
+def test_every_evidence_draft_annotates_horizon_explicitly():
+    """結構性防呆：任何 collector 新增 EvidenceDraft 卻忘了標 horizon_class，
+    這條就會紅。預設值 spot 是相容性保險，不是可以偷懶的藉口
+    （見 .kiro/steering/horizon-annotation.md 約定 1）。
+
+    Ken 在 d8e1b15 併入五項 prototype 時就漏了這一步，而預設值讓它靜默通過——
+    這條測試就是為了讓下次不再靜默。
+    """
+    import re
+    from pathlib import Path
+
+    missing: list[str] = []
+    for path in sorted(Path("agent/collectors").glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"EvidenceDraft\(", source):
+            depth, i = 0, match.end() - 1
+            while i < len(source):
+                if source[i] == "(":
+                    depth += 1
+                elif source[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                i += 1
+            if "horizon_class" not in source[match.start() : i + 1]:
+                missing.append(f"{path}:{source[: match.start()].count(chr(10)) + 1}")
+
+    assert not missing, "以下 EvidenceDraft 未顯式標註 horizon_class：\n" + "\n".join(missing)
+
+
 # --- relative ------------------------------------------------------------
 
 

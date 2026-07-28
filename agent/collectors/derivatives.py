@@ -607,4 +607,5 @@ class DerivativesCollector(BaseCollector):
             ),
             related_claim=f"{coin} Coinbase 相對 Binance 現貨溢價（美系機構/散戶買壓代理指標）",
             source_type="derivatives",
+            horizon_class=HorizonClass.SPOT,  # 兩邊都取當下 ticker 報價，橫斷面價差非時間序列
         )

@@ -14,6 +14,7 @@ import httpx
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
+from agent.collectors.horizon import window_back
 from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
 
 HTTP_TIMEOUT = 20.0
@@ -126,6 +127,7 @@ class OnchainCollector(BaseCollector):
         # 併自 pipeline/fetch_onchain_history.py：快照只有「當下一個時間點」，這裡
         # 補一筆近 5 年歷史序列的近 30 天趨勢，回答「現在算力/交易量是在漲還是跌」。
         try:
+            history_window_start, history_window_end = window_back(HISTORY_TREND_DAYS)
             history_parts = []
             for label, (chart_name, unit) in BTC_HISTORY_CHARTS.items():
                 series = await _fetch_blockchain_info_chart(client, chart_name)
@@ -144,6 +146,11 @@ class OnchainCollector(BaseCollector):
                     content_reference="；".join(history_parts),
                     related_claim=f"{coin} 鏈上活躍度近期趨勢（算力／交易量／mempool 積壓，非單點快照）",
                     source_type="onchain",
+                    # 原始序列雖有 5 年，但實際判讀只取 HISTORY_TREND_DAYS=30 天的趨勢，
+                    # 標註依「實際使用的窗口」而非「拉回來的資料長度」。
+                    window_start=history_window_start,
+                    window_end=history_window_end,
+                    horizon_class=HorizonClass.MEDIUM,
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -242,6 +249,11 @@ class OnchainCollector(BaseCollector):
                     ),
                     related_claim=f"{coin} 鏈上網路壅塞程度近期趨勢（Gas 費用歷史走勢，非單點快照）",
                     source_type="onchain",
+                    # 同 blockchain.info 歷史趨勢：CSV 回溯很長但實際判讀窗是
+                    # HISTORY_TREND_DAYS=30 天，依實際使用的窗口標註。
+                    window_start=window_back(HISTORY_TREND_DAYS)[0],
+                    window_end=window_back(HISTORY_TREND_DAYS)[1],
+                    horizon_class=HorizonClass.MEDIUM,
                 )
             ]
         except Exception as exc:  # noqa: BLE001

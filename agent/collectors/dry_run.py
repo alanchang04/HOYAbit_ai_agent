@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 
 from agent.collectors.base import BaseCollector
-from agent.schemas import EvidenceDraft, now_iso
+from agent.collectors.horizon import window_back
+from agent.schemas import EvidenceDraft, HorizonClass, now_iso
 
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "dry_run_evidence.json"
 
@@ -29,6 +30,12 @@ class DryRunCollector(BaseCollector):
         fetched_at = now_iso()
         evidences = []
         for tpl in templates:
+            # horizon 標註跟著 fixture 走，讓 dry-run 排練也走到真實的分帶邏輯——
+            # 若這裡全吃預設 spot，排練模式就驗不到假矛盾修復與信心計算的分帶行為，
+            # 賽前排練會與正式執行產生不同結果（R2-2）。
+            horizon = HorizonClass(tpl.get("horizon_class", HorizonClass.SPOT.value))
+            window_days = tpl.get("window_days")
+            window_start, window_end = window_back(window_days) if window_days else (None, None)
             evidences.append(
                 EvidenceDraft(
                     coin=coin,
@@ -38,6 +45,9 @@ class DryRunCollector(BaseCollector):
                     content_reference=tpl["content_reference"].format(coin=coin),
                     related_claim=tpl["related_claim"].format(coin=coin),
                     source_type=self.source_type,
+                    window_start=window_start,
+                    window_end=window_end,
+                    horizon_class=horizon,
                 )
             )
         return evidences
