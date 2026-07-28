@@ -32,7 +32,7 @@ class BedrockClient:
             self._client = boto3.client("bedrock-runtime", region_name=self.settings.aws_region)
         return self._client
 
-    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
+    def converse(self, system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> str:
         """呼叫 Bedrock Converse API，失敗時以 exponential backoff 重試最多 max_retries 次。
 
         真實 Bedrock 驗證時實測發現：辯論步驟（尤其第 2 輪反駁，要求輸出完整

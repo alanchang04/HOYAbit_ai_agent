@@ -121,6 +121,18 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     return lines
 
 
+# markdown 表格儲存格放得下的字數上限；超過就改放摘要＋表格下方列完整版
+TABLE_CELL_MAX_CHARS = 80
+
+
+def _table_safe(text: str) -> str:
+    """把可能含換行／過長的文字壓成適合放進 markdown 表格儲存格的單行摘要。"""
+    flat = " ".join(text.split()).replace("|", "｜")
+    if len(flat) <= TABLE_CELL_MAX_CHARS:
+        return flat
+    return flat[:TABLE_CELL_MAX_CHARS] + "…（完整理由見下方）"
+
+
 HORIZON_LABEL: dict[str, str] = {
     "spot": "當日（日尺度）",
     "short": "近 10 日（短期）",
@@ -198,10 +210,20 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     lines.append(f"| **基底（三維加權）** | **{breakdown.get('base', 0):.1f}** | | |")
 
     adjustment = breakdown.get("debate_adjustment", 0)
-    adjustment_reason = breakdown.get("debate_adjustment_reason", "") or "（本次未調整）"
-    lines.append(f"| 辯論後調整 | {adjustment:+d} | | {adjustment_reason} |")
+    full_reason = breakdown.get("debate_adjustment_reason", "")
+    # 表格儲存格必須是單行短文字。prompt 已限 80 字，但 LLM 不保證遵守——
+    # 實測有回過 700+ 字的評析把表格整個撐爆，所以呈現層也要防守：
+    # 表格放摘要，完整理由改列在表格下方。
+    cell_reason = _table_safe(full_reason) if full_reason else "（本次未調整）"
+    lines.append(f"| 辯論後調整 | {adjustment:+d} | | {cell_reason} |")
     lines.append(f"| **最終信心** | **{breakdown.get('final', result.confidence_score)}** | | |")
     lines.append("")
+
+    if full_reason and len(full_reason) > TABLE_CELL_MAX_CHARS:
+        lines.append("**辯論調整的完整理由：**")
+        lines.append("")
+        lines.append(normalize_embedded_lists(full_reason))
+        lines.append("")
 
     if breakdown.get("signal_consensus_detail", {}).get("degraded"):
         reason = breakdown["signal_consensus_detail"].get("degraded_reason", "")

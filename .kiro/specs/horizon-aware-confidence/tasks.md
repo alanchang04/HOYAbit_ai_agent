@@ -231,9 +231,14 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     **此條需合併後複查是否已涵蓋**，未涵蓋則補上
   - _Requirements: R4-3_
 
-- [ ] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
+- [x] **3.8** 【需 LLM 額度】用真實 Bedrock 跑一次 BTC 多源整合題，
   人工檢查 Step B 是否正確把跨尺度差異放進 `structural_context` 而非 `contradictions`
-  - 這是本規格**最核心的驗證點**，若 LLM 仍把跨尺度判成矛盾，需回頭加強 §3.5.3 的約束措辭
+  - ✅ **2026-07-28 驗證通過**（Claude Sonnet 4.5，ap-northeast-1，27 筆證據）。
+    contradictions 3 條全是同尺度衝突（RSI vs 價格皆 30 天／多空比 vs OI 皆即時／
+    Mempool vs 交易筆數皆 30 天鏈上）；structural_context 5 條全是跨尺度定位，
+    其中第一條「兩週 -1.98% vs 一季 -15.87% vs 一年 -46%」正是設計時舉的例子，
+    且引用了 Phase 8.5 新增的 ev-004（近一季）/ev-005（近一年）粒度證據。
+    舊制會把這 5 條全丟進 contradictions 扣滿 -15。
   - _Requirements: R2-6, R2-7_
 
 ### Phase 4 — 信心公式重寫

@@ -277,6 +277,17 @@ def compute_confidence(
     return final, breakdown
 
 
+WHY_REASON_MAX_CHARS = 100
+
+
+def _summarize_reason(reason: str) -> str:
+    """把辯論理由壓成適合放進條列的一行。"""
+    flat = " ".join(reason.split())
+    if len(flat) <= WHY_REASON_MAX_CHARS:
+        return flat
+    return flat[:WHY_REASON_MAX_CHARS] + "…（完整理由見信心說明）"
+
+
 def build_why_lines(breakdown: dict) -> list[str]:
     """「Why this confidence?」（R3-13）：由扣分項決定性反查生成，**不呼叫 LLM**。
 
@@ -309,7 +320,9 @@ def build_why_lines(breakdown: dict) -> list[str]:
             lines.append(f"⚠ 來源方向分歧（{summary}），市場缺乏共識")
 
     adjustment = breakdown.get("debate_adjustment", 0)
-    reason = breakdown.get("debate_adjustment_reason", "")
+    # why 是條列摘要，理由過長會把整份清單淹掉（實測 LLM 回過 700+ 字的評析）。
+    # 這裡截短，完整理由由報告層另外整段呈現。
+    reason = _summarize_reason(breakdown.get("debate_adjustment_reason", ""))
     if adjustment < 0:
         lines.append(f"⚠ 辯論後下修 {abs(adjustment)} 分：{reason}")
     elif adjustment > 0:
