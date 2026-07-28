@@ -294,6 +294,37 @@ class TestDebateAdjustment:
         )
         assert bd["debate_adjustment"] == 0
 
+    @pytest.mark.parametrize("raw, expected", [("-8", -8), (" -8 ", -8), ("-8.0", -8), ("5", 5), ("0", 0)])
+    def test_numeric_string_is_honoured(self, raw, expected):
+        """模型把數值包成字串是 JSON 輸出的常見偏差，不該讓整段辯論調整靜默歸零。
+
+        pipeline 是把 Step D 的 `debate_adjustment` 原樣傳進來的，寬鬆度必須與
+        `_coerce_direction()` 對齊——同一條鏈上不該有兩套標準。
+        """
+        _, bd = compute_confidence(
+            _full_coverage_evidences(), {}, debate_adjustment=raw, debate_adjustment_reason="理由"
+        )
+        assert bd["debate_adjustment"] == expected
+        assert bd["debate_adjustment_note"] == ""      # 正常受理，不該留「未提供有效調整值」
+
+    @pytest.mark.parametrize("raw", [True, False, None, "很多", "", "-", float("nan"), float("inf")])
+    def test_unreadable_values_stay_zero(self, raw):
+        """bool 是 int 子類、inf/nan 會讓 int() 爆炸——放寬字串容忍後這些仍須擋住。"""
+        _, bd = compute_confidence(
+            _full_coverage_evidences(), {}, debate_adjustment=raw, debate_adjustment_reason="理由"
+        )
+        assert bd["debate_adjustment"] == 0
+        assert bd["debate_adjustment_raw"] is None
+
+    def test_out_of_range_numeric_string_still_clamped(self):
+        """字串進來也要走同一條夾值路徑，並照樣把原始值記進 breakdown。"""
+        _, bd = compute_confidence(
+            _full_coverage_evidences(), {}, debate_adjustment="-99", debate_adjustment_reason="理由"
+        )
+        assert bd["debate_adjustment"] == -15
+        assert bd["debate_adjustment_raw"] == -99
+        assert "已夾值" in bd["debate_adjustment_note"]
+
 
 # --- 夾值（沿用舊制概念，行為不變）---
 

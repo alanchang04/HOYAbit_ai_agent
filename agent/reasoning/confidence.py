@@ -223,16 +223,41 @@ def _is_current_signal(horizon: HorizonClass, primary: HorizonClass | None) -> b
     return order.index(horizon) <= order.index(primary)
 
 
+def _coerce_adjustment(raw) -> int | None:
+    """把裁判回報的調整值收斂成整數；無法解讀時回 None。
+
+    **容忍字串數字（"-8"／"-8.0"）**：把數值包成字串是 JSON 輸出常見的模型偏差，
+    而這裡漏接的代價是整段辯論調整靜默歸零——辯論調整是 ADR-5 裡讓辯論真正影響
+    分數的唯一機制，等於整場辯論白跑，且 note 會寫成「裁判未提供有效的調整值」，
+    讀起來像模型沒答。寬鬆度刻意與 `pipeline._coerce_direction()` 對齊，
+    避免同一條推理鏈上兩套標準。「很多」這類非數值仍然回 None。
+    """
+    if isinstance(raw, bool):  # bool 是 int 的子類，必須先擋掉
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = float(raw.strip())
+        except ValueError:
+            return None
+    if not isinstance(raw, (int, float)):
+        return None
+    try:
+        return int(raw)  # inf/nan 在此拋出，不讓它污染分數
+    except (ValueError, OverflowError):
+        return None
+
+
 def _clamp_debate_adjustment(raw, reason: str) -> tuple[int, int | None, str]:
     """回傳 (採用值, 原始值, 夾值說明)。無理由一律視為 0（R3-10）。"""
+    value = _coerce_adjustment(raw)
     if not isinstance(reason, str) or not reason.strip():
-        return 0, raw if isinstance(raw, (int, float)) else None, "未提供調整理由，視為 0"
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return 0, value, "未提供調整理由，視為 0"
+    if value is None:
         return 0, None, "裁判未提供有效的調整值，視為 0"
-    clamped = max(DEBATE_ADJUSTMENT_MIN, min(DEBATE_ADJUSTMENT_MAX, int(raw)))
-    if clamped != int(raw):
-        return clamped, int(raw), f"原始值 {int(raw)} 超出 [{DEBATE_ADJUSTMENT_MIN}, {DEBATE_ADJUSTMENT_MAX}]，已夾值"
-    return clamped, int(raw), ""
+    clamped = max(DEBATE_ADJUSTMENT_MIN, min(DEBATE_ADJUSTMENT_MAX, value))
+    if clamped != value:
+        return clamped, value, f"原始值 {value} 超出 [{DEBATE_ADJUSTMENT_MIN}, {DEBATE_ADJUSTMENT_MAX}]，已夾值"
+    return clamped, value, ""
 
 
 def compute_confidence(
