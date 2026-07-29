@@ -431,18 +431,26 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     - 問「最近一年」（→ structural）：計分層收 long/structural 的票，prompt 卻叫
       模型省略這些列；且跨帶的**真矛盾**被導進不扣分的 `structural_context`
       → 矛盾懲罰漏算、分數虛高。正好打掉 R7 存在的理由。
-    - 問「今天／盤中」（→ spot）：模型照指示為 short/medium 表態，
-      `current_types` 用 primary=spot 全數丟棄 → 共識樣本可能不足 2 而降級成中性 50，
-      `degraded_reason` 還會誤指模型沒給夠表態。
+    - 問「今天／盤中」（→ spot）：模型照指示為 short/medium 表態，計分層卻用
+      primary=spot 收票。注意 `current_types` 的篩選是 **source_type 粒度、不是逐列**——
+      被丟的只有「在當前訊號帶內一筆證據都沒有」的類別（實測 price 因另有 spot 證據
+      而整類保留，macro／onchain 整類消失）。即使如此代價仍不小：實測 3 來源 2:1 分歧
+      的 33.33 分被打成中性 50，方向相反，且 `degraded_reason` 會誤指模型表態來源不足。
     - **7.2 沒抓到的原因**：三題（「最近兩週」、無時間詞 ×2）全部解析成 medium，
       正好是唯一重合的值，錯配從未觸發。
     - **已修**：`build_evidence_legend(primary_horizon)` 動態生成，
       Step A/B 加 `primary_horizon` 參數（預設 None → medium，嚴格超集），
-      兩個呼叫點接線。順帶修正分帶說明的 `short=≤7天` → `≤10天`（8.1 改了邊界
-      但沒同步說明文字，等於對 LLM 謊報邊界）。
-      新增 `tests/test_prompt_primary_horizon.py`（41 例），其中
+      兩個呼叫點接線。另修兩處同類問題：
+      1. `SYSTEM_PROMPT` 第 7 條原本寫死「短窗訊號與長窗結構之間的落差是位置關係」。
+         它是 **system turn、每次呼叫都送**，主視野=structural 時會與新的 user turn
+         正面衝突，而 system turn 通常勝出——等於這次修正在唯一要救的情境下失效。
+         改成相對措辭並明指以【時間尺度說明】為準。
+      2. 分帶說明的 `short=≤7天` → `≤10天`（8.1 改了邊界但沒同步說明文字，
+         等於對 LLM 謊報邊界）。
+      新增 `tests/test_prompt_primary_horizon.py`（45 例）：
       `test_bands_match_scoring_layer` 逐帶比對 prompt 層與 `is_current_signal()`，
-      防止兩層再次各自漂移。
+      防止兩層再次各自漂移；`TestScorerSideOfTheMismatch` 直接打
+      `compute_signal_consensus()` 釘死篩選粒度與錯配的實際代價。
 
 - [x] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
   - 日／10 日／季／年 四檔為新增（月已由 vic 的 `SERIES_WINDOW=30` 完成）

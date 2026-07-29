@@ -14,9 +14,11 @@ import json
 
 import pytest
 
+from agent.reasoning.confidence import compute_signal_consensus
 from agent.reasoning.pipeline import run_reasoning
 from agent.reasoning.prompts import (
     EVIDENCE_LIST_LEGEND,
+    SYSTEM_PROMPT,
     build_evidence_legend,
     build_step_a_prompt,
     build_step_b_prompt,
@@ -86,6 +88,28 @@ class TestBandDerivation:
         assert current_signal_bands(None) == current_signal_bands(DEFAULT_PRIMARY_HORIZON)
         assert build_evidence_legend(None) == build_evidence_legend(DEFAULT_PRIMARY_HORIZON)
         assert EVIDENCE_LIST_LEGEND == build_evidence_legend(None)
+
+
+class TestSystemPromptDoesNotOverrideLegend:
+    """`SYSTEM_PROMPT` 第 7 條不得寫死帶名，否則會蓋掉動態說明區塊。
+
+    `_call_json_step()` 每一次呼叫都把 `SYSTEM_PROMPT` 當 system turn 送出，
+    而 system turn 通常勝過 user turn。原本第 7 條寫死「短窗訊號與長窗結構之間的
+    落差是位置關係」——主視野 = structural 時，Step B 的 user turn 說長窗反向訊號
+    是真矛盾，兩者直接打架，模型很可能照 system turn 繼續把它導進 structural_context，
+    等於這次修正在唯一要救的情境下完全無效。改成相對措辭並明指以說明區塊為準。
+    """
+
+    def test_rule_seven_is_relative_not_hardwired(self):
+        assert "比本次主視野更長" in SYSTEM_PROMPT
+        assert "以該處為準" in SYSTEM_PROMPT
+        # 寫死的帶名不可再出現（"長窗結構" 隱含 long/structural 恆為脈絡）
+        assert "短窗訊號與長窗結構之間的落差" not in SYSTEM_PROMPT
+
+    def test_rule_seven_still_states_the_core_rule(self):
+        """措辭改了，規則本身不能弱化（R2-5/R2-7 仍要成立）。"""
+        assert "不等於矛盾" in SYSTEM_PROMPT
+        assert "位置關係" in SYSTEM_PROMPT
 
 
 class TestLegendText:
@@ -174,6 +198,66 @@ class TestStepAWiring:
         """不傳主視野仍可運作（R6-1 降級不中斷）。"""
         prompt = build_step_a_prompt("BTC", "q", [_ev()])
         assert "本次主判斷視野為 medium" in prompt
+
+
+class TestScorerSideOfTheMismatch:
+    """計分層實際會怎麼處理錯配產出的 direction_matrix。
+
+    上面的測試全在斷言 prompt 字串，證明不了錯配的代價。這裡直接打
+    `compute_signal_consensus()`，把「模型照舊指示產出、計分層用新主視野收票」
+    的情境跑出來——順便釘死篩選的**粒度**：是 source_type 層級，不是逐列。
+    """
+
+    def _mixed(self) -> list[Evidence]:
+        """price 同時有 spot 與 medium 證據；macro／onchain 只有 medium。"""
+        def ev(i: int, stype: str, horizon: HorizonClass) -> Evidence:
+            return Evidence(
+                id=f"ev-{i:03d}",
+                coin="BTC",
+                source="s",
+                fetched_at=now_iso(),
+                content_reference="r",
+                related_claim="c",
+                source_type=stype,
+                horizon_class=horizon,
+            )
+
+        return [
+            ev(1, "price", HorizonClass.SPOT),
+            ev(2, "price", HorizonClass.MEDIUM),
+            ev(3, "macro", HorizonClass.MEDIUM),
+            ev(4, "onchain", HorizonClass.MEDIUM),
+        ]
+
+    _MATRIX = [
+        {"source_type": "price", "direction": 1, "basis": ["ev-002"]},
+        {"source_type": "macro", "direction": -1, "basis": ["ev-003"]},
+        {"source_type": "onchain", "direction": -1, "basis": ["ev-004"]},
+    ]
+
+    def test_filter_is_source_type_granular_not_row_granular(self):
+        """`price` 因為**另有**一筆 spot 證據而整類保留，即使這票是依 medium 證據投的。
+
+        所以「主視野=spot 時 short/medium 的票全被丟掉」是誇大的說法：
+        真正被丟的只有「在當前訊號帶內一筆證據都沒有」的 source_type。
+        """
+        _, detail = compute_signal_consensus(self._MATRIX, self._mixed(), HorizonClass.SPOT)
+        kept = [r["source_type"] for r in detail["directions"]]
+        assert kept == ["price"]  # macro／onchain 整類消失，price 留下
+
+    def test_mismatch_turns_real_disagreement_into_neutral(self):
+        """3 個來源 2:1 分歧（33.33 分）→ 剩 1 個來源 → 降級成中性 50。
+
+        分數不是小幅偏移而是反向：明明分歧嚴重，卻報成「談不上共識」的中性值，
+        且 `degraded_reason` 會寫成表態來源不足，讀起來像模型沒給夠資料。
+        """
+        evidences = self._mixed()
+        aligned, _ = compute_signal_consensus(self._MATRIX, evidences, HorizonClass.MEDIUM)
+        mismatched, detail = compute_signal_consensus(self._MATRIX, evidences, HorizonClass.SPOT)
+        assert aligned == pytest.approx(33.33, abs=0.01)
+        assert mismatched == 50.0
+        assert detail["degraded"] is True
+        assert "表態來源不足" in detail["degraded_reason"]
 
 
 class TestPipelineWiring:
