@@ -385,7 +385,9 @@ def _real_reasoning(
 
     # Step A：事實層
     step_a_raw = _call_json_step(
-        llm_client, build_step_a_prompt(coin, question, evidences, coin2=coin2), "step_a_facts"
+        llm_client,
+        build_step_a_prompt(coin, question, evidences, coin2=coin2, primary_horizon=primary_horizon),
+        "step_a_facts",
     )
     facts = _sanitize_facts(step_a_raw.get("facts", []), known_ids)
     _log("step_a_facts", "ok", f"facts_count={len(facts)}")
@@ -410,7 +412,11 @@ def _real_reasoning(
 
     # Step B：交叉驗證層
     step_b_raw = _call_json_step(
-        llm_client, build_step_b_prompt(coin, question, evidences, facts, coin2=coin2), "step_b_cross_validation"
+        llm_client,
+        build_step_b_prompt(
+            coin, question, evidences, facts, coin2=coin2, primary_horizon=primary_horizon
+        ),
+        "step_b_cross_validation",
     )
     cross_validation = {
         "consistent_signals": step_b_raw.get("consistent_signals", []) if isinstance(step_b_raw.get("consistent_signals"), list) else [],

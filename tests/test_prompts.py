@@ -76,7 +76,10 @@ def test_step_b_prompt_has_three_sections_and_direction_matrix():
     assert "structural_context" in prompt
     assert "direction_matrix" in prompt
     # 明確約束：跨尺度不算矛盾、direction 限三值
-    assert "不同尺度的落差不是矛盾" in prompt
+    # 措辭由「不同尺度」改為「比主視野更長的尺度」（Task 8.4）：分帶說明改成隨主視野
+    # 生成後，「不同尺度」的講法在主視野=structural 時是錯的——那時五帶皆為當前訊號，
+    # 長窗的反向訊號就是真矛盾。這裡斷言的仍是同一條規則，只是限定範圍。
+    assert "比主視野更長的尺度落差不是矛盾" in prompt
     assert "1（看多）" in prompt and "-1（看空）" in prompt
 
 

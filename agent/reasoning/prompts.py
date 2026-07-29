@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 import re
 
-from agent.schemas import Evidence, QuestionType
+from agent.schemas import (
+    DEFAULT_PRIMARY_HORIZON,
+    HORIZON_ORDER,
+    Evidence,
+    HorizonClass,
+    QuestionType,
+)
 
 QUESTION_TYPE_KEYWORDS: dict[QuestionType, list[str]] = {
     "comparison": ["比較", "相較", "對比", "vs", "與.*相比"],
@@ -82,14 +88,81 @@ SYSTEM_PROMPT = """你是 HOYA BIT 加密市場分析 AI Agent 的推理引擎�
 8. 證據權重（weight）代表來源可信度。低權重證據不足以單獨推翻高權重證據，除非你能具體說明該高權重來源在此情境下為何不適用。
 """
 
-# 證據清單前的固定說明區塊：讓 LLM 看得懂 horizon 分帶與權重對抗規則（horizon-aware R2-4/R4-2）。
-EVIDENCE_LIST_LEGEND = """【時間尺度說明】每筆證據標註了 horizon（觀察窗尺度）：
-  spot=當下快照｜short=≤7天｜medium=8-30天（本次主判斷視野）｜long=31-180天｜structural=>180天
-  medium 是主視野。long/structural 屬「結構脈絡」，用來定位當前判斷處在大週期何處，
-  不應與短窗訊號當成互相矛盾。
+# 分帶的天數描述。與 `schemas._HORIZON_UPPER_BOUND_DAYS` 一一對應——ADR-7 把 short
+# 由「≤7 天」放寬成「≤10 天」以容納「10 日」標準粒度，這裡的文字必須跟著改，
+# 否則等於對 LLM 謊報邊界。
+_HORIZON_BAND_DESC: dict[HorizonClass, str] = {
+    HorizonClass.SPOT: "spot=當下快照",
+    HorizonClass.SHORT: "short=≤10天",
+    HorizonClass.MEDIUM: "medium=11-30天",
+    HorizonClass.LONG: "long=31-180天",
+    HorizonClass.STRUCTURAL: "structural=>180天",
+}
 
-【權重說明】weight 為來源可信度（0-1）。低權重證據（<0.5）不足以單獨推翻
+_WEIGHT_LEGEND = """【權重說明】weight 為來源可信度（0-1）。低權重證據（<0.5）不足以單獨推翻
   高權重證據（>0.8）；若要如此主張，必須說明該高權重來源在此情境下為何不適用。"""
+
+
+def current_signal_bands(primary_horizon: HorizonClass | None = None) -> list[HorizonClass]:
+    """`≤ 主視野` 的帶（當前訊號）。與 `schemas.is_current_signal()` 同一條界線。"""
+    primary = primary_horizon or DEFAULT_PRIMARY_HORIZON
+    return HORIZON_ORDER[: HORIZON_ORDER.index(primary) + 1]
+
+
+def structural_bands(primary_horizon: HorizonClass | None = None) -> list[HorizonClass]:
+    """`> 主視野` 的帶（結構脈絡）。主視野為 structural 時為空。"""
+    primary = primary_horizon or DEFAULT_PRIMARY_HORIZON
+    return HORIZON_ORDER[HORIZON_ORDER.index(primary) + 1 :]
+
+
+def _band_names(bands: list[HorizonClass]) -> str:
+    return "／".join(b.value for b in bands)
+
+
+def build_evidence_legend(primary_horizon: HorizonClass | None = None) -> str:
+    """證據清單前的說明區塊：horizon 分帶與權重對抗規則（R2-4/R4-2/R7-3）。
+
+    **分帶說明必須隨主視野生成，不能寫死。** 計分層的當前訊號集合是
+    `is_current_signal(h, primary)`（會隨題目滑動），若 prompt 這邊固定寫
+    「spot/short/medium 是當前訊號」，兩層就只在 primary=medium 時重合：
+    題目問「最近一年」時 long/structural 已是當前訊號，模型卻仍被指示把
+    它們當結構脈絡——跨帶的真實矛盾會被導進不扣分的 structural_context，
+    分數虛高；題目問「今天」時則相反，模型為 short/medium 表態而計分層
+    全部丟棄，共識樣本可能不足 2 而降級。
+    """
+    primary = primary_horizon or DEFAULT_PRIMARY_HORIZON
+    current = current_signal_bands(primary)
+    structural = structural_bands(primary)
+    bands_line = "｜".join(_HORIZON_BAND_DESC[b] for b in HORIZON_ORDER)
+
+    if structural:
+        role_lines = (
+            f"  當前訊號帶＝{_band_names(current)}（≤ 主視野）：直接參與本次判斷。\n"
+            f"  結構脈絡帶＝{_band_names(structural)}（> 主視野）：用來定位當前判斷處在\n"
+            f"  大週期何處，不應與當前訊號當成互相矛盾。"
+        )
+    else:
+        # 主視野已是最長帶，沒有任何「更長的尺度」可以拿來當脈絡。
+        role_lines = (
+            f"  當前訊號帶＝{_band_names(current)}（≤ 主視野）：五帶全部直接參與本次判斷。\n"
+            f"  本次無結構脈絡帶——主視野已涵蓋最長尺度，長窗證據同樣是當前訊號，\n"
+            f"  不可因為它「看起來很長期」就排除在判斷之外。"
+        )
+
+    return (
+        f"""【時間尺度說明】每筆證據標註了 horizon（觀察窗尺度）：
+  {bands_line}
+
+  本次主判斷視野為 {primary.value}。
+{role_lines}
+
+"""
+        + _WEIGHT_LEGEND
+    )
+
+
+# 相容別名：主視野為預設 medium 時的說明區塊。新程式碼請改呼叫 `build_evidence_legend()`。
+EVIDENCE_LIST_LEGEND = build_evidence_legend()
 
 # weight_reason 內嵌的最終來源等級格式：「…來源等級0.80(B+:理由)…」（含 PR 降級後結果）。
 # 分級標籤取自 static/source_reputation.json（由 filter 層寫入 reason），此處僅解析、不寫死對照（R4-1）。
@@ -168,7 +241,13 @@ def _weight_index_section(evidences: list[Evidence] | None) -> str:
     return f"\n{index}\n" if index else ""
 
 
-def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coin2: str | None = None) -> str:
+def build_step_a_prompt(
+    coin: str,
+    question: str,
+    evidences: list[Evidence],
+    coin2: str | None = None,
+    primary_horizon: HorizonClass | None = None,
+) -> str:
     coin_note = (
         f"本題涉及兩個幣種：{coin} 與 {coin2}。每筆證據都已標註 coin 欄位，"
         f"請在每個 fact 中一併填入該事實所屬的幣種（coin 欄位），若證據同時適用兩者可自行判斷歸類。"
@@ -179,7 +258,7 @@ def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coi
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
 {coin_note}
 
-{EVIDENCE_LIST_LEGEND}
+{build_evidence_legend(primary_horizon)}
 
 以下是本次蒐集到的所有證據（含 evidence id 與 coin 欄位）：
 {_format_evidence_list(evidences)}
@@ -197,8 +276,37 @@ def build_step_a_prompt(coin: str, question: str, evidences: list[Evidence], coi
 
 
 def build_step_b_prompt(
-    coin: str, question: str, evidences: list[Evidence], facts: list[dict], coin2: str | None = None
+    coin: str,
+    question: str,
+    evidences: list[Evidence],
+    facts: list[dict],
+    coin2: str | None = None,
+    primary_horizon: HorizonClass | None = None,
 ) -> str:
+    current = current_signal_bands(primary_horizon)
+    structural = structural_bands(primary_horizon)
+    current_names = _band_names(current)
+    # 有結構脈絡帶才需要第三段；主視野已是最長帶時要求模型硬填，只會逼出捏造的
+    # 「跨尺度落差」——所以明講留空，而不是刪掉欄位（下游一律讀得到這個 key）。
+    if structural:
+        structural_instruction = (
+            f"3. structural_context：當前訊號（{current_names}）與結構脈絡"
+            f"（{_band_names(structural)}）之間的\n"
+            "   方向差異，一律寫在這裡而非 contradictions，並以「位置關係」措辭描述。\n"
+            "   例：「兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位，屬高位反彈而非底部啟動」。"
+        )
+        contradiction_scope = f"、或「當前訊號各帶（{current_names}）之間」"
+        contradiction_caveat = "**比主視野更長的尺度落差不是矛盾**（見時間尺度說明）。"
+    else:
+        structural_instruction = (
+            "3. structural_context：本次主視野已涵蓋最長尺度，沒有「比主視野更長」的\n"
+            "   結構脈絡可言，請填空陣列 []。不要為了填滿欄位而把當前訊號之間的\n"
+            "   方向差異搬到這裡——那些是真矛盾，該寫進 contradictions。"
+        )
+        contradiction_scope = f"、或「五帶（{current_names}）之間」"
+        contradiction_caveat = (
+            "本次五帶皆為當前訊號，長窗證據的反向訊號同樣算矛盾，不可當成脈絡略過。"
+        )
     cross_coin_note = (
         f"本題涉及兩個幣種（{coin} 與 {coin2}），除了各幣種內部的一致/矛盾訊號，"
         f"也請特別留意「跨幣種」的對比訊號（例如哪個幣種的鏈上活躍度相對更高、哪個情緒面更負面）。"
@@ -212,7 +320,7 @@ def build_step_b_prompt(
 事實層摘要如下：
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
-{EVIDENCE_LIST_LEGEND}
+{build_evidence_legend(primary_horizon)}
 
 原始證據清單（供比對細節）：
 {_format_evidence_list(evidences)}
@@ -220,16 +328,14 @@ def build_step_b_prompt(
 請執行【交叉驗證層】分析，輸出**三段**：
 1. consistent_signals：多個獨立來源指向同一方向的一致訊號。
    若多筆證據其實引用同一篇文章或同一原始資料，請註明「非獨立來源」以避免重複計算可信度。
-2. contradictions：**真正的矛盾訊號**。只有「同一 horizon 帶內」、或「同屬當前訊號三帶
-   （spot/short/medium）之間」的方向衝突才算矛盾。**不同尺度的落差不是矛盾**（見時間尺度說明）。
-3. structural_context：當前訊號（spot/short/medium）與結構脈絡（long/structural）之間的
-   方向差異，一律寫在這裡而非 contradictions，並以「位置關係」措辭描述。
-   例：「兩週情緒轉強，但價格仍處 5 年分佈第 88 百分位，屬高位反彈而非底部啟動」。
+2. contradictions：**真正的矛盾訊號**。只有「同一 horizon 帶內」{contradiction_scope}的
+   方向衝突才算矛盾。{contradiction_caveat}
+{structural_instruction}
 
 另外輸出 direction_matrix：各 source_type 對市場方向的表態。
   - direction 只能是 1（看多）、0（中性）、-1（看空）三個整數之一，不可填小數或文字。
-  - 只針對 horizon 為 spot/short/medium（當前訊號三帶）的證據表態；
-    若某 source_type 在這三帶內無證據，該類別直接省略不列。
+  - 只針對 horizon 為 {current_names}（當前訊號帶）的證據表態；
+    若某 source_type 在這些帶內無證據，該類別直接省略不列。
   - basis 填該表態依據的 evidence id 清單。
 
 請只輸出以下 JSON 格式：

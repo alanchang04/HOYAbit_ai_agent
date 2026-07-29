@@ -424,6 +424,25 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   `orchestrator` 判定後傳入 `run_reasoning()`，
   並取代 `prompts.py`／`confidence.py` 中所有寫死的「當前訊號三帶」判斷
   - _Requirements: R7-3_
+  - ⚠️ **複查（2026-07-29 vic）：原先只做了 `confidence.py`，`prompts.py` 漏做。**
+    `pipeline.py` 的 Step A/B 兩個呼叫點根本沒傳 `primary_horizon`，
+    `EVIDENCE_LIST_LEGEND` 與 Step B 的 `direction_matrix`／`structural_context`
+    指示仍寫死「spot/short/medium 是當前訊號」。兩層只在 primary=medium 時重合：
+    - 問「最近一年」（→ structural）：計分層收 long/structural 的票，prompt 卻叫
+      模型省略這些列；且跨帶的**真矛盾**被導進不扣分的 `structural_context`
+      → 矛盾懲罰漏算、分數虛高。正好打掉 R7 存在的理由。
+    - 問「今天／盤中」（→ spot）：模型照指示為 short/medium 表態，
+      `current_types` 用 primary=spot 全數丟棄 → 共識樣本可能不足 2 而降級成中性 50，
+      `degraded_reason` 還會誤指模型沒給夠表態。
+    - **7.2 沒抓到的原因**：三題（「最近兩週」、無時間詞 ×2）全部解析成 medium，
+      正好是唯一重合的值，錯配從未觸發。
+    - **已修**：`build_evidence_legend(primary_horizon)` 動態生成，
+      Step A/B 加 `primary_horizon` 參數（預設 None → medium，嚴格超集），
+      兩個呼叫點接線。順帶修正分帶說明的 `short=≤7天` → `≤10天`（8.1 改了邊界
+      但沒同步說明文字，等於對 LLM 謊報邊界）。
+      新增 `tests/test_prompt_primary_horizon.py`（41 例），其中
+      `test_bands_match_scoring_layer` 逐帶比對 prompt 層與 `is_current_signal()`，
+      防止兩層再次各自漂移。
 
 - [x] **8.5** `price.py` 補齊五檔標準粒度證據（design.md §3.2.2 表）
   - 日／10 日／季／年 四檔為新增（月已由 vic 的 `SERIES_WINDOW=30` 完成）
