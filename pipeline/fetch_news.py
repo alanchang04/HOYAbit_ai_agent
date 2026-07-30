@@ -47,6 +47,7 @@ OFFICIAL_SOURCES: dict[str, list[dict]] = {
     ],
     "XRP": [
         {"name": "Ripple Insights", "kind": "html", "url": "https://ripple.com/insights/"},
+        {"name": "XRPL Blog", "kind": "html", "url": "https://xrpl.org/blog/"},
     ],
 }
 
@@ -87,11 +88,15 @@ NARRATIVE_KEYWORDS: dict[str, dict[str, list[str]]] = {
 
 
 def tag_narrative_topics(coin: str, *texts: str) -> list[str]:
+    # 純 substring 比對會誤中：接上 XRPL Blog 後實測到「sec」吃到「security
+    # issues」的「sec」，把一篇跟 SEC 案完全無關的版本發布公告標成「SEC 案終局」
+    # 主題。改用 \b 詞邊界比對修掉這個坑，多字詞組（例如 "cross border"）內部的
+    # 空白不受影響，一樣能比對。
     combined = " ".join(texts).lower()
     return [
         topic
         for topic, keywords in NARRATIVE_KEYWORDS.get(coin.upper(), {}).items()
-        if any(kw in combined for kw in keywords)
+        if any(re.search(rf"\b{re.escape(kw.lower())}\b", combined) for kw in keywords)
     ]
 
 
@@ -142,10 +147,14 @@ def _parse_rss_published(entry: dict) -> datetime | None:
 
 
 def _parse_html_published(published: str) -> datetime | None:
-    try:
-        return datetime.strptime(published, "%B %d, %Y").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
+    # Ripple Insights 用全月名「April 24, 2026」；XRPL Blog 用縮寫月名「Jun 15,
+    # 2026」，hero 卡片格式又少一個逗號「Jul 20 2026」——三種格式都試過再放棄。
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%b %d %Y"):
+        try:
+            return datetime.strptime(published, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
 
 
 def _recency_note(published_dt: datetime | None, now: datetime) -> str:
@@ -211,9 +220,57 @@ def _scrape_ripple_insights(html: str) -> list[dict]:
     return items
 
 
+def _scrape_xrpl_blog(html: str) -> list[dict]:
+    """XRPL 官方技術部落格（版本發布／漏洞揭露），補上 Ripple Insights 沒覆蓋的
+    「協議技術」角度，跟 BTC 用 Bitcoin Optech Newsletter 的角色對應。沒有 RSS，
+    但列表頁本身就內嵌完整標題／日期／摘要（`h5.mb-2-sm` 標題＋`p.card-date`
+    日期＋`p.line-clamp` 摘要三兄弟結構），比 BNB／Ripple 那兩個只給連結、要
+    另外點進單篇抓 meta description 的做法更省一次 request。最新一篇單獨用
+    `hero` 卡片版型呈現（class 跟其餘列表項不同），額外抓一次避免漏掉。"""
+    soup = BeautifulSoup(html, "html.parser")
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    hero_link = soup.select_one("h4.h2-sm a[href^='/blog/']")
+    if hero_link:
+        date_span = soup.select_one("h4.eyebrow .hero-post-date")
+        date_text = date_span.find_parent("h4").get_text(" ", strip=True) if date_span else "未知"
+        seen.add(hero_link["href"])
+        items.append({
+            "title": hero_link.get_text(strip=True),
+            "url": f"https://xrpl.org{hero_link['href']}",
+            "published": date_text,
+            "summary": "",
+        })
+
+    for h5_link in soup.select("h5.mb-2-sm a[href^='/blog/']"):
+        href = h5_link["href"]
+        if href in seen:
+            continue
+        seen.add(href)
+        wrapper = h5_link.find_parent("div")
+        date_p = wrapper.find("p", class_="card-date") if wrapper else None
+        desc = ""
+        next_div = wrapper.find_next_sibling("div") if wrapper else None
+        if next_div:
+            desc_p = next_div.find("p", class_="line-clamp")
+            if desc_p:
+                desc = desc_p.get_text(strip=True)
+        items.append({
+            "title": h5_link.get_text(strip=True),
+            "url": f"https://xrpl.org{href}",
+            "published": date_p.get_text(strip=True) if date_p else "未知",
+            "summary": desc,
+        })
+        if len(items) >= MAX_ITEMS_PER_SOURCE:
+            break
+    return items
+
+
 HTML_SCRAPERS = {
     "BNB Chain Blog": _scrape_bnbchain_blog,
     "Ripple Insights": _scrape_ripple_insights,
+    "XRPL Blog": _scrape_xrpl_blog,
 }
 
 
@@ -244,11 +301,14 @@ def fetch_coin(client: httpx.Client, coin: str) -> dict:
                     })
             else:
                 for item in HTML_SCRAPERS[source["name"]](resp.text):
-                    summary = ""
-                    try:
-                        summary = fetch_meta_description(client, item["url"])
-                    except Exception as exc:  # noqa: BLE001
-                        errors.append(f"{item['url']}: summary fetch error={exc}")
+                    # XRPL Blog 的 scraper 已經從列表頁順手拿到摘要，不用像
+                    # BNB／Ripple 那樣再多打一次單篇 request。
+                    summary = item.get("summary", "")
+                    if not summary:
+                        try:
+                            summary = fetch_meta_description(client, item["url"])
+                        except Exception as exc:  # noqa: BLE001
+                            errors.append(f"{item['url']}: summary fetch error={exc}")
                     items.append({
                         "source": f"{source['name']}（官方源・HTML 解析）",
                         "url": item["url"],

@@ -3,14 +3,30 @@
   "items": [
     {
       "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/solana-changelog-july-23-2026",
+      "title": "Solana Changelog: July 23, 2026",
+      "published": "Thu, 23 Jul 2026 13:04:00 GMT",
+      "recency_note": "",
+      "summary": "The Resource and Inclusion Fees SIMD was accepted alongside new Agave, Firedancer, and program SDK releases.",
+      "narrative_topics": []
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
+      "url": "https://solana.com/news/case-study-crossmint",
+      "title": "Deploying enterprise stablecoin rails on Solana in days with Crossmint",
+      "published": "Thu, 23 Jul 2026 13:00:00 GMT",
+      "recency_note": "",
+      "summary": "Read how Crossmint’s Solana infrastructure supports Western Union USDPT, fomo’s $4B volume, Tala wallets, and Wirex smart wallets.",
+      "narrative_topics": []
+    },
+    {
+      "source": "Solana Foundation News（官方源）",
       "url": "https://solana.com/news/rent-reduction-deep-dive",
       "title": "Rent Reduction on Solana: A Data-Backed Analysis",
       "published": "Mon, 20 Jul 2026 00:00:00 GMT",
       "recency_note": "",
       "summary": "A data-backed analysis of whether Solana can reduce the rent-exempt requirement from 6,960 to 696 lamports per byte without creating immediate state-growth risk, covering attack economics, account persistence, AccountsDB growth, and payment onboarding costs.",
-      "narrative_topics": [
-        "支付／DePIN"
-      ]
+      "narrative_topics": []
     },
     {
       "source": "Solana Foundation News（官方源）",
@@ -26,29 +42,11 @@
       "url": "https://solana.com/news/skhy-is-now-live",
       "title": "The Sun Rises in Seoul and Trades on Solana: $SKHY is Now Live",
       "published": "Fri, 10 Jul 2026 12:00:00 GMT",
-      "recency_note": "",
-      "summary": "SK Hynix ($SKHY), South Korea’s dominant memory-chip maker, is now live on Solana.",
-      "narrative_topics": []
-    },
-    {
-      "source": "Solana Foundation News（官方源）",
-      "url": "https://solana.com/news/solana-changelog-july-9-2026",
-      "title": "Solana Changelog: July 9, 2026",
-      "published": "Thu, 09 Jul 2026 12:05:00 GMT",
-      "recency_note": "",
-      "summary": "Agave, Firedancer, Superbank, Solana Go, and LiteSVM published new releases alongside validator, RPC, and tooling updates.",
-      "narrative_topics": []
-    },
-    {
-      "source": "Solana Foundation News（官方源）",
-      "url": "https://solana.com/news/solana-ecosystem-roundup-june-2026",
-      "title": "Solana Ecosystem Roundup: June 2026",
-      "published": "Mon, 06 Jul 2026 06:00:00 GMT",
       "recency_note": "⚠️非近期（發布已 17 天，超過 14 天窗口）",
-      "summary": "",
+      "summary": "SK Hynix ($SKHY), South Korea’s dominant memory-chip maker, is now live on Solana.",
       "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-23T14:26:20Z"
+  "fetched_at": "2026-07-28T09:57:29Z"
 }

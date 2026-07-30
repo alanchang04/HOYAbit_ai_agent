@@ -1,8 +1,14 @@
 {
   "coin": "XRP",
   "source": "XRPL 公開 JSON-RPC (https://xrplcluster.com)",
-  "ledger_seq": 105727776,
+  "ledger_seq": 105906243,
   "load_factor": 1,
   "base_fee_xrp": 1e-05,
-  "fetched_at": "2026-07-20T12:11:25Z"
+  "fetched_at": "2026-07-28T09:58:31Z",
+  "xrpscan_supplement": {
+    "source": "XRPScan /api/v1/ledger",
+    "total_supply_xrp": 99985633424.35358,
+    "tx_count": 80,
+    "destroyed_drops_this_ledger": -1792
+  }
 }

@@ -14,6 +14,15 @@
     },
     {
       "source": "BNB Chain Blog（官方源・HTML 解析）",
+      "url": "https://www.bnbchain.org/en/blog/newest-dapps-on-bnb-chain-july-2026",
+      "title": "Newest dapps on bnb chain july 2026（標題由網址還原，非原文標題）",
+      "published": "未知",
+      "recency_note": "⚠️日期未知，無法判斷是否近期",
+      "summary": "Every week, new builders join BNB Chain - spanning DeFi, AI, RWAs, infra and more.\n\nScroll through the latest projects below. If something grabs your attention, give them a follow. We’ll keep updating this list as the ecosystem grows.\n\nThe momentum’s real. Let’s keep pushing Web3 forward.\n\n\n\nProject name\n\nCategory\n\nDescription\n\nDapital\n\nDeFi\n\nA social trading app\n\nPrivacy Cash\n\nPrivacy\n\nPrivately fund your wallet\n\nStove Protocol\n\nInfra\n\nRWA infrastructure\n\nPay Protocol\n\nInfra\n\nOpen Protocol Ente",
+      "narrative_topics": []
+    },
+    {
+      "source": "BNB Chain Blog（官方源・HTML 解析）",
       "url": "https://www.bnbchain.org/en/blog/bnb-chain-ai-agent-landscape-agents-tools-and-payments",
       "title": "Bnb chain ai agent landscape agents tools and payments（標題由網址還原，非原文標題）",
       "published": "未知",
@@ -40,17 +49,8 @@
       "recency_note": "⚠️日期未知，無法判斷是否近期",
       "summary": "TL;DR\n\n * In H1 2026, BSC cut block intervals to 450 ms, brought in-memory finality down to 650 ms, and nearly doubled benchmark throughput to ~5,200 TPS\n * The H2 objective is to double mainnet throughput again, on a stated path toward a 10x improvement across BNB Chain\n * A next-generation L1 architecture is in development on a design path toward the 1M TPS end-of-life goal\n\nSix months ago, BNB Chain set three priorities for BSC: speed, throughput, and protocol stability. This roadmap opens",
       "narrative_topics": []
-    },
-    {
-      "source": "BNB Chain Blog（官方源・HTML 解析）",
-      "url": "https://www.bnbchain.org/en/blog/meet-the-winners-of-bnb-hack-ai-trading-agent-edition",
-      "title": "Meet the winners of bnb hack ai trading agent edition（標題由網址還原，非原文標題）",
-      "published": "未知",
-      "recency_note": "⚠️日期未知，無法判斷是否近期",
-      "summary": "TL;DR\n\n * The latest edition of BNB Hack brought together builders to create autonomous agents, reusable skills, and onchain trading tools.\n * A total of 21 winners share $36,000 across trading agents, strategy skills, and best use of CoinMarketCap Agent Hub, Trust Wallet Agent Kit, and BNB Agent SDK.\n * Full builds can be found here\n\n\nCongrats to All Builders and Winners\n\nBNB Hack: AI Trading Agent Edition brought builders together to create autonomous trading agents, reusable strategy skills,",
-      "narrative_topics": []
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-23T14:26:22Z"
+  "fetched_at": "2026-07-28T09:57:30Z"
 }
