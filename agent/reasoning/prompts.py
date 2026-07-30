@@ -678,6 +678,25 @@ def _truncate_hypothesis(text: str, limit: int = 40) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
+def _debate_summary_instruction(debate: dict | None) -> str:
+    """debate_summary 的指示文字；沒有辯論（fallback 路徑）時要求輸出空陣列，
+    不要求模型硬編一份「攻防結果」出來——那不存在，編了就是幻覺。
+    """
+    if not _has_debate_transcript(debate):
+        return (
+            "本次未觸發正反辯論（fallback 路徑），debate_summary 請輸出空陣列 []，"
+            "不要虛構攻防內容。"
+        )
+    return """另外輸出 debate_summary：這場辯論打了什麼、誰的哪個論點站得住腳、哪個被推翻，
+給讀者不用看完兩輪逐字稿就能抓到重點。3-5 點，每點是一個具體的攻防結果
+（不是「雙方各有論點」這種空話），且每點都要引用它所依據的 evidence id。
+這是**你消化完整場辯論後的整理**，不是逐字稿的濃縮版——要點出「誰贏了這一點」，
+不是「雙方都提到了這件事」。
+
+請先想清楚 debate_summary 再寫 market_judgment：市場判斷應該是這場辯論攻防的
+自然結果，不是另外重新分析一次。"""
+
+
 def build_step_d_prompt(
     coin: str,
     question: str,
@@ -720,8 +739,14 @@ debate_adjustment_reason **限 80 字以內、只講最關鍵的一個理由**�
 信心分項表格裡，寫成長篇會把表格撐爆。完整的辯論評析請寫在 market_judgment 與
 limitations，不要塞進這個欄位。
 
+{_debate_summary_instruction(debate)}
+
 請只輸出以下 JSON 格式：
 {{
+  "debate_summary": [
+    {{"point": "反方對鏈上活躍度下滑的批評成立，正方未能有效反駁", "evidence_ids": ["ev-011"]}},
+    ...
+  ],
   "market_judgment": "最終市場判斷",
   "confidence": "高/中/低",
   "limitations": ["已知限制或資料不足之處", ...],

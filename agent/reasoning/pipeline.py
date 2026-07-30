@@ -127,6 +127,9 @@ def _dry_run_reasoning(
         "limitations": ["本次為 --dry-run 假資料流程，未使用真實市場資料與 LLM 推理"],
         "invalidation_conditions": ["正式執行並取得真實資料後，本假結論應被取代"],
         "evidence_ids": all_ids,
+        # dry-run 沒有真實辯論可摘要，維持空陣列——report.md 會走「本次未觸發
+        # 正反辯論」的既有 fallback 文案，不虛構攻防內容。
+        "debate_summary": [],
     }
 
     # L5：三維可解釋信心分數（R3）
@@ -281,6 +284,22 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
         if isinstance(fact.get("coin"), str):
             entry["coin"] = fact["coin"]
         sanitized.append(entry)
+    return sanitized
+
+
+def _sanitize_debate_summary(raw, known_ids: set[str]) -> list[dict]:
+    """裁判整理的辯論重點摘要（{point, evidence_ids}）。格式錯誤的條目整條丟棄
+    而非整段作廢——單一條目壞掉不該讓其他 3-4 點也一起消失（R6-1 降級優先）。
+    """
+    sanitized: list[dict] = []
+    if not isinstance(raw, list):
+        return sanitized
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("point"), str) or not item["point"].strip():
+            continue
+        sanitized.append(
+            {"point": item["point"], "evidence_ids": _sanitize_ids(item.get("evidence_ids", []), known_ids)}
+        )
     return sanitized
 
 
@@ -648,6 +667,9 @@ def _real_reasoning(
         if isinstance(step_d_raw.get("invalidation_conditions"), list)
         else [],
         "evidence_ids": _sanitize_ids(step_d_raw.get("evidence_ids", []), known_ids),
+        # 裁判整理的辯論重點摘要（3-5 點，各點附 evidence id）。fallback 路徑
+        # （無辯論）prompt 已要求輸出空陣列，這裡不用另外分支處理。
+        "debate_summary": _sanitize_debate_summary(step_d_raw.get("debate_summary", []), known_ids),
         # 裁判的辯論後信心調整：這裡只原樣接住，夾值（-15~+5）與「無理由視為 0」
         # 的規則屬於信心公式（design.md §3.6.4），由 Phase 4 的 compute_confidence()
         # 處理。先接住是因為不接的話模型產出後會被整段丟棄，白花 token 又沒人發現。

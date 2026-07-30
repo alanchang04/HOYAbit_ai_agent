@@ -333,3 +333,117 @@ def test_executive_summary_splits_base_and_debate_adjustment():
     assert "基底" in exec_section
     assert "-5" in exec_section
     assert "辯論調整" in exec_section
+
+
+def _debate_result(debate_summary=None, rounds=None, **overrides):
+    """帶多輪辯論與（選填）debate_summary 的 ReasoningResult。"""
+    debate = {
+        "rounds": rounds
+        or [
+            {
+                "round": 1,
+                "bull_argument": "正方第1輪論證",
+                "bull_evidence_ids": ["ev-001"],
+                "bear_critique": "反方批評",
+                "bear_argument": "反方第1輪論證",
+                "bear_evidence_ids": ["ev-002"],
+            },
+            {
+                "round": 2,
+                "bull_argument": "正方第2輪修正論證",
+                "bull_evidence_ids": ["ev-003"],
+                "bear_critique": "反方第2輪批評",
+                "bear_argument": "反方第2輪論證",
+                "bear_evidence_ids": [],
+            },
+        ],
+        "round_count": 2,
+        "bull_argument": "正方第2輪修正論證",
+        "bull_evidence_ids": ["ev-001", "ev-003"],
+        "bear_argument": "反方第2輪論證",
+        "bear_evidence_ids": ["ev-002"],
+    }
+    conclusion = {
+        "market_judgment": "市場判斷內容",
+        "confidence": "中",
+        "evidence_ids": ["ev-001"],
+        "debate_summary": debate_summary if debate_summary is not None else [],
+    }
+    base = dict(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion=conclusion,
+        debate=debate,
+        confidence_score=64,
+    )
+    base.update(overrides)
+    return ReasoningResult(**base)
+
+
+def test_debate_summary_section_appears_before_conclusion():
+    """辯論重點摘要要在執行摘要之後、第1節結論之前——快速看懂攻防結果再看結論。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2, 3)]
+    result = _debate_result(
+        debate_summary=[
+            {"point": "反方對鏈上活躍度下滑的批評成立", "evidence_ids": ["ev-002"]},
+            {"point": "正方擋下流動性枯竭的質疑", "evidence_ids": ["ev-003"]},
+        ]
+    )
+    md = build_report_markdown("BTC", "題目", result, evidences)
+
+    assert "## 辯論重點摘要" in md
+    assert "反方對鏈上活躍度下滑的批評成立（ev-002）" in md
+    assert md.index("## 執行摘要") < md.index("## 辯論重點摘要") < md.index("## 1. 結論")
+
+
+def test_debate_summary_absent_when_judge_produces_none():
+    """裁判沒產出摘要（或 fallback 路徑）時，不硬擠一段空章節。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2, 3)]
+    result = _debate_result(debate_summary=[])
+    md = build_report_markdown("BTC", "題目", result, evidences)
+    assert "## 辯論重點摘要" not in md
+
+
+def test_full_transcript_collapsed_when_summary_present():
+    """有摘要可看時，第3節完整逐字稿改預設收合（<details> 無 open 屬性）。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2, 3)]
+    result = _debate_result(debate_summary=[{"point": "p", "evidence_ids": ["ev-002"]}])
+    md = build_report_markdown("BTC", "題目", result, evidences)
+
+    assert '<details markdown="1">' in md
+    assert "</details>" in md
+    assert "正方 vs 反方辯論" in md.split("<summary>")[1].split("</summary>")[0]
+
+
+def test_full_transcript_not_collapsed_when_no_summary():
+    """沒有摘要時逐字稿是唯一內容，不應該被收合藏起來。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2, 3)]
+    result = _debate_result(debate_summary=[])
+    md = build_report_markdown("BTC", "題目", result, evidences)
+    assert "<details" not in md
+    assert "### 正方 vs 反方辯論" in md
+
+
+def test_debate_summary_evidence_ids_pass_reference_validation():
+    """debate_summary 引用的 id 必須存在於 evidence 清單，否則要能被驗證機制抓到。"""
+    evidences = [make_evidence("ev-001")]
+    result = _debate_result(
+        debate_summary=[{"point": "p", "evidence_ids": ["ev-999"]}],
+        debate={},
+    )
+    with pytest.raises(EvidenceReferenceError):
+        validate_evidence_references(result, evidences)
+
+
+def test_debate_summary_renders_correctly_as_markdown():
+    """<details> 區塊內的既有辯論內容經 python-markdown 渲染仍正確（md_in_html）。"""
+    import markdown as md_lib
+
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2, 3)]
+    result = _debate_result(debate_summary=[{"point": "p", "evidence_ids": ["ev-002"]}])
+    report = build_report_markdown("BTC", "題目", result, evidences)
+    html = md_lib.markdown(report, extensions=["extra", "sane_lists"])
+
+    assert "<details>" in html
+    assert "<summary>" in html
+    assert "正方立論" in html

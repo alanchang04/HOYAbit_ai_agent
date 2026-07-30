@@ -417,3 +417,45 @@ def test_fake_llm_client_accumulates_usage():
     assert client.usage["input_tokens"] == 500  # 5 calls × 100
     assert client.usage["output_tokens"] == 1000  # 5 calls × 200
     assert client.usage["calls"] == client.call_count
+
+
+class TestSanitizeDebateSummary:
+    """裁判整理的辯論重點摘要：格式錯誤的單一條目整條丟棄，不讓其他 3-4 點也作廢
+    （R6-1 降級優先），且幻覺 evidence id 要被過濾掉。"""
+
+    def _sanitize(self, raw, known_ids=frozenset({"ev-001", "ev-002"})):
+        from agent.reasoning.pipeline import _sanitize_debate_summary
+
+        return _sanitize_debate_summary(raw, set(known_ids))
+
+    def test_valid_items_pass_through(self):
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+
+    def test_hallucinated_evidence_id_is_stripped_not_whole_item(self):
+        """幻覺 id 只濾掉那個 id，這個攻防重點本身仍保留（有 point 就有價值）。"""
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"]}]
+        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+
+    def test_missing_point_drops_only_that_item(self):
+        raw = [
+            {"evidence_ids": ["ev-001"]},  # 缺 point，整條丟棄
+            {"point": "重點二", "evidence_ids": ["ev-002"]},
+        ]
+        assert self._sanitize(raw) == [{"point": "重點二", "evidence_ids": ["ev-002"]}]
+
+    def test_empty_point_string_is_dropped(self):
+        raw = [{"point": "   ", "evidence_ids": []}]
+        assert self._sanitize(raw) == []
+
+    def test_non_list_input_degrades_to_empty(self):
+        assert self._sanitize("不是清單") == []
+        assert self._sanitize(None) == []
+
+    def test_non_dict_item_is_skipped(self):
+        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": []}]
+        assert self._sanitize(raw) == [{"point": "有效重點", "evidence_ids": []}]
+
+    def test_missing_evidence_ids_defaults_to_empty_list(self):
+        raw = [{"point": "沒引用證據的重點"}]
+        assert self._sanitize(raw) == [{"point": "沒引用證據的重點", "evidence_ids": []}]

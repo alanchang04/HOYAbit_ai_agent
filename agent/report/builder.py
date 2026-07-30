@@ -23,6 +23,8 @@ def _collect_referenced_ids(result: ReasoningResult) -> set[str]:
     ids.update(result.conclusion.get("evidence_ids", []))
     ids.update(result.debate.get("bull_evidence_ids", []))
     ids.update(result.debate.get("bear_evidence_ids", []))
+    for item in result.conclusion.get("debate_summary", []):
+        ids.update(item.get("evidence_ids", []))
     return ids
 
 
@@ -118,6 +120,27 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
         lines.append(f"**{watchpoint_label}：** {watchpoint}")
         lines.append("")
 
+    return lines
+
+
+def _build_debate_summary_lines(result: ReasoningResult) -> list[str]:
+    """裁判整理的辯論重點摘要：讀者不用看完第 3 節兩輪逐字稿就能抓到攻防結果。
+
+    放在執行摘要之後、結論之前——「快速看懂辯論打了什麼 → 再看最終結論」，
+    完整逐字稿仍保留在第 3 節（收合呈現），滿足可回溯性但不強迫每個人都讀完。
+    沒有辯論（fallback 路徑）或裁判未產出摘要時直接跳過整節，不硬擠一段空話。
+    """
+    points = result.conclusion.get("debate_summary", [])
+    if not points:
+        return []
+
+    lines: list[str] = ["## 辯論重點摘要", ""]
+    for item in points:
+        point = item.get("point", "")
+        ids = item.get("evidence_ids", [])
+        suffix = f"（{', '.join(ids)}）" if ids else ""
+        lines.append(f"- {point}{suffix}")
+    lines.append("")
     return lines
 
 
@@ -268,6 +291,7 @@ def build_report_markdown(
         lines.append("")
 
     lines.extend(_build_executive_summary_lines(result))
+    lines.extend(_build_debate_summary_lines(result))
 
     lines.append("## 1. 結論／市場判斷")
     lines.append("")
@@ -332,7 +356,16 @@ def build_report_markdown(
         heading = "### 正方 vs 反方辯論"
         if len(debate_rounds) > 1:
             heading = f"### 正方 vs 反方辯論（共 {len(debate_rounds)} 輪）"
-        lines.append(heading)
+        # 有「辯論重點摘要」可看時，完整逐字稿改預設收合——讀者已經在最上方
+        # 看過攻防結果，這裡是查證據用的原文，不需要強迫每個人往下讀兩輪。
+        # 沒有摘要時（fallback／裁判未產出）逐字稿是唯一內容，不收合。
+        collapse = bool(result.conclusion.get("debate_summary"))
+        if collapse:
+            lines.append('<details markdown="1">')
+            lines.append(f"<summary>{heading.lstrip('# ').strip()}（點擊展開完整逐輪紀錄）</summary>")
+            lines.append("")
+        else:
+            lines.append(heading)
         lines.append("")
         if len(debate_rounds) > 1:
             # 反方每輪有「批評＋論證」兩段、正方只有一段，版面音量天然是 2:1。
@@ -374,6 +407,9 @@ def build_report_markdown(
         stopped = STOP_REASON_LABEL.get(result.debate.get("stopped_reason", ""))
         if stopped:
             lines.append(f"*辯論結束原因：* {stopped}")
+            lines.append("")
+        if collapse:
+            lines.append("</details>")
             lines.append("")
 
     lines.append("### 推論假設")

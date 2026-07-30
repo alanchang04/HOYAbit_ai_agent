@@ -121,3 +121,22 @@ def test_step_d_prompt_has_debate_adjustment_fields():
     assert "debate_adjustment_reason" in prompt
     assert "-15" in prompt and "+5" in prompt          # 不對稱範圍
     assert "權重分佈" in prompt                          # R4-4 裁判考量權重
+
+
+def test_step_d_prompt_requires_debate_summary_when_debate_present():
+    """有辯論紀錄時，裁判要先整理攻防重點再下結論——不是逐字稿的濃縮版。"""
+    debate = {
+        "rounds": [{"round": 1, "bull_argument": "正方", "bear_critique": "批評", "bear_argument": "反方"}],
+        "stopped_reason": "converged",
+    }
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, [], debate=debate)
+    assert "debate_summary" in prompt
+    assert "誰的哪個論點站得住腳" in prompt
+
+
+def test_step_d_prompt_forbids_fabricated_summary_without_debate():
+    """沒有辯論（fallback 路徑）時，明確禁止裁判虛構攻防內容。"""
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, [], debate=None)
+    assert "debate_summary" in prompt
+    assert "不要虛構攻防內容" in prompt
+    assert "誰的哪個論點站得住腳" not in prompt
