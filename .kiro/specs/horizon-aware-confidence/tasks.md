@@ -476,6 +476,56 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   （primary=`structural` 時 `long` 應為當前訊號而非結構脈絡）
   - _Requirements: R7-3, R7-4_
 
+### Phase 9 — 訊號有效期、重要性係數與蒐集層適配（R8，2026-07-30 新增）
+
+> **本 Phase 的紀律：只加欄位／加參數，不換任何一層**（ADR-8）。
+> 若做到某一項時發現「這需要重寫既有的層」，那就是超出範圍了，停下來回報。
+>
+> 排序原則：9.1→9.3 是地基與最高價值（同時解掉 vic code review 的發現）；
+> 9.6 成本最高、價值最低，時間不夠時**第一個砍它**。
+
+- [ ] **9.1** `agent/schemas.py` 新增 `Persistence`／`DecayPattern` 兩個列舉與
+  `EvidenceDraft` 的兩個對應欄位（design.md §3.9.1）
+  - 皆給預設值（`persistence=MEDIUM`／`decay=SLOW`），舊 `evidence.json` 要能載入
+  - **不要**把 `persistence` 跟 `horizon_class` 合併——它們回答不同問題，
+    合併就是把這次要修的概念混淆再犯一次
+  - _Requirements: R8-1_
+
+- [ ] **9.2** 依 design.md §3.9.1 對照表為各 collector 的子來源標註兩個新欄位
+  - ⚠ 最能體現差異的是 funding 費率百分位：`horizon=medium` 但 `persistence=short`
+  - 比照 `tests/test_collectors_horizon.py` 的作法補逐項斷言
+  - _Requirements: R8-1_
+
+- [ ] **9.3** `compute_data_confidence()` 納入「有效期是否覆蓋主視野」（R8-2）
+  - **這條同時修掉 vic code review 點名的「Data Confidence 對 horizon 盲目」**
+  - 重現案例（必須變成回歸測試）：問「過去一年」、19 筆全 17 天窗的證據，
+    現行判六類「完整」拿 100 分，同一份報告開頭卻寫「主視野無可用證據」
+  - 某類 `persistence` 明顯短於主視野時，最高只能到「部分」檔
+  - _Requirements: R8-2_
+
+- [ ] **9.4** 新增 `static/signal_importance.json`（design.md §3.9.3）
+  - **人工訂定的靜態常數，不做歷史回測**——介面比照回測版，日後換資料不改程式
+  - `by_question_type` 覆寫層解掉「比較流動性的題目卻因 social 缺失扣 9.3 分」
+  - 係數值屬 Ken 的設計權威範圍，落地前與他確認
+  - _Requirements: R8-3_
+
+- [ ] **9.5** `_format_evidence_list()` 依 priority 排序（R8-4）
+  - `priority = source_weight × base_importance × horizon_match`
+  - **不新增 Prioritizer 層**；**排序不得丟掉任何證據**，結構脈絡仍在清單裡只是排後面
+  - _Requirements: R8-4_
+
+- [ ] **9.6** `collector.fetch()` 接受 `primary_horizon`，各自盡力調整查詢窗（R8-5）
+  - 例：問「過去一年」時 social 改抓 `t=year`、news 放寬窗口
+  - **盡力而為**：該來源無法調整就維持既有行為，不得因此失敗
+  - ⚠ 動到全部 7 個 collector，是本 Phase 成本最高的一項；時間不夠時先砍這條，
+    9.1-9.5 的價值不依賴它
+  - _Requirements: R8-5, R6-1_
+
+- [ ] **9.7** 全套測試 + 一次真實 Bedrock 驗證（**題目要用非 medium 主視野**）
+  - ⚠ Task 7.2 的三題全部解析成 medium，導致 prompt/計分層的帶集合錯配從未觸發
+    （vic 於 `a883396` 發現）。這次驗證**必須**用「過去一年」或「最近一季」的題目
+  - _Requirements: R8-6_
+
 ---
 
 ## Notes

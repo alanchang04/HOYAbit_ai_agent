@@ -334,6 +334,62 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
   - **範圍註記**：`raw_data/` 的接線由 alanchang 負責（決策⑥），
     本規格只定義 agent 端需要什麼，不規範檔案產生流程。
 
+### R8 — 訊號有效期、重要性係數與蒐集層尺度適配
+
+> 2026-07-30 新增。來源：Ken 的「HOYA Research Agent v2」架構提案（他已看過 R7，
+> 分支基準點含 Phase 8），加上 vic 的 Phase 4 code review 發現。
+>
+> **本條的存在意義是「把 v2 提案的價值用加法交付，而不是重寫架構」。**
+> Ken 的 9 層提案若照實作等於重寫 pipeline，賽前時程無法承受；但其中四項
+> 可以用「在既有位置加欄位／加參數」完成，且**這四項剛好一次解掉四個已知問題**：
+>
+> | 加這個 | 順便解掉 |
+> |---|---|
+> | `persistence`／`decay` | vic 的「Data Confidence 對 horizon 盲目」 |
+> | `base_importance` 靜態表 | Ken 自己擔心的「Layer A 單獨做會把權重壓平成 3 個值」 |
+> | 同上，依題型調整 | 「social 抓不到就扣 9.3 分」的六類等權問題 |
+> | 主視野傳到 collector | Ken 指出的真缺口：問「過去一年」時 Reddit 仍抓 `t=week` |
+
+**User Story:** 作為推理引擎，我要知道一筆證據的**訊號還有效多久**（而不只是它涵蓋多長的窗），
+這樣我在回答「兩週後如何」時，才不會把一個 3 天後就衰減掉的訊號當成同等份量的依據。
+
+#### 核心觀念釐清（本條的前提）
+
+`horizon_class`（R2-1）與 `persistence`（本條）是**兩個不同的東西**，先前混為一談：
+
+| 欄位 | 回答的問題 | funding 費率百分位的例子 |
+|---|---|---|
+| `horizon_class` | 這筆**觀察涵蓋多長的窗** | 90 筆 × 8h ≈ 30 天 → `medium` |
+| `persistence` | 這個**訊號還有效多久** | 預測有效期約 **1–3 天** → `short` |
+
+#### Acceptance Criteria
+
+- **R8-1** WHEN 定義 `EvidenceDraft` THEN schema SHALL 新增
+  `persistence: Persistence`（`short`／`medium`／`long`）與
+  `decay: DecayPattern`（`fast`／`slow`），兩者 SHALL 由 collector 決定性標註
+  （比照 R2-2 的 `horizon_class`，不交由 LLM 推斷），且 SHALL 有預設值以維持
+  向後相容（R2-9 同理）。
+- **R8-2** WHEN 計算 Data Confidence THEN 系統 SHALL 納入「該類證據的有效期是否
+  覆蓋本次主視野」；IF 某類證據雖筆數與窗長達標、但其 `persistence` 明顯短於
+  主視野 THEN 該類 SHALL NOT 判為「完整」。
+  - **這條同時修掉 vic 指出的缺陷**：現行 `compute_data_confidence()` 只看
+    筆數與最長窗長，完全不讀 `horizon_class`。實測：問「過去一年」時，
+    19 筆全是 17 天窗的證據仍判六類「完整」拿 100 分，而同一份報告開頭卻
+    寫著「⚠ 主視野無可用證據」——**報告自相矛盾**。
+- **R8-3** WHEN 計算證據優先度 THEN 系統 SHALL 讀取
+  `static/signal_importance.json` 的靜態重要性係數（Ken 提案的 Layer B 簡化版），
+  且該表 SHALL 為人工訂定的常數，SHALL NOT 依賴歷史回測資料。
+  - 介面比照回測版設計，日後要換成回測值時**只換資料不改程式**。
+- **R8-4** WHEN 組裝推理層 prompt 的證據清單 THEN `_format_evidence_list()`
+  SHALL 依優先度排序（高優先在前），SHALL NOT 新增獨立的 Prioritizer 層。
+  - 優先度輸入：`source_weight` × `base_importance` × 主視野匹配度。
+- **R8-5** WHEN orchestrator 呼叫 collector THEN SHALL 傳入本次的 `primary_horizon`；
+  各 collector SHALL 盡力依該尺度調整查詢窗（例如問「過去一年」時 social 改抓
+  `t=year`、news 放寬窗口），IF 該來源無法調整 THEN SHALL 維持既有行為，
+  SHALL NOT 因此失敗（R6-1）。
+- **R8-6** WHEN 本條任一新欄位缺失或計算失敗 THEN 系統 SHALL 退回 R7 既有行為，
+  SHALL NOT 中斷 pipeline。
+
 ## 非目標（Out of Scope）
 
 - 不改動 R12 四因子信譽公式本身（僅**使用**其產出的 `source_weight`）
@@ -341,6 +397,19 @@ R12 四因子信譽計算目前僅影響過濾層與報告附錄，對辯論零�
 - 不新增付費資料源；所有新增端點必須免 key
 - 不以 Binance 資料取代官方 CSV 作為長歷史基準（R1-8）
 - 不做具名人物風格模仿（R5-3）
+
+### 明確不採納 Ken v2 提案的以下五項（2026-07-30 裁定）
+
+這五項各有道理，但**都要重寫已驗證通過的層**，賽前時程無法承受。
+記錄於此是為了「決定過而不做」，不是「忘了做」——賽後可重啟。
+
+| 項目 | 不做的理由 |
+|---|---|
+| **Evidence Graph**（supports/contradicts 圖） | Step B 已產出扁平版（`consistent_signals`／`contradictions`／`structural_context`）。升級成圖需要新的一層與新的資料結構 |
+| **Market Hypothesis 取代 Bull/Bear** | 重寫整個辯論層，而該層 2026-07-28 剛通過三題型真實驗證（零失敗）。且「Continuation vs Challenge」套在假設驗證題型上會很怪——那題型本來就有明確的待驗證陳述 |
+| **Judge 不算分，只回答定性問題** | 與 R3（可解釋信心分數）直接衝突，那是需求方第三大點的明確要求。**且現行設計已經是分層的**：Judge 給定性評析＋`debate_adjustment`，決定性公式算 base——Ken 要的東西其實已經在了，需向他澄清 |
+| **Factor Interpreter 全面重構** | 要求每筆證據結構化成 Direction／Reason／Importance，等於重寫全部 7 個 collector 的輸出格式 |
+| **Evidence Scope／Market Regime** | 需要先做「當前是趨勢盤還是震盪盤」的 regime 判定器，那本身就是一個獨立題目 |
 
 ## 待確認事項
 

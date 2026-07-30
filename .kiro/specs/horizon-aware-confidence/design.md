@@ -164,6 +164,49 @@ Ken 提案把四因子拆成 `w = Layer A（資料品質）× Layer B（市場�
 
 ---
 
+### ADR-8：以「只加欄位」交付 Ken v2 提案的價值，不重寫架構（2026-07-30）
+
+**決策**：採納 Ken v2 提案中可用**加法**交付的四項（R8-1~R8-5），
+明確不採納需要重寫既有層的五項（見 requirements.md 非目標）。
+
+**背景**：Ken 提出 9 層的「HOYA Research Agent v2」，核心主張是
+「Time Horizon 不應該只是附加功能，而是整個系統最上層的 Filter」。
+**他的分支基準點包含我們的 Phase 8**，所以這是看過現況後的批評，
+不是不知情的重複提案——份量因此更重。
+
+**他說對的地方**：我們的 `resolve_primary_horizon()` 只作用在**推理層**
+（prompt 生成 ＋ 信心計分）。**蒐集層完全不受影響**——問「過去一年」時
+Reddit 照樣抓 `t=week`、news 照樣抓 14 天，只有 `price` 因為 R7-4 做了
+五檔粒度而例外。他圖上 Time Horizon 是餵進 Research Orchestrator 再分流到
+各 collector 的，那個位置我們確實沒做。這是真缺口，故納入 R8-5。
+
+**判定原則：一項提案值不值得做，看它是「加欄位」還是「換一層」。**
+
+| Ken 的想法 | 成本 | 交付方式 | 裁定 |
+|---|---|---|---|
+| Persistence／Decay | 低 | Evidence 加 2 欄位 | ✅ R8-1 |
+| Time Horizon → collector | 中 | `fetch()` 加參數 | ✅ R8-5 |
+| Base Importance（＝Layer B） | 低 | 靜態係數表 | ✅ R8-3 |
+| Evidence Prioritizer | 低 | **不新增層**，改成既有清單的排序依據 | ✅ R8-4 |
+| Evidence Graph | 高 | 需新層＋新資料結構 | ❌ |
+| Market Hypothesis 取代 Bull/Bear | 高 | 重寫辯論層 | ❌ |
+| Judge 不算分 | — | 與 R3 衝突，且現行已是分層設計 | ❌ |
+| Factor Interpreter 重構 | 高 | 重寫 7 個 collector 輸出格式 | ❌ |
+| Evidence Scope／Market Regime | 高 | 需先做 regime 判定器 | ❌ |
+
+**為什麼這四項值得做（不是因為 Ken 說要做）**：它們同時解掉四個**獨立來源**
+的已知問題——vic 的 code review 發現、Ken 自己擔心的 Layer A 壓平問題、
+需求方問的「social 抓不到為何扣分」、以及 Ken 指出的蒐集層缺口。
+一組改動、四個問題，這才是採納的理由。
+
+**否決的替代方案**：
+- ❌ *照 9 層全做*：等於 v2 重寫。而辯論層 2026-07-28 剛通過三題型真實驗證
+  （27／27／51 筆證據，零失敗），重寫會丟掉已驗證的東西換取未驗證的架構。
+- ❌ *全部不做*：Persistence 是真實的概念缺漏（見 §3.9），
+  且蒐集層不吃主視野是實際缺口。
+
+---
+
 ### ADR-5：信心 = 可複現 Base ＋ 不對稱辯論調整（−15 ~ +5）
 
 **決策**：把「可解釋公式」（需求三）與「辯論後才定案」（需求四）**分層**而非二選一。
@@ -666,6 +709,86 @@ raw_data/_meta/window_policy.md                           # 窗口政策（權�
 ```
 
 序列檔至少需有日期欄，供 collector 推導 `window_start`/`window_end`。
+
+## 3.9 訊號有效期與重要性係數（R8）
+
+### 3.9.1 `persistence` 與 `horizon_class` 的差別（R8-1）
+
+先前把兩者混為一談，這是概念缺漏不是實作瑕疵：
+
+```python
+class Persistence(str, Enum):
+    SHORT = "short"    # 訊號有效期 ≤ 7 天
+    MEDIUM = "medium"  # 8–30 天
+    LONG = "long"      # > 30 天
+
+class DecayPattern(str, Enum):
+    FAST = "fast"      # 事件過後迅速失效（情緒、資金費率極值）
+    SLOW = "slow"      # 逐步衰減（估值指標、結構性供給）
+```
+
+| 子來源 | `horizon_class`（觀察窗） | `persistence`（有效期） | `decay` |
+|---|---|---|---|
+| funding 費率百分位 | `medium`（90 筆×8h≈30 天） | **`short`**（1–3 天） | `fast` |
+| social 情緒 | `short`（7 天） | **`short`** | `fast` |
+| news 官方公告 | `medium`（14 天） | **`medium`** | `slow` |
+| CME COT 機構倉位 | `long`（12 週） | **`long`** | `slow` |
+| 波動率全歷史百分位 | `structural` | **`long`** | `slow` |
+| 供給節奏日曆 | `structural` | **`long`** | `slow` |
+
+> **關鍵案例**：funding 的觀察窗是 30 天（`medium`），但訊號 3 天後就衰減。
+> 現行系統認為它對回答「兩週後如何」的貢獻，跟 30 天新聞覆蓋一樣——
+> 那是錯的，而且沒有任何欄位能表達這件事。
+
+### 3.9.2 Data Confidence 納入有效期（R8-2）
+
+現行 `compute_data_confidence()` 只讀「筆數」與「最長窗長」，
+**完全不讀 `horizon_class`**。實測後果：
+
+```
+題目：過去一年 BTC 表現如何（主視野 = structural）
+證據：19 筆，六類筆數全部達標，但全部是 17 天窗
+
+報告開頭：⚠ 本次主判斷尺度為近一年以上，但該尺度無可用證據
+信心分項：資料品質 = 100.0  ← 六類全判「完整」
+
+→ 同一份報告自相矛盾
+```
+
+修法：新增一道「有效期覆蓋」檢查，某類的 `persistence` 明顯短於主視野時
+不得判為「完整」，最高只能到「部分」檔。
+
+### 3.9.3 靜態重要性係數（R8-3）
+
+`static/signal_importance.json`，人工訂定，**不做歷史回測**：
+
+```json
+{
+  "$comment": "Ken 提案 Layer B 的簡化版。介面比照回測版設計，日後換成回測值只換資料不改程式。",
+  "by_source_type": {"price": 1.0, "derivatives": 0.9, "onchain": 0.85,
+                     "news": 0.8, "macro": 0.7, "social": 0.5},
+  "by_question_type": {
+    "comparison": {"social": 0.3, "news": 0.6},
+    "hypothesis_test": {}
+  }
+}
+```
+
+`by_question_type` 是覆寫層——解掉「比較流動性的題目卻因 social 缺失扣 9.3 分」
+的六類等權問題。
+
+### 3.9.4 排序而非新增一層（R8-4）
+
+Ken 的 Evidence Prioritizer 是獨立的一層。我們**不新增層**，
+改成 `_format_evidence_list()` 的輸出排序：
+
+```
+priority = source_weight × base_importance × horizon_match
+其中 horizon_match = 1.0（當前訊號帶）／0.6（結構脈絡帶）
+```
+
+LLM 讀清單本來就有位置效應，高優先排前面即可達到 Ken 要的效果，
+而且**排序不會丟掉任何證據**——結構脈絡仍在清單裡，只是排後面。
 
 ## 4. 相容性與降級矩陣（R6-1）
 
