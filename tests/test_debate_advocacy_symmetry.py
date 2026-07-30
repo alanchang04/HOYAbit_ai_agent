@@ -139,6 +139,17 @@ class TestJudgeCompensates:
         prompt = self._judge()
         assert "反方的最後一輪論證沒有人反駁過" in prompt
 
+    def test_judge_told_volume_gap_is_a_format_artifact(self):
+        """待辦 12⑥ 的裁判側：報告已對**讀者**揭露版面音量 2:1（`TestDebateRenderingLabels`），
+        但真正打分的是裁判，而裁判讀到的逐字稿同樣是反方兩段、正方一段。
+
+        只擋語氣（守則 3 既有的「語氣篤定不等於論據紮實」）擋不住篇幅——
+        反方的 critique/argument 分別計算長度上限，結構上就會比正方長。
+        """
+        prompt = self._judge()
+        assert "不可因為某一方字數較多就認為它比較有份量" in prompt
+        assert "版面格式造成的，不是論據比較多" in prompt
+
     def test_existing_critique_duty_survives(self):
         """既有守則不得被這次新增擠掉（防裁判偷懶直接採信正方）。"""
         prompt = self._judge()
