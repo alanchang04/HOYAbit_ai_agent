@@ -150,3 +150,116 @@ class TestJudgeCompensates:
         prompt = build_step_d_prompt("BTC", "q", "multi_source", [], {}, [], debate=None)
         assert "裁判守則" not in prompt
         assert "反方的最後一輪論證沒有人反駁過" not in prompt
+
+
+class TestDebateLengthRuleIsUniversal:
+    """待辦 11：長度上限原本只加在正方第 2 輪。
+
+    那條是 Task 3.8 實測踩到「27 筆證據時輸出被 max_tokens 截斷、燒掉 360 秒且
+    整輪作廢」才補的。第 1 輪面對同樣的證據量卻沒有任何約束，承擔同一個截斷風險，
+    而且沒有前輪逐字稿在旁邊約束它。三個辯論位置必須共用同一份文字。
+    """
+
+    def _prompts(self):
+        from agent.reasoning.prompts import (
+            build_step_c1_bull_prompt,
+            build_step_c1_bull_rebuttal_prompt,
+            build_step_c2_bear_prompt,
+        )
+
+        facts, cv = [{"summary": "s", "evidence_ids": []}], {"consistent_signals": []}
+        rounds = [{"round": 1, "bull_argument": "a", "bear_critique": "c", "bear_argument": "b"}]
+        return {
+            "C1 第1輪": build_step_c1_bull_prompt("BTC", "q", "multi_source", facts, cv),
+            "C1 第2輪": build_step_c1_bull_rebuttal_prompt(
+                "BTC", "q", "multi_source", facts, cv, rounds
+            ),
+            "C2": build_step_c2_bear_prompt("BTC", "q", "multi_source", facts, cv, "bull"),
+        }
+
+    def test_all_three_get_the_length_rule(self):
+        from agent.reasoning.prompts import DEBATE_LENGTH_RULE
+
+        for name, prompt in self._prompts().items():
+            assert DEBATE_LENGTH_RULE in prompt, f"{name} 缺長度上限，承擔截斷風險"
+
+    def test_round1_no_longer_invites_prose(self):
+        """「可以是一段完整的話」在反向誘導模型寫成一坨散文，已移除。"""
+        for name, prompt in self._prompts().items():
+            assert "可以是一段完整的話" not in prompt, name
+
+
+class TestJudgeRewardSymmetry:
+    """待辦 12③：裁判守則原本只有「反方打中 → 下修」，沒有「正方擋住 → 上修」。
+
+    實證：四次真實 Bedrock 執行的 debate_adjustment 分別是 -10／-12／-6／-10，
+    **全部為負、一次都沒有正的**。再疊上 ADR-5 的 −15~+5 不對稱範圍，
+    系統結構上幾乎不可能往上走——「辯論後信心」實際上只是「辯論後扣分」。
+    """
+
+    def _judge_prompt(self):
+        from agent.reasoning.prompts import build_step_d_prompt
+
+        return build_step_d_prompt(
+            "BTC",
+            "q",
+            "multi_source",
+            [{"summary": "s", "evidence_ids": []}],
+            {"consistent_signals": []},
+            [],
+            debate={"rounds": [{"round": 1, "bull_argument": "a", "bear_critique": "c",
+                                "bear_argument": "b"}]},
+        )
+
+    def test_judge_has_upward_trigger_not_only_downward(self):
+        prompt = self._judge_prompt()
+        assert "下修" in prompt, "前提：下修觸發條件仍在"
+        assert "上調" in prompt, "缺少『正方擋住批評 → 上調』的觸發條件"
+
+    def test_asymmetry_is_about_magnitude_not_direction(self):
+        """範圍不對稱（−15~+5）是刻意的，但那限制的是幅度不是方向。"""
+        prompt = self._judge_prompt()
+        assert "不對稱指的是「幅度」不是「方向」" in prompt
+
+    def test_zero_is_explicitly_wrong_when_critiques_fail(self):
+        assert "0 分是錯的答案" in self._judge_prompt()
+
+
+class TestDebateRenderingLabels:
+    """待辦 12⑥：反方每輪兩段、正方一段，版面音量天然 2:1。
+
+    那是輸出欄位的結構差異，不是論據強弱。不講明的話讀者容易把「講得多」
+    讀成「比較有理」。
+    """
+
+    def _report(self):
+        from agent.report.builder import build_report_markdown
+        from agent.reasoning.pipeline import ReasoningResult
+        from agent.schemas import Evidence, now_iso
+
+        ev = Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
+                      content_reference="c", related_claim="r", source_type="price")
+        result = ReasoningResult(
+            question_type="multi_source",
+            facts=[{"summary": "s", "evidence_ids": ["ev-001"]}],
+            conclusion={"market_judgment": "m", "confidence": "中", "evidence_ids": ["ev-001"]},
+            debate={
+                "rounds": [
+                    {"round": 1, "bull_argument": "正1", "bull_evidence_ids": ["ev-001"],
+                     "bear_critique": "批1", "bear_argument": "反1", "bear_evidence_ids": []},
+                    {"round": 2, "bull_argument": "正2", "bull_evidence_ids": ["ev-001"],
+                     "bear_critique": "批2", "bear_argument": "反2", "bear_evidence_ids": []},
+                ],
+                "round_count": 2,
+            },
+        )
+        return build_report_markdown("BTC", "q", result, [ev])
+
+    def test_discloses_structural_volume_asymmetry(self):
+        assert "篇幅差異來自輸出結構而非論據強弱" in self._report()
+
+    def test_round2_bull_labelled_as_rebuttal_not_mere_restatement(self):
+        """正方第 2 輪也在攻防，標成「正方論證」會讓它看起來只是重講一次。"""
+        md = self._report()
+        assert "*正方立論：*" in md
+        assert "*正方回應反方批評並修正論證：*" in md

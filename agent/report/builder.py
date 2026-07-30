@@ -334,11 +334,25 @@ def build_report_markdown(
             heading = f"### 正方 vs 反方辯論（共 {len(debate_rounds)} 輪）"
         lines.append(heading)
         lines.append("")
+        if len(debate_rounds) > 1:
+            # 反方每輪有「批評＋論證」兩段、正方只有一段，版面音量天然是 2:1。
+            # 那是輸出欄位的結構差異，不是論據強弱——不講明的話讀者（和裁判）
+            # 容易把「講得多」讀成「比較有理」（STATUS.md 待辦 12⑥）。
+            lines.append(
+                "> 版面說明：反方每輪有「批評」與「論證」兩段，正方只有一段，"
+                "篇幅差異來自輸出結構而非論據強弱。正方第 2 輪起的論證本身"
+                "即包含對反方批評的逐項回應。"
+            )
+            lines.append("")
         for rd in debate_rounds:
+            round_no = rd.get("round", 1)
             if len(debate_rounds) > 1:
-                lines.append(f"**第 {rd.get('round', '?')} 輪**")
+                lines.append(f"**第 {round_no} 輪**")
                 lines.append("")
-            lines.append("*正方論證：*")
+            bull_label = (
+                "*正方立論：*" if round_no == 1 else "*正方回應反方批評並修正論證：*"
+            )
+            lines.append(bull_label)
             lines.append("")
             lines.append(normalize_embedded_lists(rd.get("bull_argument", "")))
             bull_ids = rd.get("bull_evidence_ids", [])
@@ -350,7 +364,7 @@ def build_report_markdown(
                 lines.append("")
                 lines.append(normalize_embedded_lists(rd["bear_critique"]))
                 lines.append("")
-            lines.append("*反方論證：*")
+            lines.append("*反方立論：*")
             lines.append("")
             lines.append(normalize_embedded_lists(rd.get("bear_argument", "")))
             bear_ids = rd.get("bear_evidence_ids", [])
