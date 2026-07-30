@@ -191,6 +191,16 @@
     `af3cd3e` 的 commit 訊息裡也標明這題只有隊員能答。若那份輸出在 07-29 10:59
     （`698a89e`）之後仍成立，才需要動 ②；在那之前的話主因已除，再修會變成正方過強。
 
+13. **`report.md` 有辯論重點摘要、四面板④ 沒有（Alan 範圍，2026-07-30 vic 複查發現）**：
+    `3929328` 新增的 `debate_summary` 只接到 `report/builder.py`——報告現在把
+    「## 辯論重點摘要」放在執行摘要之後、結論之前當作主要入口，但
+    `report/view_builder.py:340-432` 的 `_build_panel4()` 是自己從 `conclusion`
+    逐欄取值組出來的，**沒有 `debate_summary`**。結果是同一次執行的兩個交付面
+    對「有沒有辯論重點摘要」講法不一致：`/result` 看得到、`/view/{run_id}` 面板④
+    看不到，而面板④ 正是「分析報告」那一格。
+    改法就是在 `_build_panel4()` 的回傳 dict 加一個欄位＋前端 `view.html` 補一段，
+    屬於 `view_builder.py`／`webapp/` 的範圍，未動。
+
 ## 開發過程中的重要修正紀錄
 
 - CoinDesk RSS 308 redirect → 加 `follow_redirects=True`
