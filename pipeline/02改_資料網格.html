@@ -340,6 +340,7 @@
         <button type="button" class="chip l2" data-spec="xrpl-server-info" data-coin="XRP"><span class="t">層2</span><span>帳本高度 <span class="src">XRPL・備援 s1.ripple.com</span></span></button>
         <button type="button" class="chip l2" data-spec="xrpl-server-info" data-coin="XRP"><span class="t">層2</span><span>負載係數（網路壅塞） <span class="src">XRPL</span></span></button>
         <button type="button" class="chip l2" data-spec="xrpl-server-info" data-coin="XRP"><span class="t">層2</span><span>base fee <span class="src">XRPL</span></span></button>
+        <button type="button" class="chip l2" data-spec="xrpscan-supply" data-coin="XRP"><span class="t">層2</span><span>流通供給量／單筆帳本交易數（免 key） <span class="src">XRPScan</span></span></button>
       </div></td>
     </tr>
 
@@ -365,6 +366,7 @@
       <td><div class="chips">
         <button type="button" class="chip l2" data-spec="ripple-insights" data-coin="XRP"><span class="t">層2</span><span>官方發布源（公司層級，因 XRP 市場敘事由 Ripple 動作驅動） <span class="src">Ripple Insights</span></span></button>
         <button type="button" class="chip l2" data-spec="news-coin-keywords" data-coin="XRP"><span class="t">層2</span><span>特有題材：SEC 案終局／監管明確化・RLUSD 穩定幣・跨境支付 ODL・XRP ETF</span></button>
+        <button type="button" class="chip l2" data-spec="xrpl-blog" data-coin="XRP"><span class="t">層2</span><span>技術公告：版本發布／漏洞揭露（補充源） <span class="src">XRPL Blog</span></span></button>
       </div></td>
     </tr>
 
@@ -643,6 +645,13 @@ const SPECS = {
     how: 'POST 到上述任一節點，body <code>{"method":"server_info","params":[{}]}</code>，讀 <code>result.info.validated_ledger.seq</code>（帳本高度）、<code>result.info.load_factor</code>（負載係數）、<code>result.info.validated_ledger.base_fee_xrp</code>（目前費率）。已在 <code>_fetch_xrpl()</code> 實作。',
     read: 'load_factor 平常是 1，數字越大代表網路越壅塞、手續費動態上升；帳本高度單純確認節點同步中，本身無判斷意義。',
   },
+  'xrpscan-supply': {
+    title: 'XRP 流通供給量／單筆帳本交易數', status: 'done',
+    where: 'XRPScan 公開 API，免費 Developer 方案（每天 10,000 次請求），實測 2026-07-28 不需要 API key 就能打。Ken 問「能不能多拿 XRP 資料」時點名要查的來源之一。',
+    how: 'GET <code>https://api.xrpscan.com/api/v1/ledger</code>（不帶參數，回傳當前帳本），讀 <code>ledgers[0].total_coins</code>（流通供給量，drops 換算成 XRP）、<code>ledgers[0].tx_count</code>（該筆帳本交易數）、<code>ledgers[0].destroyed_coins</code>（該筆帳本燒掉的 drops 量）。已在 <code>pipeline/fetch_onchain.py</code> 的 <code>fetch_xrp()</code> 實作為 <code>xrpscan_supplement</code>。',
+    read: '流通供給量會隨時間緩降（XRP 有交易費銷毀機制，上限 1000 億枚），跟 ETH/BNB 那個要付費申請 key 才有的 scan-api-supply 是同類角色，但這條免 key 就能穩定拿到；單筆帳本交易數可當網路使用量的細粒度代理。',
+    caveat: '跟 xrpl-server-info 互補不是取代——server_info 給帳本高度/負載係數/base fee，這裡補 server_info 沒有的供給量跟交易數，兩個 spec 都要抓才是完整的 XRP onchain 快照。',
+  },
   'btc-optech-newsletter': {
     title: 'BTC 官方發布源：Bitcoin Optech Newsletter', status: 'done',
     where: 'BTC 去中心化，沒有單一官方實體發新聞稿。<code>https://bitcoinops.org/feed.xml</code> 已於 2026-07-20 實測為有效 Atom feed（讀到 Newsletter #414、#413 等）。原本想加 Bitcoin Core 開發郵件列表（Bitcoin-dev mailing list）當第二管道，但列表已搬到 gnusha.org public-inbox 鏡像，該站對爬蟲有 anti-bot 擋牆（"go-away" 挑戰頁），實測抓不到內容，故沒接——現況只有 Optech 這一條。',
@@ -675,7 +684,14 @@ const SPECS = {
     where: '<code>https://ripple.com/insights/</code> 沒有公開 RSS，已於 2026-07-20 實測退階解析網頁抓到含真實標題與發布時間的文章清單。⚠️ 選公司層級而非 XRPL Foundation Blog（協議層級，偏技術治理/grants）——XRP 的市場敘事（SEC 案、RLUSD、ODL）目前主要由 Ripple 公司動作驅動，跟 BNB 選鏈層級是相反的判斷，理由是兩幣的新聞重心分別落在不同層。',
     how: '已在 <code>agent/collectors/news.py</code> 的 <code>_scrape_ripple_insights()</code> 用 BeautifulSoup 解析；⚠️ 已修過一個 bug：同一篇文章在列表頁有兩個 <code>&lt;a href&gt;</code> 變體，一個是純圖片連結沒有標題文字，另一個才有 <code>&lt;p class="line-clamp-2"&gt;</code> 真標題——去重時如果拿到圖片版會整篇退化成印網址，已改成優先保留有標題文字的變體。站方改版會讓抓取失效，賽前建議重跑一次確認。',
     read: 'SEC 案進度、RLUSD 穩定幣、ODL 跨境支付合作公告的第一手來源，是 XRP 層2 特有敘事的原始素材。',
-    caveat: '同一篇文章在列表頁會出現兩個連結：一個純圖片無標題、一個才有真標題，之前抓到圖片版會整篇退化成印網址——已經修掉這個 bug，改成優先抓有標題文字的那個。跟 bnbchain-blog 一樣沒有 RSS，站方改版一樣有失效風險，賽前建議重跑確認。',
+    caveat: '同一篇文章在列表頁會出現兩個連結：一個純圖片無標題、一個才有真標題，之前抓到圖片版會整篇退化成印網址——已經修掉這個 bug，改成優先抓有標題文字的那個。跟 bnbchain-blog 一樣沒有 RSS，站方改版一樣有失效風險，賽前建議重跑確認。2026-07-28 補充：後來另外加了 <code>xrpl-blog</code> 當技術補充源，這格「選公司層級當主要敘事來源」的判斷沒有變，兩格是互補不是取代。',
+  },
+  'xrpl-blog': {
+    title: 'XRP 技術補充源：XRPL Blog（協議層級）', status: 'done',
+    where: '<code>https://xrpl.org/blog/</code>，沒有公開 RSS。Ken 2026-07-28 問「能不能多拿 XRP 資料」點名要查的來源之一；跟 <code>ripple-insights</code> 那格「選公司層級而非協議層級」是同一個舊決策的延伸，不是推翻——這裡明確定位成技術補充源，不取代 Ripple Insights 當主要敘事來源。',
+    how: '列表頁本身就內嵌完整標題／日期／摘要（<code>h5.mb-2-sm</code> 標題＋<code>p.card-date</code> 日期＋<code>p.line-clamp</code> 摘要），比 Ripple Insights 那套「只給連結、要點進單篇多打一次 request 抓 meta description」更省一次 network call；最新一篇另外用 hero 卡片版型呈現，額外抓一次避免漏掉。已在 <code>pipeline/fetch_news.py</code> 的 <code>_scrape_xrpl_blog()</code> 實作。',
+    read: '版本發布／漏洞揭露這類協議技術公告，跟 Ripple Insights 的商業合作/生態敘事互補，剛好補上 XRP 唯一缺的「技術面」角度，跟 BTC 用 Bitcoin Optech Newsletter 涵蓋技術面的角色對應。',
+    caveat: '沒有 RSS，站方改版有失效風險，尚未實測遇到 Ripple Insights 那種「兩個連結變體」的坑，先記著留意；實測時發現共用的 <code>tag_narrative_topics()</code> 純 substring 比對會把「security issues」的「sec」誤判成 SEC 案關鍵字，已改成 <code>\\b</code> 詞邊界比對修掉，五幣共用，不只是這格受惠。',
   },
   'news-coin-keywords': {
     title: '特有題材關鍵字組', status: 'done',

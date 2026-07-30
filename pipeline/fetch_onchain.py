@@ -128,26 +128,53 @@ def fetch_sol(client: httpx.Client) -> dict:
     }
 
 
+DROPS_PER_XRP = 1_000_000
+
+
 def fetch_xrp(client: httpx.Client) -> dict:
     rpc_urls = ["https://xrplcluster.com", "https://s1.ripple.com:51234"]
     last_exc: Exception | None = None
+    result: dict = {}
     for rpc_url in rpc_urls:
         try:
             resp = client.post(rpc_url, json={"method": "server_info", "params": [{}]})
             resp.raise_for_status()
             info = resp.json()["result"]["info"]
             validated = info.get("validated_ledger", {})
-            return {
+            result = {
                 "source": f"XRPL 公開 JSON-RPC ({rpc_url})",
                 "ledger_seq": validated.get("seq"),
                 "load_factor": info.get("load_factor"),
                 "base_fee_xrp": validated.get("base_fee_xrp"),
                 "fetched_at": now_iso(),
             }
+            last_exc = None
+            break
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             continue
-    raise last_exc  # type: ignore[misc]
+    if last_exc is not None:
+        raise last_exc
+
+    # XRPScan 補充：免 key（Developer 免費層每天 10,000 次請求），單一端點就拿到
+    # server_info 沒有的兩個欄位——total_coins（流通供給量，XRP 有交易費銷毀
+    # 機制，數字會隨時間緩降）跟 destroyed_coins（該筆帳本燒掉的量）。跟 ETH/BNB
+    # 的 supply_supplement 同一種「有就疊加、沒有就 skipped」設計，不影響主要
+    # 免 key 資料。
+    try:
+        scan_resp = client.get("https://api.xrpscan.com/api/v1/ledger")
+        scan_resp.raise_for_status()
+        latest = scan_resp.json()["ledgers"][0]
+        result["xrpscan_supplement"] = {
+            "source": "XRPScan /api/v1/ledger",
+            "total_supply_xrp": latest["total_coins"] / DROPS_PER_XRP,
+            "tx_count": latest["tx_count"],
+            "destroyed_drops_this_ledger": latest.get("destroyed_coins"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        result["xrpscan_supplement"] = {"skipped": f"error={exc}"}
+
+    return result
 
 
 def write_output(coin: str, result: dict) -> Path:

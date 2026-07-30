@@ -1,9 +1,9 @@
 {
   "coin": "BTC",
   "source": "Blockchair /bitcoin/stats",
-  "blocks": 958876,
-  "mempool_tx_count": 9125,
-  "tx_count_24h": 776601,
-  "hashrate_24h": "943338757096130041173",
-  "fetched_at": "2026-07-20T12:11:22Z"
+  "blocks": 959958,
+  "mempool_tx_count": 6614,
+  "tx_count_24h": 648541,
+  "hashrate_24h": "860571737798752613379",
+  "fetched_at": "2026-07-28T09:58:27Z"
 }
