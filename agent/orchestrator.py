@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 
 from agent.collectors.base import BaseCollector
-from agent.collectors.coin_map import detect_coins_in_text
+from agent.collectors.coin_map import detect_coins_in_text, get_coin_info
 from agent.collectors.derivatives import DerivativesCollector
 from agent.collectors.dry_run import DryRunCollector
 from agent.collectors.horizon import resolve_primary_horizon
@@ -22,6 +22,7 @@ from agent.collectors.macro import MacroCollector
 from agent.collectors.news import NewsCollector
 from agent.collectors.onchain import OnchainCollector
 from agent.collectors.price import PriceCollector
+from agent.collectors.reference_pages import resolve_reference_url
 from agent.collectors.social import SocialCollector
 from agent.config import Settings, check_optional_keys, get_settings
 from agent.logging_utils import ExecutionLogger
@@ -131,10 +132,27 @@ def _horizon_annotation_issue(ev: Evidence) -> str | None:
     return None
 
 
+def _resolve_chain(coin: str) -> str | None:
+    """幣種 → 鏈別（供 onchain 的 RPC 端點對照瀏覽器）。未知幣種回 None。"""
+    try:
+        return get_coin_info(coin).chain
+    except Exception:  # noqa: BLE001 - 未知幣種不該中斷流程（R6-1）
+        return None
+
+
 def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Evidence]:
     evidences = []
     for i, draft in enumerate(drafts, start=1):
-        ev = Evidence(id=f"ev-{i:03d}", **draft.model_dump())
+        payload = draft.model_dump()
+        # 補上「人看的頁面」。集中在這裡推導而非散在 7 個 collector 的 32 個
+        # EvidenceDraft 呼叫點：對照表只有一份、可稽核、可單獨測，且新增來源時
+        # 不改 collector 也能受惠。collector 若自己就知道更好的頁面（例如 news／
+        # social 的原文網址），可直接填 reference_url，這裡不覆蓋。
+        if not payload.get("reference_url"):
+            payload["reference_url"] = resolve_reference_url(
+                payload.get("source_url"), draft.coin, _resolve_chain(draft.coin)
+            )
+        ev = Evidence(id=f"ev-{i:03d}", **payload)
         # horizon-aware R2-3：標註缺漏／矛盾只記警示 log，絕不拋錯或過濾掉證據（R6-1 降級優先）。
         issue = _horizon_annotation_issue(ev) if logger is not None else None
         if issue:

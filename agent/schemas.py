@@ -165,7 +165,11 @@ class EvidenceDraft(BaseModel):
 
     coin: str
     source: str
+    # 實際呼叫的位址（出處，供稽核）。可能是只回 JSON 的 API 端點。
     source_url: str | None = None
+    # 同一份資料「人看的頁面」（供讀者自行查證）。多數由 orchestrator 依
+    # `reference_pages` 對照表自動推導，對不上時維持 None、渲染層退回 source_url。
+    reference_url: str | None = None
     fetched_at: str
     content_reference: str
     # ⚠ 名字叫 claim，內容是**主題標籤**（「BTC 鏈上活躍度」「BTC 官方發布新聞事件」），

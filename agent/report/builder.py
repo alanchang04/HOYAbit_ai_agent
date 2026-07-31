@@ -288,9 +288,12 @@ def _source_link(evidence: Evidence) -> str:
     基準資料集自己算的，供給節奏日曆是賽前人工研究——這些本來就沒有外部原文，
     硬編一個連結反而是造假。實跑 38 筆有 30 筆帶連結，缺的 8 筆全屬此類。
 
+    **優先用 `reference_url`（人看的頁面），沒有才退回 `source_url`（實際呼叫的端點）。**
+    後者可能只回一坨 JSON，對讀者沒用；但它是出處，仍完整留在 evidence.json 裡供稽核。
+
     markdown 連結文字裡的 `[` `]` 會破壞語法，先轉義再組。
     """
-    url = getattr(evidence, "source_url", None)
+    url = getattr(evidence, "reference_url", None) or getattr(evidence, "source_url", None)
     if not url:
         return evidence.source
     safe_label = evidence.source.replace("[", "（").replace("]", "）")
