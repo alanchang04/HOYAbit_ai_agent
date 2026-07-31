@@ -428,6 +428,31 @@ def build_step_b_prompt(
 """
 
 
+# Step B 之後，`direction_matrix` 就只是計分輸入，不再進任何 LLM prompt。
+_SCORING_ONLY_CROSS_VALIDATION_KEYS = ("direction_matrix",)
+
+
+def _cross_validation_for_prompt(cross_validation: dict) -> dict:
+    """交叉驗證層裡可以給推論／辯論／裁判看的部分——**拿掉 `direction_matrix`**。
+
+    `direction_matrix` 是 Step B 讓模型對六類來源各投一次 1／0／−1 的方向表。
+    它原本整包 `json.dumps` 餵進正方、反方、正方反駁、反方第二輪與裁判五個
+    prompt，等於**雙方開口之前就先看到六個預先算好的方向判決**——正方要推翻的
+    不只是反方的論證，還有一份已登記在案的表態。2026-07-31 實跑的那份是
+    price=−1（權重 0.92，全場最高）／macro=−1／derivatives=+1／其餘 0，淨值偏空，
+    正方等於天生逆風。這正是 Ken v3「Debate 之前不該存在任何方向性結論」要防的錨定。
+
+    **只拿掉數值表態，不拿掉質性內容**：`consistent_signals`／`contradictions`／
+    `structural_context` 全部保留——那些是「哪些來源彼此呼應、哪裡真的衝突」的
+    描述，是辯論的原料；被移除的僅是「所以結論偏多還偏空」這個預判。
+
+    裁判也一併拿掉，理由不同但同樣具體：`direction_matrix` 已經決定性地算進
+    Signal Consensus，占基底分 40%。裁判若再看一次同一份表，同一個訊號會在
+    `base` 與 `debate_adjustment` 各計一次分（ADR-5 要的是後者只反映辯論品質）。
+    """
+    return {k: v for k, v in cross_validation.items() if k not in _SCORING_ONLY_CROSS_VALIDATION_KEYS}
+
+
 def build_step_c_prompt(
     coin: str,
     question: str,
@@ -447,7 +472,7 @@ def build_step_c_prompt(
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 交叉驗證層：
-{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+{json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
 {_weight_index_section(evidences)}
 請執行【推論層】分析：根據以上事實與交叉驗證結果，提出 1-3 個市場狀態假設。
 每個假設都必須同時列出支持它的 evidence id 與反對/削弱它的 evidence id（若真的沒有反對證據可留空陣列，但不可省略欄位）。
@@ -487,7 +512,7 @@ def build_step_c1_bull_prompt(
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 交叉驗證層：
-{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+{json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
 {_weight_index_section(evidences)}
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
@@ -541,7 +566,7 @@ def build_step_c1_bull_rebuttal_prompt(
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 交叉驗證層：
-{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+{json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
 {_weight_index_section(evidences)}
 先前的辯論紀錄：
 {format_debate_transcript(rounds)}
@@ -602,7 +627,7 @@ def build_step_c2_bear_prompt(
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 交叉驗證層：
-{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+{json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
 {_weight_index_section(evidences)}{transcript_section}
 正方分析師本輪（第 {round_no} 輪）的論證如下：
 {bull_argument}
@@ -782,7 +807,7 @@ def build_step_d_prompt(
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 交叉驗證層：
-{json.dumps(cross_validation, ensure_ascii=False, indent=2)}
+{json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
 
 {_format_inference_section(inference, debate)}
 {_format_debate_section(debate)}

@@ -168,6 +168,10 @@ class EvidenceDraft(BaseModel):
     source_url: str | None = None
     fetched_at: str
     content_reference: str
+    # ⚠ 名字叫 claim，內容是**主題標籤**（「BTC 鏈上活躍度」「BTC 官方發布新聞事件」），
+    # **不是方向性主張**——這裡永遠不該出現「看多／看空／利多／利空」。命名確實誤導，
+    # Ken 的 v3 提案就因此判斷我們有一層會造成錨定的 Claim（見 10_v3提案評估回覆.md §三）。
+    # 賽前不改名：散在 8 個 collector ＋ 18 個測試檔共 80 處引用，純改名不划算。賽後改為 `topic`。
     related_claim: str
     source_type: SourceType
 

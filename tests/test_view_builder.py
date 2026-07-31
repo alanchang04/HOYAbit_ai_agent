@@ -578,3 +578,100 @@ def test_build_report_view_with_baseline(
     panel2 = result["panel2_naive_baseline"]
     assert panel2["enabled"] is True
     assert panel2["naive_output"]["analysis"] == "未過濾分析結果摘要"
+
+
+# --- 面板④ 辯論重點摘要（2026-07-31，vic 於 STATUS.md 13 發現的兩交付面不一致）---
+
+
+def _view_with_debate_summary(
+    out_dir, evidences, run_metrics, debate_summary
+):
+    """把 debate_summary 塞進 conclusion 後跑一次 view_builder。"""
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "BTC 價格在 $67,000 附近", "evidence_ids": ["ev-001"]}],
+        conclusion={
+            "market_judgment": "BTC 目前處於偏強格局",
+            "confidence": "中",
+            "debate_summary": debate_summary,
+            "evidence_ids": ["ev-001"],
+        },
+        debate={
+            "bull_argument": "正方全文",
+            "bull_evidence_ids": ["ev-001"],
+            "bear_argument": "反方全文",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=57,
+    )
+    return build_report_view(
+        out_dir=out_dir,
+        evidences=evidences,
+        reasoning_result=result,
+        run_metrics=run_metrics,
+        filter_decisions=[],
+        baseline_result=None,
+        coin="BTC",
+        question="測試題目",
+    )
+
+
+def test_panel4_exposes_debate_summary(
+    out_dir, sample_evidences, sample_run_metrics
+) -> None:
+    """`3929328` 只把 debate_summary 接進 report.md，面板④整段沒有——
+    同一次執行的兩個交付面對「有沒有辯論重點摘要」講法不一致。"""
+    view = _view_with_debate_summary(
+        out_dir,
+        sample_evidences,
+        sample_run_metrics,
+        [{"point": "反方對鏈上活躍度的批評成立", "evidence_ids": ["ev-001"]}],
+    )
+
+    summary_items = view["panel4_report"]["debate_summary"]
+    assert len(summary_items) == 1
+    assert summary_items[0]["point"] == "反方對鏈上活躍度的批評成立"
+    assert summary_items[0]["evidence_ids"] == ["ev-001"]
+    # 面板一律以 fingerprint 對外呈現證據，比照 core_facts／bullish_evidence
+    assert summary_items[0]["fingerprints"]
+
+
+def test_panel4_summary_points_to_debate_summary_when_present(
+    out_dir, sample_evidences, sample_run_metrics
+) -> None:
+    """有摘要時，摘要卡片不再整段倒貼正反方全文（與 report.md 同一套取捨）。"""
+    view = _view_with_debate_summary(
+        out_dir,
+        sample_evidences,
+        sample_run_metrics,
+        [{"point": "反方批評成立", "evidence_ids": ["ev-001"]}],
+    )
+    assert view["panel4_report"]["summary"]["has_debate_summary"] is True
+
+
+def test_panel4_falls_back_to_full_arguments_without_summary(
+    out_dir, sample_evidences, sample_run_metrics
+) -> None:
+    """沒有摘要時維持既有行為：照舊貼正反方全文，不能變成兩邊都沒有。"""
+    view = _view_with_debate_summary(out_dir, sample_evidences, sample_run_metrics, [])
+
+    panel4 = view["panel4_report"]
+    assert panel4["debate_summary"] == []
+    assert panel4["summary"]["has_debate_summary"] is False
+    assert panel4["summary"]["bull_argument"] == "正方全文"
+
+
+def test_panel4_debate_summary_skips_unknown_evidence_ids(
+    out_dir, sample_evidences, sample_run_metrics
+) -> None:
+    """查不到 fingerprint 的 id 略過不顯示，但 point 本身仍保留（R6-1 降級優先）。"""
+    view = _view_with_debate_summary(
+        out_dir,
+        sample_evidences,
+        sample_run_metrics,
+        [{"point": "只引用了不存在的證據", "evidence_ids": ["ev-999"]}],
+    )
+
+    item = view["panel4_report"]["debate_summary"][0]
+    assert item["point"] == "只引用了不存在的證據"
+    assert item["fingerprints"] == []
