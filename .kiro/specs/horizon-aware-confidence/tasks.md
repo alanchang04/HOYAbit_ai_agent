@@ -524,10 +524,43 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
     與 news（放寬「非近期」判斷線）。詳見 design.md §3.9.5。
   - _Requirements: R8-5, R6-1_
 
-- [ ] **9.7** 全套測試 + 一次真實 Bedrock 驗證（**題目要用非 medium 主視野**）
+- [x] **9.7** 全套測試 + 一次真實 Bedrock 驗證（**題目要用非 medium 主視野**）
   - ⚠ Task 7.2 的三題全部解析成 medium，導致 prompt/計分層的帶集合錯配從未觸發
     （vic 於 `a883396` 發現）。這次驗證**必須**用「過去一年」或「最近一季」的題目
   - _Requirements: R8-6_
+
+  **驗證結果（2026-07-31，真實 Bedrock）**
+
+  題目「分析 BTC 過去一年的市場結構變化與當前所處位置」→ 主視野 `structural`
+  （basis=「過去一年」），33 筆證據，耗時 233 秒，`degraded_mode=False`。
+  全套單元測試 615 passed。
+
+  | 驗證項 | 結果 |
+  |---|---|
+  | 主視野解析（蒐集層／推理層各自解，須一致） | 兩層皆 `structural` ✅ |
+  | **帶集合錯配（本次驗證的主要目的）** | `structural_context=0`、`direction_matrix=6` ✅ |
+  | R8-5 social 改抓 t=year | 窗口 365 天、`horizon=structural` ✅ |
+  | R8-5 news 放寬判斷線 | 窗口 180 天、`horizon=long` ✅ |
+  | R8-1 persistence 不隨窗口拉長而改 | social 仍 `short/fast` ✅ |
+  | R8-4 排序 | price 0.950 置頂、social 0.105 墊底 ✅ |
+  | R8-2 有效期覆蓋檢查 | 見下 ✅ |
+
+  **帶集合錯配確認已解**：主視野為 `structural` 時沒有「比主視野更長」的帶，
+  模型正確輸出空的 `structural_context`，且六類來源全部參與 `direction_matrix`
+  表態（若 prompt 仍寫死「long/structural＝結構脈絡」，這兩個數字會是非零與 ≤3）。
+  報告中「結構脈絡」字樣出現 0 次，沒有留下空章節。
+
+  **R8-2 同一份證據在兩種主視野下的對照**（這是 9.3 設計取捨的實證）：
+
+  | 主視野 | data_confidence | 未達完整門檻的類別 |
+  |---|---:|---|
+  | `structural`（本次實際） | **80.0** | news／onchain／social（有效期覆蓋不到） |
+  | `medium`（對照組） | **100.0** | 無 |
+
+  問一年期結構問題時，只有幾天有效期的訊號本來就撐不起該尺度的判斷，扣分是對的；
+  而 `medium` 對照組仍為 100 分，證實 9.3 選用 `gap>=2` 而非字面「任何落差都扣」
+  的取捨確實保住了已驗證的常見情境（design.md §3.9.2）。報告也如實揭露：
+  「⚠ news 訊號有效期覆蓋不到主視野（structural），未達完整門檻，該項得 60%」。
 
 ---
 
