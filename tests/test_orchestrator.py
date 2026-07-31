@@ -1,7 +1,11 @@
 """驗證 orchestrator 的 degraded mode 與時限控管邏輯（離線，不打真實 API/LLM）。"""
 
-from agent.orchestrator import assign_evidence_ids, run_pipeline
-from agent.schemas import EvidenceDraft, LogStatus
+import asyncio
+
+import pytest
+
+from agent.orchestrator import assign_evidence_ids, collect_all, run_pipeline
+from agent.schemas import EvidenceDraft, HorizonClass, LogStatus
 
 
 class _RecordingLogger:
@@ -100,3 +104,56 @@ def test_normal_mode_does_not_trigger_degraded_when_deadline_is_generous(monkeyp
 
     assert result.degraded_mode is False
     assert len(result.evidences) > 0
+
+
+# --- R8-5：主視野傳進蒐集層 ---------------------------------------------
+
+
+class _SpyCollector:
+    """只記下 run() 收到什麼 kwargs，不實際蒐集。"""
+
+    def __init__(self, source_type="price"):
+        self.source_type = source_type
+        self.calls: list[tuple[str, dict]] = []
+
+    async def run(self, coin, **kwargs):
+        self.calls.append((coin, kwargs))
+        return []
+
+
+def test_collect_all_forwards_primary_horizon_to_every_collector():
+    price, macro = _SpyCollector("price"), _SpyCollector("macro")
+    asyncio.run(
+        collect_all([price, macro], ["BTC", "ETH"], 60.0, primary_horizon=HorizonClass.STRUCTURAL)
+    )
+
+    # 每幣一次的 price 兩次、幣種無關的 macro 一次，全都要收到主視野
+    assert [c[0] for c in price.calls] == ["BTC", "ETH"]
+    assert [c[0] for c in macro.calls] == ["BTC"]
+    for _, kwargs in price.calls + macro.calls:
+        assert kwargs["primary_horizon"] == HorizonClass.STRUCTURAL
+
+
+def test_collect_all_passes_none_when_horizon_not_given():
+    """未指定時傳 None，各 collector 依此退回既有查詢窗（R6-1）。"""
+    price = _SpyCollector("price")
+    asyncio.run(collect_all([price], ["BTC"], 60.0))
+    assert price.calls[0][1]["primary_horizon"] is None
+
+
+@pytest.mark.parametrize(
+    "question, expected",
+    [
+        ("分析 BTC 過去一年的市場結構", "structural"),
+        ("分析 BTC 過去兩週市場表現", "medium"),
+    ],
+)
+def test_pipeline_logs_primary_horizon_used_for_collection(monkeypatch, tmp_path, question, expected):
+    """蒐集階段解出的主視野要寫進 execution_log，讓人能查「當時是用哪個尺度抓資料」。"""
+    monkeypatch.setenv("DEGRADED_MODE_TRIGGER_SECONDS", "720")
+
+    run_pipeline(coin="BTC", question=question, dry_run=True, output_dir=str(tmp_path))
+
+    log_text = (tmp_path / "execution_log.jsonl").read_text(encoding="utf-8")
+    assert "primary_horizon_for_collection" in log_text
+    assert f"primary_horizon={expected}" in log_text

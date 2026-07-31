@@ -554,3 +554,134 @@ async def test_onchain_total_supply_persistence_diverges_from_horizon(logger):
     assert supply.horizon_class == HorizonClass.SPOT
     assert supply.persistence == Persistence.LONG
     assert supply.decay == DecayPattern.SLOW
+
+
+# --- R8-5：collector 依主視野盡力調整查詢窗 ------------------------------
+
+
+async def _social_fetch_capturing_t(logger, **fetch_kwargs) -> tuple[list, list[str]]:
+    """跑一次 social.fetch()，回傳 (evidences, 實際送出的 t 參數清單)。"""
+    seen_t: list[str] = []
+
+    async def mock_get(url, **kwargs):
+        seen_t.append(kwargs["params"]["t"])
+        return _resp(text=_RSS_FIXTURE)
+
+    collector = SocialCollector(logger)
+    with (
+        patch("agent.collectors.social.httpx.AsyncClient") as cls,
+        patch("agent.collectors.social.RSS_INTER_REQUEST_DELAY", 0),
+    ):
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC", **fetch_kwargs)
+    return evidences, seen_t
+
+
+@pytest.mark.asyncio
+async def test_social_switches_to_year_window_for_structural_horizon(logger):
+    """問「過去一年」時 social 該改抓 t=year，否則只拿得到近 7 天情緒、
+    在 structural 主視野下全被當成當前訊號帶裡唯一的短窗樣本。"""
+    evidences, seen_t = await _social_fetch_capturing_t(
+        logger, primary_horizon=HorizonClass.STRUCTURAL
+    )
+
+    assert seen_t and set(seen_t) == {"year"}
+    assert evidences
+    expected_start, expected_end = window_back(365)
+    for ev in evidences:
+        # horizon_class 跟著實際查詢窗重新推導（ADR-2），不是沿用寫死的 SHORT
+        assert ev.horizon_class == HorizonClass.STRUCTURAL
+        assert (ev.window_start, ev.window_end) == (expected_start, expected_end)
+
+
+@pytest.mark.asyncio
+async def test_social_keeps_week_window_when_primary_horizon_absent(logger):
+    """沒傳 primary_horizon 時行為與 R8-5 之前完全相同（R6-1 降級優先）。"""
+    evidences, seen_t = await _social_fetch_capturing_t(logger)
+
+    assert set(seen_t) == {"week"}
+    expected_start, expected_end = window_back(7)
+    for ev in evidences:
+        assert ev.horizon_class == HorizonClass.SHORT
+        assert (ev.window_start, ev.window_end) == (expected_start, expected_end)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "primary", [HorizonClass.SPOT, HorizonClass.SHORT, HorizonClass.MEDIUM, None]
+)
+async def test_social_short_range_horizons_keep_week_window(logger, primary):
+    """spot/short/medium 三帶沿用既有 t=week——這幾帶是命題最常見的尺度，
+    不新增中間層級，避免多一組沒被驗證過的行為。"""
+    _, seen_t = await _social_fetch_capturing_t(logger, primary_horizon=primary)
+    assert set(seen_t) == {"week"}
+
+
+@pytest.mark.asyncio
+async def test_social_persistence_stays_short_even_in_year_window(logger):
+    """查詢窗拉長不改變 persistence：抓回來的是「這一年內陸續發生的情緒快照集合」，
+    每一則仍然短命，過期情緒不能因為窗口變長就當成現況。"""
+    evidences, _ = await _social_fetch_capturing_t(
+        logger, primary_horizon=HorizonClass.STRUCTURAL
+    )
+    assert evidences
+    for ev in evidences:
+        assert ev.persistence == Persistence.SHORT
+        assert ev.decay == DecayPattern.FAST
+
+
+@pytest.mark.asyncio
+async def test_news_widens_recency_window_for_long_horizon(logger):
+    """月更頻率的官方源在「過去一年」題目下不該被整批標成非近期。"""
+    async def mock_get(url, **kwargs):
+        return _resp(text=RSS_SAMPLE)
+
+    collector = NewsCollector(logger)
+    with patch("agent.collectors.news.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC", primary_horizon=HorizonClass.LONG)
+
+    assert evidences
+    expected_start, expected_end = window_back(180)
+    for ev in evidences:
+        assert ev.horizon_class == HorizonClass.LONG
+        assert (ev.window_start, ev.window_end) == (expected_start, expected_end)
+        assert "非近期" not in ev.content_reference
+
+
+@pytest.mark.asyncio
+async def test_news_keeps_14_day_window_when_primary_horizon_absent(logger):
+    """沒傳時維持既有 14 天窗口與 medium 標註。"""
+    async def mock_get(url, **kwargs):
+        return _resp(text=RSS_SAMPLE)
+
+    collector = NewsCollector(logger)
+    with patch("agent.collectors.news.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC")
+
+    assert evidences
+    expected_start, expected_end = window_back(14)
+    for ev in evidences:
+        assert ev.horizon_class == HorizonClass.MEDIUM
+        assert (ev.window_start, ev.window_end) == (expected_start, expected_end)
+
+
+@pytest.mark.asyncio
+async def test_non_adapting_collector_tolerates_primary_horizon(logger):
+    """R8-5 的「盡力而為」半條：無法依主視野調整的 collector 收到這個參數
+    也不能爆——`fetch(**kwargs)` 直接忽略它，維持既有行為。"""
+    async def mock_get(url, **kwargs):
+        if "fng" in url:
+            return _resp({"data": [{"value": "50", "value_classification": "Neutral"}]})
+        return _resp({"date": "2026-07-25", "rates": {"EUR": 0.92, "JPY": 150.0, "GBP": 0.79}})
+
+    collector = MacroCollector(logger)
+    with patch("agent.collectors.macro.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        with_horizon = await collector.fetch("BTC", primary_horizon=HorizonClass.STRUCTURAL)
+        cls.return_value = _client(get=mock_get)
+        without_horizon = await collector.fetch("BTC")
+
+    assert with_horizon  # 沒有因為多收一個參數而失敗
+    assert [e.horizon_class for e in with_horizon] == [e.horizon_class for e in without_horizon]

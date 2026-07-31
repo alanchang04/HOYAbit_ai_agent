@@ -815,6 +815,39 @@ priority = source_weight × base_importance × horizon_match
 LLM 讀清單本來就有位置效應，高優先排前面即可達到 Ken 要的效果，
 而且**排序不會丟掉任何證據**——結構脈絡仍在清單裡，只是排後面。
 
+### 3.9.5 主視野傳進蒐集層（R8-5）
+
+`orchestrator.collect_all()` 解出主視野後傳給每個 `collector.run()`，
+`BaseCollector.run()` 以 `**kwargs` 透傳到 `fetch()`。因為既有簽名本來就是
+`fetch(self, coin, **kwargs)`，**七個 collector 一個都不必改簽名**——
+不調整的直接忽略這個參數。這是 ADR-8「只加參數不換層」最乾淨的一例。
+
+**實際會調整的只有兩個 collector**，其餘五個維持既有行為（R8-5 明訂
+「無法調整就維持既有行為，不得因此失敗」，不是每個來源都得動）：
+
+| collector | 主視野 long／structural 時 | 為什麼 |
+|---|---|---|
+| social | `t=week` → `t=year`（窗口 7→365 天） | Reddit 搜尋本來就吃 `t` 參數，改一個字即可 |
+| news | 「非近期」判斷線 14→180 天 | 官方 RSS／HTML **沒有**查詢窗參數，抓取行為不變 |
+| price | 不變 | R7-4 已做五檔粒度，本來就涵蓋各尺度 |
+| onchain／derivatives／macro／relative | 不變 | 端點回傳固定窗口，無可調參數 |
+
+三個實作上的判斷：
+
+1. **只在 long／structural 才切換，中間不設層級。** spot/short/medium 是命題
+   最常見的尺度，既有 `t=week` 行為已驗證過；多插一個中間檔位等於多一組沒被
+   驗證的行為，不划算。
+
+2. **`horizon_class` 跟著實際查詢窗重新推導，不能沿用寫死值。** social 改抓
+   365 天後仍標 `SHORT`，等於對計分層謊報窗口——ADR-2 說 horizon 由「自己實際
+   傳出去的查詢參數」決定，這條在窗口可變之後更必須守。改用
+   `horizon_for_days(window_days)` 推導。
+
+3. **`persistence` 不跟著改，仍固定 short/fast。** 這是本節唯一違反直覺的地方：
+   窗口拉長到一年，抓回來的並不是「一個有效期一年的情緒訊號」，而是
+   「這一年內陸續發生的情緒快照集合」，每一則仍然短命。若因為窗口變長就把
+   persistence 調成 long，等於宣稱去年的推文今天還算數，恰好是 R8-1 要防的錯誤。
+
 ## 4. 相容性與降級矩陣（R6-1）
 
 | 失敗點 | 降級行為 | 揭露方式 |

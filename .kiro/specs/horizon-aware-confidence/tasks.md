@@ -514,11 +514,14 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - **不新增 Prioritizer 層**；**排序不得丟掉任何證據**，結構脈絡仍在清單裡只是排後面
   - _Requirements: R8-4_
 
-- [ ] **9.6** `collector.fetch()` 接受 `primary_horizon`，各自盡力調整查詢窗（R8-5）
+- [x] **9.6** `collector.fetch()` 接受 `primary_horizon`，各自盡力調整查詢窗（R8-5）
   - 例：問「過去一年」時 social 改抓 `t=year`、news 放寬窗口
   - **盡力而為**：該來源無法調整就維持既有行為，不得因此失敗
-  - ⚠ 動到全部 7 個 collector，是本 Phase 成本最高的一項；時間不夠時先砍這條，
-    9.1-9.5 的價值不依賴它
+  - ~~⚠ 動到全部 7 個 collector，是本 Phase 成本最高的一項；時間不夠時先砍這條~~
+    **事後修正（實作完成後）**：這個成本評估錯了，實際只動到 2 個 collector。
+    因為 `fetch(self, coin, **kwargs)` 的既有簽名本來就吃 `**kwargs`，
+    不調整的 collector 一行都不用改；真正要改的只有 social（`t=week`→`t=year`）
+    與 news（放寬「非近期」判斷線）。詳見 design.md §3.9.5。
   - _Requirements: R8-5, R6-1_
 
 - [ ] **9.7** 全套測試 + 一次真實 Bedrock 驗證（**題目要用非 medium 主視野**）

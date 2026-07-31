@@ -14,7 +14,15 @@ from bs4 import BeautifulSoup
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.horizon import window_back
-from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
+from agent.schemas import (
+    DecayPattern,
+    EvidenceDraft,
+    HorizonClass,
+    LogStatus,
+    Persistence,
+    horizon_for_days,
+    now_iso,
+)
 
 HTTP_TIMEOUT = 20.0
 MAX_ITEMS_PER_SOURCE = 5
@@ -27,6 +35,13 @@ USER_AGENT = "hoyabit-crypto-agent/1.0"
 # pipeline/待辦筆記/news_日期窗口.md：低頻官方源（BTC Optech 等）若硬濾掉超窗
 # 項目可能整批變空，標記比濾除更安全。
 NEWS_RECENCY_WINDOW_DAYS = 14
+
+# R8-5：主視野落在 long／structural 時放寬「非近期」判斷線與涵蓋窗聲明。
+# 這幾個官方源本身沒有可調的查詢窗參數（RSS/HTML 就是回傳當下能抓到的最新
+# 幾篇），實際抓取行為不變；放寬的是「多久算過期」的判斷線，避免問「過去
+# 一年」時，月更頻率的官方源（如 BTC Optech）被錯誤標成全部非近期。
+NEWS_LONG_RANGE_WINDOW_DAYS = 180
+_LONG_RANGE_HORIZONS = frozenset({HorizonClass.LONG, HorizonClass.STRUCTURAL})
 
 # 併自 pipeline/fetch_news.py（Step 25）：對照 02改_資料網格.html 的
 # news-coin-keywords spec，每幣 3-6 個特有主題，各掛幾個英文關鍵字（官方源
@@ -117,12 +132,12 @@ def _parse_html_published(published: str) -> datetime | None:
         return None
 
 
-def _recency_note(published_dt: datetime | None, now: datetime) -> str:
+def _recency_note(published_dt: datetime | None, now: datetime, window_days: int = NEWS_RECENCY_WINDOW_DAYS) -> str:
     if published_dt is None:
         return "｜⚠️日期未知，無法判斷是否近期"
     age_days = (now - published_dt).days
-    if age_days > NEWS_RECENCY_WINDOW_DAYS:
-        return f"｜⚠️非近期（發布已 {age_days} 天，超過 {NEWS_RECENCY_WINDOW_DAYS} 天窗口）"
+    if age_days > window_days:
+        return f"｜⚠️非近期（發布已 {age_days} 天，超過 {window_days} 天窗口）"
     return ""
 
 # 每幣的官方發布源。RSS 端點已於 2026-07-20 逐一 curl 實測確認可用；
@@ -226,9 +241,16 @@ class NewsCollector(BaseCollector):
         sources = OFFICIAL_SOURCES.get(coin.upper(), [])
         evidences: list[EvidenceDraft] = []
         now = datetime.now(timezone.utc)
-        # 標的是「本 collector 的涵蓋窗口」（近 14 天），不是個別文章的發布日：超出窗口的
+
+        # R8-5：盡力依主視野放寬「非近期」判斷線；沒傳／傳 None 時維持既有 14 天（R6-1）。
+        primary_horizon = kwargs.get("primary_horizon")
+        recency_window_days = (
+            NEWS_LONG_RANGE_WINDOW_DAYS if primary_horizon in _LONG_RANGE_HORIZONS else NEWS_RECENCY_WINDOW_DAYS
+        )
+        news_horizon_class = horizon_for_days(recency_window_days)
+        # 標的是「本 collector 的涵蓋窗口」，不是個別文章的發布日：超出窗口的
         # 項目不濾除、只在 content_reference 由 _recency_note() 標「非近期」（見上方註解）。
-        window_start, window_end = window_back(NEWS_RECENCY_WINDOW_DAYS, end=now.date())
+        window_start, window_end = window_back(recency_window_days, end=now.date())
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}, follow_redirects=True
@@ -242,7 +264,7 @@ class NewsCollector(BaseCollector):
                     if source["kind"] == "rss":
                         parsed = feedparser.parse(resp.text)
                         for entry in parsed.entries[:MAX_ITEMS_PER_SOURCE]:
-                            recency = _recency_note(_parse_rss_published(entry), now)
+                            recency = _recency_note(_parse_rss_published(entry), now, recency_window_days)
                             summary = strip_html(entry.get("summary", "")) if entry.get("summary") else ""
                             topics = tag_narrative_topics(coin, entry.get("title", ""), summary)
                             topics_note = f"｜特有題材：{'・'.join(topics)}" if topics else ""
@@ -261,7 +283,7 @@ class NewsCollector(BaseCollector):
                                     source_type="news",
                                     window_start=window_start,
                                     window_end=window_end,
-                                    horizon_class=HorizonClass.MEDIUM,
+                                    horizon_class=news_horizon_class,
                                     # design.md §3.9.1 明列案例：news 官方公告 persistence=medium/slow。
                                     persistence=Persistence.MEDIUM,
                                     decay=DecayPattern.SLOW,
@@ -269,7 +291,7 @@ class NewsCollector(BaseCollector):
                             )
                     else:
                         for item in HTML_SCRAPERS[source["name"]](resp.text):
-                            recency = _recency_note(_parse_html_published(item["published"]), now)
+                            recency = _recency_note(_parse_html_published(item["published"]), now, recency_window_days)
                             summary = ""
                             try:
                                 summary = await _fetch_meta_description(client, item["url"])
@@ -290,7 +312,7 @@ class NewsCollector(BaseCollector):
                                     source_type="news",
                                     window_start=window_start,
                                     window_end=window_end,
-                                    horizon_class=HorizonClass.MEDIUM,
+                                    horizon_class=news_horizon_class,
                                     # design.md §3.9.1 明列案例：news 官方公告 persistence=medium/slow。
                                     persistence=Persistence.MEDIUM,
                                     decay=DecayPattern.SLOW,
