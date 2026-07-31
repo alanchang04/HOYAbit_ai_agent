@@ -681,6 +681,8 @@ def _format_debate_section(debate: dict | None) -> str:
 3. **雙方都被要求只管建構己方論證、不主動交代自身弱點**，所以兩邊的論證都不會
    自帶但書，語氣篤定不等於論據紮實。你要對雙方施以同等的檢視，不可因為某一方
    聽起來比較有把握就採信它。
+   **篇幅同理**：反方的格式是「批評＋論證」兩段、正方是一段，所以反方本來就會比較長。
+   那是版面格式造成的，不是論據比較多——不可因為某一方字數較多就認為它比較有份量。
 4. 特別注意：**反方的最後一輪論證沒有人反駁過**（每輪都是正方先講、反方後講）。
    正方的漏洞有反方會挖，反方最後那段的漏洞只有你會看到——請主動檢查它引用的
    證據是否真的支持它的主張，並把發現寫進 limitations。
@@ -744,6 +746,23 @@ def _debate_summary_instruction(debate: dict | None) -> str:
 自然結果，不是另外重新分析一次。"""
 
 
+def _debate_summary_schema(debate: dict | None) -> str:
+    """輸出格式範例裡的 debate_summary 欄位，**必須跟上面的指示同進退**。
+
+    fallback 路徑（無辯論）原本散文說「請輸出空陣列」，格式範例卻照樣秀一筆
+    「反方對…的批評成立，正方未能有效反駁」——模型抄格式範例的傾向強過讀散文，
+    等於一邊禁止虛構攻防、一邊示範怎麼虛構。而 `_sanitize_debate_summary()`
+    只濾掉不存在的 evidence id，**不會**擋掉編出來的 point 字串，
+    所以這裡放行就沒有第二道防線了。
+    """
+    if not _has_debate_transcript(debate):
+        return '  "debate_summary": [],'
+    return """  "debate_summary": [
+    {"point": "反方對鏈上活躍度下滑的批評成立，正方未能有效反駁", "evidence_ids": ["ev-011"]},
+    ...
+  ],"""
+
+
 def build_step_d_prompt(
     coin: str,
     question: str,
@@ -796,10 +815,7 @@ limitations，不要塞進這個欄位。
 
 請只輸出以下 JSON 格式：
 {{
-  "debate_summary": [
-    {{"point": "反方對鏈上活躍度下滑的批評成立，正方未能有效反駁", "evidence_ids": ["ev-011"]}},
-    ...
-  ],
+{_debate_summary_schema(debate)}
   "market_judgment": "最終市場判斷",
   "confidence": "高/中/低",
   "limitations": ["已知限制或資料不足之處", ...],

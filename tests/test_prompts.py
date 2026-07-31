@@ -191,3 +191,30 @@ def test_step_d_prompt_forbids_fabricated_summary_without_debate():
     assert "debate_summary" in prompt
     assert "不要虛構攻防內容" in prompt
     assert "誰的哪個論點站得住腳" not in prompt
+
+
+def test_step_d_fallback_schema_shows_empty_summary_not_an_example():
+    """fallback 路徑的**格式範例**也必須是空陣列，不能秀一筆攻防範例。
+
+    散文說「請輸出空陣列」而格式範例照樣秀「反方對…的批評成立」，等於一邊禁止
+    虛構攻防、一邊示範怎麼虛構——模型抄格式範例的傾向強過讀散文。
+    而 `_sanitize_debate_summary()` 只濾不存在的 evidence id，**編出來的 point
+    字串會原樣留到報告裡**，這裡放行就沒有第二道防線。
+    """
+    for debate in (None, {}, {"rounds": [], "stopped_reason": "bull_failed"}):
+        prompt = build_step_d_prompt(
+            "BTC", "分析 BTC", "multi_source", [], {}, [], debate=debate
+        )
+        assert '"debate_summary": [],' in prompt, f"debate={debate!r} 的格式範例不是空陣列"
+        assert "正方未能有效反駁" not in prompt, f"debate={debate!r} 仍在示範虛構攻防"
+
+
+def test_step_d_schema_keeps_summary_example_when_debate_present():
+    """有辯論時格式範例要保留 {point, evidence_ids} 示範，否則模型不知道該給什麼。"""
+    debate = {
+        "rounds": [{"round": 1, "bull_argument": "正方", "bear_critique": "批評", "bear_argument": "反方"}],
+        "stopped_reason": "converged",
+    }
+    prompt = build_step_d_prompt("BTC", "分析 BTC", "multi_source", [], {}, [], debate=debate)
+    assert '"point"' in prompt and '"evidence_ids"' in prompt
+    assert '"debate_summary": [],' not in prompt
