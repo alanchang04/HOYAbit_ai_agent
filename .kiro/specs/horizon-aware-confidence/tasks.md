@@ -509,7 +509,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - 係數值屬 Ken 的設計權威範圍，落地前與他確認
   - _Requirements: R8-3_
 
-- [ ] **9.5** `_format_evidence_list()` 依 priority 排序（R8-4）
+- [x] **9.5** `_format_evidence_list()` 依 priority 排序（R8-4）
   - `priority = source_weight × base_importance × horizon_match`
   - **不新增 Prioritizer 層**；**排序不得丟掉任何證據**，結構脈絡仍在清單裡只是排後面
   - _Requirements: R8-4_

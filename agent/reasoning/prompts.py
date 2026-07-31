@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import re
 
+from agent.filters.signal_importance import get_base_importance, load_signal_importance_config
 from agent.schemas import (
     DEFAULT_PRIMARY_HORIZON,
     HORIZON_ORDER,
     Evidence,
     HorizonClass,
     QuestionType,
+    is_current_signal,
 )
 
 QUESTION_TYPE_KEYWORDS: dict[QuestionType, list[str]] = {
@@ -186,9 +188,50 @@ def _window_str(evidence: Evidence) -> str:
     return "n/a"
 
 
-def _format_evidence_list(evidences: list[Evidence]) -> str:
+# R8-4：結構脈絡帶排後面但不丟掉——排序只是位置效應，證據仍完整在清單裡。
+_HORIZON_MATCH_CURRENT = 1.0
+_HORIZON_MATCH_STRUCTURAL = 0.6
+
+
+def _evidence_priority(
+    evidence: Evidence,
+    question_type: str | None,
+    primary_horizon: HorizonClass | None,
+    importance_config: dict | None,
+) -> float:
+    """priority = source_weight × base_importance × horizon_match（design.md §3.9.4）。
+
+    不新增 Evidence Prioritizer 這一層（ADR-8）——LLM 讀清單本來就有位置效應，
+    高優先排前面即可達到 Ken 提案要的效果，且排序不會讓任何證據從清單消失。
+    """
+    base_importance = get_base_importance(evidence.source_type.value, question_type, importance_config)
+    horizon_match = (
+        _HORIZON_MATCH_CURRENT
+        if is_current_signal(evidence.horizon_class, primary_horizon)
+        else _HORIZON_MATCH_STRUCTURAL
+    )
+    return evidence.source_weight * base_importance * horizon_match
+
+
+def _format_evidence_list(
+    evidences: list[Evidence],
+    question_type: str | None = None,
+    primary_horizon: HorizonClass | None = None,
+) -> str:
+    """組裝證據清單文字，依 priority 由高到低排序（R8-4）。
+
+    `question_type`／`primary_horizon` 皆為選填——舊呼叫端不傳時，`get_base_importance`
+    退回全域預設、`is_current_signal` 退回預設主視野，排序退化成「純看 source_weight」，
+    不會壞，只是少了題型/尺度加權（R6-1 降級優先）。
+    """
+    importance_config = load_signal_importance_config()
+    ordered = sorted(
+        evidences,
+        key=lambda e: _evidence_priority(e, question_type, primary_horizon, importance_config),
+        reverse=True,
+    )
     lines = []
-    for e in evidences:
+    for e in ordered:
         grade = _grade_label(e)
         weight_field = f"weight={e.source_weight:.2f}" + (f" [{grade}]" if grade else "")
         horizon = getattr(e, "horizon_class", None)
@@ -277,6 +320,7 @@ def build_step_a_prompt(
     evidences: list[Evidence],
     coin2: str | None = None,
     primary_horizon: HorizonClass | None = None,
+    question_type: str | None = None,
 ) -> str:
     coin_note = (
         f"本題涉及兩個幣種：{coin} 與 {coin2}。每筆證據都已標註 coin 欄位，"
@@ -291,7 +335,7 @@ def build_step_a_prompt(
 {build_evidence_legend(primary_horizon)}
 
 以下是本次蒐集到的所有證據（含 evidence id 與 coin 欄位）：
-{_format_evidence_list(evidences)}
+{_format_evidence_list(evidences, question_type, primary_horizon)}
 
 請執行【事實層】分析：將上述證據依 source_type（{'與 coin ' if coin2 else ''}）分組，各自摘要成客觀事實陳述（不做推論、不下判斷）。
 
@@ -312,6 +356,7 @@ def build_step_b_prompt(
     facts: list[dict],
     coin2: str | None = None,
     primary_horizon: HorizonClass | None = None,
+    question_type: str | None = None,
 ) -> str:
     current = current_signal_bands(primary_horizon)
     structural = structural_bands(primary_horizon)
@@ -355,7 +400,7 @@ def build_step_b_prompt(
 {build_evidence_legend(primary_horizon)}
 
 原始證據清單（供比對細節）：
-{_format_evidence_list(evidences)}
+{_format_evidence_list(evidences, question_type, primary_horizon)}
 
 請執行【交叉驗證層】分析，輸出**三段**：
 1. consistent_signals：多個獨立來源指向同一方向的一致訊號。

@@ -63,6 +63,49 @@ def test_system_prompt_has_horizon_and_weight_rules():
     assert "低權重證據不足以單獨推翻高權重證據" in SYSTEM_PROMPT
 
 
+class TestEvidenceListPrioritySorting:
+    """R8-4：priority = source_weight × base_importance × horizon_match，高分排前面。"""
+
+    def _ids_in_order(self, out: str) -> list[str]:
+        return [line.split("id=")[1].split(" ")[0] for line in out.splitlines()]
+
+    def test_higher_base_importance_source_type_sorts_first(self):
+        # 同權重、同 horizon，只有 source_type 不同：price(1.0) 該排在 social(0.5) 前面。
+        price_ev = _ev(id="ev-101", source_type="price", source_weight=0.8, horizon_class="short")
+        social_ev = _ev(id="ev-102", source_type="social", source_weight=0.8, horizon_class="short")
+        out = _format_evidence_list([social_ev, price_ev])
+        assert self._ids_in_order(out) == ["ev-101", "ev-102"]
+
+    def test_structural_context_still_present_but_ordered_later(self):
+        # 同 source_type/weight，只有 horizon 落在結構脈絡帶（>主視野）者該排後面，但不能消失。
+        current_ev = _ev(id="ev-201", source_type="price", source_weight=0.8, horizon_class="short")
+        structural_ev = _ev(id="ev-202", source_type="price", source_weight=0.8, horizon_class="structural")
+        out = _format_evidence_list([structural_ev, current_ev], primary_horizon="short")
+        ids = self._ids_in_order(out)
+        assert ids == ["ev-201", "ev-202"]
+
+    def test_no_evidence_dropped(self):
+        evs = [
+            _ev(id=f"ev-{300 + i}", source_type=t, horizon_class=h)
+            for i, (t, h) in enumerate(
+                [("price", "spot"), ("social", "structural"), ("news", "medium"), ("macro", "long")]
+            )
+        ]
+        out = _format_evidence_list(evs)
+        assert out.count("- id=") == 4
+
+    def test_comparison_question_type_demotes_social_below_price(self):
+        # signal_importance.json 的 comparison 覆寫層把 social 壓到 0.3，price 仍是 1.0，
+        # 差距應比未覆寫時更大，但排序方向（price 先）不變。
+        price_ev = _ev(id="ev-401", source_type="price", source_weight=0.6, horizon_class="short")
+        social_ev = _ev(id="ev-402", source_type="social", source_weight=0.6, horizon_class="short")
+        out = _format_evidence_list([social_ev, price_ev], question_type="comparison")
+        assert self._ids_in_order(out) == ["ev-401", "ev-402"]
+
+    def test_empty_list_unaffected(self):
+        assert _format_evidence_list([]) == "（本次無可用證據）"
+
+
 def test_step_a_prompt_has_legend():
     prompt = build_step_a_prompt("BTC", "分析 BTC 過去兩週", [_ev()])
     assert "【時間尺度說明】" in prompt
