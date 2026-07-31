@@ -758,6 +758,31 @@ class DecayPattern(str, Enum):
 修法：新增一道「有效期覆蓋」檢查，某類的 `persistence` 明顯短於主視野時
 不得判為「完整」，最高只能到「部分」檔。
 
+**實作時發現的邊界（2026-07-30，已解決）**：字面上「明顯短於主視野」若實作成
+「只要 persistence 短於主視野就扣分」，會製造一次新的回歸——social（persistence
+恆為 short）與多數 derivatives 子來源，在**預設**主視野 medium 下，跟 medium 的
+差距只有 1 帶（short→medium）。這正是三題型真實 Bedrock 驗證過的最常見情境
+（問「最近兩週」），若照字面實作會讓這個已驗證情境的 social／derivatives
+系統性卡在 60 分。
+
+**解法**：借用 `HorizonClass` 五帶的順序做比較，門檻設在**差距 ≥2 帶**才觸發
+（`_SEVERE_PERSISTENCE_MISMATCH_GAP = 2`），只抓本節真正要修的案例：
+
+```python
+_PERSISTENCE_EQUIVALENT_HORIZON = {
+    Persistence.SHORT: HorizonClass.SHORT,
+    Persistence.MEDIUM: HorizonClass.MEDIUM,
+    Persistence.LONG: HorizonClass.STRUCTURAL,   # long 視為覆蓋到最長帶
+}
+# 差距 = HORIZON_ORDER.index(primary) - HORIZON_ORDER.index(該類最長 persistence 對應帶)
+# 差距 >= 2 才判「嚴重覆蓋不到」
+```
+
+驗算：
+- primary=medium（預設），social persistence=short → 差距 1 → **不觸發**，維持 100 分
+- primary=structural（問「過去一年」），全部 persistence=short → 差距 3 → **觸發**，降到 60 分（原案例的自相矛盾修復）
+- persistence=long 一律視為覆蓋到 structural，不論主視野多長都不觸發
+
 ### 3.9.3 靜態重要性係數（R8-3）
 
 `static/signal_importance.json`，人工訂定，**不做歷史回測**：

@@ -496,7 +496,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - 比照 `tests/test_collectors_horizon.py` 的作法補逐項斷言
   - _Requirements: R8-1_
 
-- [ ] **9.3** `compute_data_confidence()` 納入「有效期是否覆蓋主視野」（R8-2）
+- [x] **9.3** `compute_data_confidence()` 納入「有效期是否覆蓋主視野」（R8-2）
   - **這條同時修掉 vic code review 點名的「Data Confidence 對 horizon 盲目」**
   - 重現案例（必須變成回歸測試）：問「過去一年」、19 筆全 17 天窗的證據，
     現行判六類「完整」拿 100 分，同一份報告開頭卻寫「主視野無可用證據」
