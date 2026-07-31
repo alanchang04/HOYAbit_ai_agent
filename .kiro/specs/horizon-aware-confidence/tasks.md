@@ -503,7 +503,7 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
   - 某類 `persistence` 明顯短於主視野時，最高只能到「部分」檔
   - _Requirements: R8-2_
 
-- [ ] **9.4** 新增 `static/signal_importance.json`（design.md §3.9.3）
+- [x] **9.4** 新增 `static/signal_importance.json`（design.md §3.9.3）
   - **人工訂定的靜態常數，不做歷史回測**——介面比照回測版，日後換資料不改程式
   - `by_question_type` 覆寫層解掉「比較流動性的題目卻因 social 缺失扣 9.3 分」
   - 係數值屬 Ken 的設計權威範圍，落地前與他確認

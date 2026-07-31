@@ -1,0 +1,21 @@
+{
+  "$comment": "R8-3 靜態重要性係數（Ken 提案 Layer B 的簡化版，design.md §3.9.3）。人工訂定，不做歷史回測——介面比照回測版設計，日後要換成回測值時只換這個檔案，不改程式。⚠️ 這裡的數值是 alanchang 依 design.md 草擬的暫定值，尚未與 Ken 對過，賽前需比照 static/source_reputation.json 的 dedup_penalty 曲線校準一次。",
+  "version": "1.0",
+  "by_source_type": {
+    "price": 1.0,
+    "derivatives": 0.9,
+    "onchain": 0.85,
+    "news": 0.8,
+    "macro": 0.7,
+    "social": 0.5
+  },
+  "by_question_type": {
+    "$comment": "覆寫層：某題型下特定 source_type 的重要性不同於全域預設。只列需要覆寫的項目，未列出的沿用 by_source_type。解掉『比較流動性的題目卻因 social 缺失扣分』的六類等權問題。",
+    "comparison": {
+      "social": 0.3,
+      "news": 0.6
+    },
+    "hypothesis_test": {},
+    "multi_source": {}
+  }
+}
