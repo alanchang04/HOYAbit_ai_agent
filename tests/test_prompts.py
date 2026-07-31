@@ -83,6 +83,14 @@ def test_step_b_prompt_has_three_sections_and_direction_matrix():
     assert "1（看多）" in prompt and "-1（看空）" in prompt
 
 
+def test_step_b_structural_context_has_length_cap():
+    """2026-07-30：實測 structural_context 曾產出 6318 字（單題 5-6 點），
+    比它要輔助的矛盾訊號節（417 字）長 15 倍。每點應是一句話，不是重新論證一次。"""
+    prompt = build_step_b_prompt("BTC", "分析 BTC 最近兩週的整體市場狀態", [_ev()], facts=[])
+    assert "100 字以內" in prompt
+    assert "不需要重新論證為什麼" in prompt
+
+
 def test_step_d_omits_duplicate_argument_text_when_debate_present():
     """HANDOFF 6.3：有辯論紀錄時，推論層不再重複貼上同一段論證全文。
 

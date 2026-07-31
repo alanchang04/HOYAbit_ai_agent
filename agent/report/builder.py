@@ -54,17 +54,17 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     breakdown = result.confidence_breakdown or {}
     if breakdown:
         # 執行摘要就把「基底 vs 辯論調整」拆開，讀者第一眼就知道這個分數有沒有
-        # 因為辯論而被下修，不用翻到第 4 節（R3-12）。
+        # 因為辯論而被下修，不用翻到第 2 節（R3-12）。
         adjustment = breakdown.get("debate_adjustment", 0)
         lines.append(
             f"> 信心：{result.confidence_score}%（{confidence_label}）"
             f"＝ 基底 {breakdown.get('base', 0):.0f} {adjustment:+d} 辯論調整"
-            " ── 分項計算方式見「4. 信心說明」"
+            " ── 分項計算方式見「2. 信心說明」"
         )
     else:
         lines.append(
             f"> 信心：{result.confidence_score}%（{confidence_label}）"
-            "── 分項計算方式見「4. 信心說明」"
+            "── 分項計算方式見「2. 信心說明」"
         )
     lines.append("")
 
@@ -77,7 +77,19 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
         lines.append("**市場判斷：** （本次未產出市場判斷）")
     lines.append("")
 
-    if debate.get("bull_argument") or debate.get("bear_argument"):
+    if conclusion.get("debate_summary"):
+        # 裁判已整理出辯論重點摘要時，執行摘要不再重複貼雙方最後一輪的完整論證
+        # 原文——那曾經讓執行摘要（3492 字）比市場判斷本身還長，且讀者會先看到
+        # 「【回應反方批評】」這種辯駁語氣，卻還沒看過批評內容是什麼。
+        # 攻防結果見下方新增的「辯論重點摘要」節，逐輪原文仍完整保留在第 3 節。
+        lines.append(
+            "**辯論攻防：** 誰的哪個論點站得住腳、哪個被推翻，見下方「辯論重點摘要」；"
+            "雙方逐輪完整原文見「正反方分析與矛盾訊號處理」。"
+        )
+        lines.append("")
+    elif debate.get("bull_argument") or debate.get("bear_argument"):
+        # 沒有摘要時（fallback 路徑／裁判未產出 debate_summary）這是唯一可用內容，
+        # 不能省略，否則執行摘要會完全沒有「為什麼利多／為什麼看空」的資訊。
         # 論證文字（bull_argument/bear_argument）已經是最後一輪，但頂層
         # bull_evidence_ids/bear_evidence_ids 是所有輪次的聯集——引用清單
         # 應該對齊「最後一輪」的文字，不然會列出文字裡其實沒提到的證據 id。
@@ -266,6 +278,29 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     return lines
 
 
+def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence], coin2: str | None) -> list[str]:
+    """章節「關鍵依據」：逐筆事實與其對應證據的原始文字。
+
+    這是全報告最長的一節（單次真實執行常破萬字），是查證用的原始資料，
+    不是給人從頭讀到尾的敘述——放在報告最後，讀者先看完結論／信心／攻防，
+    需要回頭核對某個數字時才會翻到這裡（R6 排版順序調整）。
+    """
+    ev_lookup = {e.id: e for e in evidences}
+    lines: list[str] = ["## 5. 關鍵依據", ""]
+    for fact in result.facts:
+        ids = fact.get("evidence_ids", [])
+        coin_prefix = f"[{fact['coin']}] " if coin2 and fact.get("coin") else ""
+        lines.append(f"- {coin_prefix}{fact.get('summary', '')}")
+        for eid in ids:
+            ev = ev_lookup.get(eid)
+            if ev:
+                lines.append(
+                    f"  - `{eid}` | {ev.source} | {ev.fetched_at} | {ev.content_reference}"
+                )
+    lines.append("")
+    return lines
+
+
 def build_report_markdown(
     coin: str,
     question: str,
@@ -275,7 +310,6 @@ def build_report_markdown(
 ) -> str:
     validate_evidence_references(result, evidences)
     ev_by_id = {e.id for e in evidences}
-    ev_lookup = {e.id: e for e in evidences}
     coin2 = coin2 or result.coin2
 
     lines: list[str] = []
@@ -298,18 +332,21 @@ def build_report_markdown(
     lines.append(normalize_embedded_lists(result.conclusion.get("market_judgment", "")))
     lines.append("")
 
-    lines.append("## 2. 關鍵依據")
+    # 章節順序（2026-07-30 調整）：結論之後接「這個結論可不可信」（信心說明），
+    # 再接「攻防細節」（正反方分析），比舊順序（結論→關鍵依據→攻防→信心）
+    # 更貼近讀者實際想知道的順序——原始證據列表挪到最後，查證用不強迫先讀完。
+    lines.append("## 2. 信心說明")
     lines.append("")
-    for fact in result.facts:
-        ids = fact.get("evidence_ids", [])
-        coin_prefix = f"[{fact['coin']}] " if coin2 and fact.get("coin") else ""
-        lines.append(f"- {coin_prefix}{fact.get('summary', '')}")
-        for eid in ids:
-            ev = ev_lookup.get(eid)
-            if ev:
-                lines.append(
-                    f"  - `{eid}` | {ev.source} | {ev.fetched_at} | {ev.content_reference}"
-                )
+    lines.extend(_build_confidence_breakdown_lines(result))
+    lines.append("### 已知限制")
+    lines.append("")
+    for lim in result.conclusion.get("limitations", []):
+        lines.append(f"- {lim}")
+    lines.append("")
+    lines.append("### 可能推翻結論的條件")
+    lines.append("")
+    for cond in result.conclusion.get("invalidation_conditions", []):
+        lines.append(f"- {cond}")
     lines.append("")
 
     lines.append("## 3. 正反方分析與矛盾訊號處理")
@@ -424,21 +461,7 @@ def build_report_markdown(
             lines.append(f"  - 反對證據：{', '.join(oppose)}")
     lines.append("")
 
-    lines.append("## 4. 信心說明")
-    lines.append("")
-    lines.extend(_build_confidence_breakdown_lines(result))
-    lines.append("### 已知限制")
-    lines.append("")
-    for lim in result.conclusion.get("limitations", []):
-        lines.append(f"- {lim}")
-    lines.append("")
-    lines.append("### 可能推翻結論的條件")
-    lines.append("")
-    for cond in result.conclusion.get("invalidation_conditions", []):
-        lines.append(f"- {cond}")
-    lines.append("")
-
-    lines.append("## 5. 後續觀察重點")
+    lines.append("## 4. 後續觀察重點")
     lines.append("")
     if result.follow_up_watchpoints:
         for point in result.follow_up_watchpoints:
@@ -446,6 +469,8 @@ def build_report_markdown(
     else:
         lines.append("- （本次推理未產出具體後續觀察重點）")
     lines.append("")
+
+    lines.extend(_build_key_evidence_lines(result, evidences, coin2))
 
     lines.append("## 附錄：信源分級依據（賽前信譽表）")
     lines.append("")
