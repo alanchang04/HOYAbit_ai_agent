@@ -675,3 +675,23 @@ def test_panel4_debate_summary_skips_unknown_evidence_ids(
     item = view["panel4_report"]["debate_summary"][0]
     assert item["point"] == "只引用了不存在的證據"
     assert item["fingerprints"] == []
+
+
+def test_panel1_exposes_source_url_for_linking(
+    out_dir, sample_evidences, sample_reasoning_result, sample_run_metrics, sample_filter_decisions
+) -> None:
+    """面板① 要帶出 source_url，前端才能把來源名稱做成可點擊的原文連結。"""
+    view = build_report_view(
+        out_dir=out_dir,
+        evidences=sample_evidences,
+        reasoning_result=sample_reasoning_result,
+        run_metrics=sample_run_metrics,
+        filter_decisions=sample_filter_decisions,
+        baseline_result=None,
+        coin="BTC",
+        question="測試題目",
+    )
+
+    items = view["panel1_raw_feed"]["items"]
+    assert items
+    assert all("source_url" in it for it in items)

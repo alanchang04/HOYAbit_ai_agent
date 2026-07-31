@@ -125,6 +125,8 @@ def _build_panel1(
                 "fingerprint": fingerprint_map.get(ev.id, ""),
                 "evidence_id": ev.id,
                 "source": ev.source,
+                # 讓讀者能直接點到原文查證（本地計算的證據沒有外部網址，維持 None）
+                "source_url": ev.source_url,
                 "source_type": ev.source_type.value,
                 "source_weight": ev.source_weight,
                 "weight_reason": ev.weight_reason,

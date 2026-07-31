@@ -1158,3 +1158,17 @@ a {
 .fact-list li {
   margin-bottom: 0.3rem;
 }
+
+/* 原始證據流的來源連結：讓讀者直接點到原文查證（可回溯性是系統核心賣點，
+   資料早就在 evidence.json 裡，2026-07-31 才補上渲染）。本地計算的證據沒有
+   外部網址，維持純文字不加連結樣式。 */
+.evidence-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.evidence-source a:hover {
+  text-decoration-style: solid;
+  opacity: 0.75;
+}

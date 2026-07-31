@@ -60,7 +60,13 @@
             <span class="fingerprint-badge">{{ item.fingerprint }}</span>
             <span class="source-type-badge">{{ item.source_type }}</span>
             <span class="weight-badge">{{ "%.2f"|format(item.source_weight) }}</span>
-            <div class="evidence-source">{{ item.source }}</div>
+            <div class="evidence-source">
+              {% if item.source_url %}
+                <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">{{ item.source }} ↗</a>
+              {% else %}
+                {{ item.source }}
+              {% endif %}
+            </div>
             <div class="evidence-content">{{ item.content_reference[:120] }}{% if item.content_reference|length > 120 %}…{% endif %}</div>
             {% if item.filter_decisions %}
               <div class="filter-decisions">

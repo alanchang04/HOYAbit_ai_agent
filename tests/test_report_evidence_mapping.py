@@ -544,3 +544,48 @@ def test_executive_summary_points_to_correct_section_number_for_confidence():
     exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
     assert "見「2. 信心說明」" in exec_section
     assert "見「4. 信心說明」" not in exec_section
+
+
+# --- 來源超連結（2026-07-31）------------------------------------------
+# 可回溯性是本系統的核心賣點，但 source_url 一直只存在 evidence.json 裡，
+# 報告與面板都沒渲染——讀者要查證得自己翻 JSON，等於沒有。
+
+
+class TestSourceLinksInReport:
+    def _report_with(self, source: str, source_url: str | None) -> str:
+        ev = Evidence(
+            id="ev-001",
+            coin="BTC",
+            source=source,
+            source_url=source_url,
+            fetched_at="2026-07-25T00:00:00Z",
+            content_reference="BTC 現價 65,400",
+            related_claim="BTC 當前報價",
+            source_type="price",
+            source_weight=0.9,
+        )
+        result = ReasoningResult(
+            question_type="multi_source",
+            facts=[{"summary": "BTC 現價 65,400", "evidence_ids": ["ev-001"]}],
+            conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        )
+        return build_report_markdown("BTC", "分析 BTC", result, [ev])
+
+    def test_source_with_url_becomes_markdown_link(self):
+        md = self._report_with("CoinGecko", "https://api.coingecko.com/api/v3/simple/price")
+        assert "[CoinGecko](https://api.coingecko.com/api/v3/simple/price)" in md
+
+    def test_source_without_url_stays_plain_text(self):
+        """本地計算的證據沒有外部原文，硬編連結等於造假。"""
+        md = self._report_with("本地區間統計（依 BTC 日線 最近一日，非外部資料）", None)
+        assert "本地區間統計（依 BTC 日線 最近一日，非外部資料）" in md
+        assert "](" not in md.split("## 5. 關鍵依據")[1]
+
+    def test_brackets_in_source_name_do_not_break_markdown(self):
+        """來源名稱含 [ ] 會破壞 markdown 連結語法，需先轉義。"""
+        md = self._report_with("Binance [futures]", "https://fapi.binance.com/x")
+        assert "[Binance （futures）](https://fapi.binance.com/x)" in md
+
+    def test_key_evidence_section_explains_missing_links(self):
+        md = self._report_with("CoinGecko", "https://example.com")
+        assert "未附連結者為本地計算" in md

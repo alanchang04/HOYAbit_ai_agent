@@ -278,6 +278,25 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     return lines
 
 
+def _source_link(evidence: Evidence) -> str:
+    """來源名稱 → markdown 連結（有 `source_url` 時）。
+
+    連結早就存在 evidence.json 裡，但報告與面板從來沒有渲染出來——讀者要查證
+    得自己去翻 JSON。可回溯性是本系統的核心賣點，藏在檔案裡等於沒有。
+
+    **沒有 URL 的不是漏抓**：本地區間統計、技術指標、長期結構指標都是我們依共同
+    基準資料集自己算的，供給節奏日曆是賽前人工研究——這些本來就沒有外部原文，
+    硬編一個連結反而是造假。實跑 38 筆有 30 筆帶連結，缺的 8 筆全屬此類。
+
+    markdown 連結文字裡的 `[` `]` 會破壞語法，先轉義再組。
+    """
+    url = getattr(evidence, "source_url", None)
+    if not url:
+        return evidence.source
+    safe_label = evidence.source.replace("[", "（").replace("]", "）")
+    return f"[{safe_label}]({url})"
+
+
 def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence], coin2: str | None) -> list[str]:
     """章節「關鍵依據」：逐筆事實與其對應證據的原始文字。
 
@@ -287,6 +306,11 @@ def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence]
     """
     ev_lookup = {e.id: e for e in evidences}
     lines: list[str] = ["## 5. 關鍵依據", ""]
+    lines.append(
+        "> 來源名稱可直接點擊查看原文／原始 API 回應。未附連結者為本地計算"
+        "（依共同基準資料集或人工研究產出），沒有對應的外部網址可查。"
+    )
+    lines.append("")
     for fact in result.facts:
         ids = fact.get("evidence_ids", [])
         coin_prefix = f"[{fact['coin']}] " if coin2 and fact.get("coin") else ""
@@ -295,7 +319,7 @@ def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence]
             ev = ev_lookup.get(eid)
             if ev:
                 lines.append(
-                    f"  - `{eid}` | {ev.source} | {ev.fetched_at} | {ev.content_reference}"
+                    f"  - `{eid}` | {_source_link(ev)} | {ev.fetched_at} | {ev.content_reference}"
                 )
     lines.append("")
     return lines
