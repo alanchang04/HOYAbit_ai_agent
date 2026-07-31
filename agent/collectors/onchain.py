@@ -15,7 +15,7 @@ import httpx
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
 HTTP_TIMEOUT = 20.0
 
@@ -119,6 +119,8 @@ class OnchainCollector(BaseCollector):
                     related_claim=f"{coin} 鏈上活躍度（交易量、mempool、算力）",
                     source_type="onchain",
                     horizon_class=HorizonClass.SPOT,
+                    persistence=Persistence.SHORT,
+                    decay=DecayPattern.FAST,
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -151,6 +153,8 @@ class OnchainCollector(BaseCollector):
                     window_start=history_window_start,
                     window_end=history_window_end,
                     horizon_class=HorizonClass.MEDIUM,
+                    persistence=Persistence.MEDIUM,
+                    decay=DecayPattern.SLOW,
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -179,6 +183,8 @@ class OnchainCollector(BaseCollector):
                         related_claim=f"{coin} 鏈上網路即時活動（區塊高度、Gas 費用）",
                         source_type="onchain",
                         horizon_class=HorizonClass.SPOT,
+                        persistence=Persistence.SHORT,
+                        decay=DecayPattern.FAST,
                     )
                 )
                 last_exc = None
@@ -207,6 +213,11 @@ class OnchainCollector(BaseCollector):
                         related_claim=f"{coin} 鏈上總供給量（補充資料）",
                         source_type="onchain",
                         horizon_class=HorizonClass.SPOT,
+                        # 例外：這裡標的是快照時間點，但總供給量本身是結構性緩慢變化的
+                        # 數字（增發/銷毀速度遠慢於價格波動），不套用「spot=short/fast」
+                        # 的通用模式——它不會在幾小時內就「過期」。
+                        persistence=Persistence.LONG,
+                        decay=DecayPattern.SLOW,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -254,6 +265,8 @@ class OnchainCollector(BaseCollector):
                     window_start=window_back(HISTORY_TREND_DAYS)[0],
                     window_end=window_back(HISTORY_TREND_DAYS)[1],
                     horizon_class=HorizonClass.MEDIUM,
+                    persistence=Persistence.MEDIUM,
+                    decay=DecayPattern.SLOW,
                 )
             ]
         except Exception as exc:  # noqa: BLE001
@@ -279,6 +292,8 @@ class OnchainCollector(BaseCollector):
                     related_claim=f"{coin} 鏈上網路即時活躍度（TPS）",
                     source_type="onchain",
                     horizon_class=HorizonClass.SPOT,
+                    persistence=Persistence.SHORT,
+                    decay=DecayPattern.FAST,
                 )
             ]
         except Exception as exc:  # noqa: BLE001
@@ -307,6 +322,8 @@ class OnchainCollector(BaseCollector):
                         related_claim=f"{coin} XRPL 網路狀態（帳本高度、費率負載）",
                         source_type="onchain",
                         horizon_class=HorizonClass.SPOT,
+                        persistence=Persistence.SHORT,
+                        decay=DecayPattern.FAST,
                     )
                 ]
             except Exception as exc:  # noqa: BLE001

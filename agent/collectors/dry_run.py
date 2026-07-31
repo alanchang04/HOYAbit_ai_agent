@@ -11,7 +11,7 @@ from pathlib import Path
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, Persistence, now_iso
 
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "dry_run_evidence.json"
 
@@ -36,6 +36,10 @@ class DryRunCollector(BaseCollector):
             horizon = HorizonClass(tpl.get("horizon_class", HorizonClass.SPOT.value))
             window_days = tpl.get("window_days")
             window_start, window_end = window_back(window_days) if window_days else (None, None)
+            # 同理（R8-1）：persistence/decay 沒在 fixture 裡指定就用 schema 預設值
+            # （medium/slow），不強制每筆 fixture 都要補這兩個欄位。
+            persistence = Persistence(tpl["persistence"]) if "persistence" in tpl else Persistence.MEDIUM
+            decay = DecayPattern(tpl["decay"]) if "decay" in tpl else DecayPattern.SLOW
             evidences.append(
                 EvidenceDraft(
                     coin=coin,
@@ -48,6 +52,8 @@ class DryRunCollector(BaseCollector):
                     window_start=window_start,
                     window_end=window_end,
                     horizon_class=horizon,
+                    persistence=persistence,
+                    decay=decay,
                 )
             )
         return evidences

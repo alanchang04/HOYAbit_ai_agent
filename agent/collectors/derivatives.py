@@ -28,7 +28,7 @@ import httpx
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
 HTTP_TIMEOUT = 20.0
 
@@ -234,6 +234,10 @@ class DerivativesCollector(BaseCollector):
             window_start=window_start,
             window_end=window_end,
             horizon_class=HorizonClass.MEDIUM,
+            # design.md §3.9.1 的典型案例：觀察窗 30 天（medium），但訊號本身
+            # 1-3 天內就衰減——這正是 persistence 要跟 horizon_class 分開的理由。
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 2. OI × 價格四象限：近 30 小時 OI 與價格同向/背離 ---
@@ -288,6 +292,8 @@ class DerivativesCollector(BaseCollector):
             window_start=window_start,
             window_end=window_end,
             horizon_class=HorizonClass.SPOT,
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 3. 多空帳戶比：散戶 vs 大戶持倉是否背離 ---
@@ -334,6 +340,8 @@ class DerivativesCollector(BaseCollector):
             window_start=window_start,
             window_end=window_end,
             horizon_class=HorizonClass.SPOT,
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 4. 期貨到期結構：永續/當季/次季 contango/backwardation ---
@@ -401,6 +409,8 @@ class DerivativesCollector(BaseCollector):
             related_claim=f"{coin} 期貨到期結構曲線形狀（contango/backwardation）",
             source_type="derivatives",
             horizon_class=HorizonClass.SPOT,  # 曲線是當下報價的橫斷面，不是時間序列
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 5. CME COT：機構（Asset Manager）淨倉位，BNB 無 CME 期貨直接跳過 ---
@@ -450,6 +460,10 @@ class DerivativesCollector(BaseCollector):
             window_start=oldest_report_date,
             window_end=report_date,
             horizon_class=HorizonClass.LONG,
+            # design.md §3.9.1 明列案例：CME COT persistence=long/slow，
+            # 機構配置型倉位是逐週緩慢調整，不是會突然過期的訊號。
+            persistence=Persistence.LONG,
+            decay=DecayPattern.SLOW,
         )
 
     # --- 6. 選擇權 IV/Skew：Binance Options 五幣統一來源 ---
@@ -537,6 +551,8 @@ class DerivativesCollector(BaseCollector):
             # IV 描述的是「未來 30 天的預期波動」，但這筆證據本身是當下報價的橫斷面快照，
             # 不是過去 30 天的觀察窗——標 spot 而非 medium。
             horizon_class=HorizonClass.SPOT,
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 7. CEX-DEX 費率差：Binance vs Hyperliquid 年化費率背離 ---
@@ -579,6 +595,8 @@ class DerivativesCollector(BaseCollector):
             related_claim=f"{coin} 中心化與去中心化交易場地的資金費率背離",
             source_type="derivatives",
             horizon_class=HorizonClass.SPOT,  # 兩邊都取 lastFundingRate，當下快照
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )
 
     # --- 8. Coinbase 溢價：Coinbase 現貨 vs Binance 現貨價差（美系買壓代理） ---
@@ -608,4 +626,6 @@ class DerivativesCollector(BaseCollector):
             related_claim=f"{coin} Coinbase 相對 Binance 現貨溢價（美系機構/散戶買壓代理指標）",
             source_type="derivatives",
             horizon_class=HorizonClass.SPOT,  # 兩邊都取當下 ticker 報價，橫斷面價差非時間序列
+            persistence=Persistence.SHORT,
+            decay=DecayPattern.FAST,
         )

@@ -8,7 +8,7 @@ import csv
 import math
 from pathlib import Path
 
-from agent.schemas import EvidenceDraft, HorizonClass, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, Persistence, now_iso
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 WINDOW = 90  # 90 日窗口
@@ -159,4 +159,7 @@ def compute_relative_metrics(
         # 90 日窗口＝31-180 天帶。相對強弱是「這一季誰比較強」的結構位置，
         # 不是當前訊號，不該與短窗方向訊號放在同一個矛盾判定裡。
         horizon_class=HorizonClass.LONG,
+        # 結構性比較，緩慢變化，跟 CME COT／供給節奏日曆同一類。
+        persistence=Persistence.LONG,
+        decay=DecayPattern.SLOW,
     )

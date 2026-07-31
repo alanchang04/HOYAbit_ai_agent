@@ -17,7 +17,18 @@ import httpx
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import utc_today
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
+
+# R8-1：五檔粒度區間統計沒有單一固定的 persistence——「最近一日」的區間描述
+# 隔天就該重算，「近一年」的區間描述可以撐好幾週不變。用同一份 (days, horizon, label)
+# 迴圈變數推導，而不是每個粒度各寫一次，避免五筆手動標註互相漂移。
+_GRANULARITY_PERSISTENCE: dict[HorizonClass, tuple[Persistence, DecayPattern]] = {
+    HorizonClass.SPOT: (Persistence.SHORT, DecayPattern.FAST),
+    HorizonClass.SHORT: (Persistence.SHORT, DecayPattern.FAST),
+    HorizonClass.MEDIUM: (Persistence.MEDIUM, DecayPattern.SLOW),
+    HorizonClass.LONG: (Persistence.LONG, DecayPattern.SLOW),
+    HorizonClass.STRUCTURAL: (Persistence.LONG, DecayPattern.SLOW),
+}
 
 HTTP_TIMEOUT = 20.0
 # MA120 需要至少 120 天收盤價才算得出來，抓 121 列留一天緩衝（見
@@ -605,6 +616,9 @@ class PriceCollector(BaseCollector):
                 window_start=summary_rows[0]["date"] if summary_rows else None,
                 window_end=as_of_date,
                 horizon_class=HorizonClass.MEDIUM,
+                # 近兩週走勢摘要本身會隨每日新收盤價緩慢滾動，不是會突然失效的訊號。
+                persistence=Persistence.MEDIUM,
+                decay=DecayPattern.SLOW,
             )
         )
 
@@ -624,6 +638,7 @@ class PriceCollector(BaseCollector):
                 )
                 continue
             window = spliced_rows[-days:]
+            persistence, decay = _GRANULARITY_PERSISTENCE[horizon]
             evidences.append(
                 EvidenceDraft(
                     coin=coin,
@@ -636,6 +651,8 @@ class PriceCollector(BaseCollector):
                     window_start=window[0]["date"],
                     window_end=window[-1]["date"],
                     horizon_class=horizon,
+                    persistence=persistence,
+                    decay=decay,
                 )
             )
 
@@ -664,6 +681,8 @@ class PriceCollector(BaseCollector):
                     window_start=series_rows[0]["date"] if series_rows else None,
                     window_end=as_of_date,
                     horizon_class=HorizonClass.MEDIUM,
+                    persistence=Persistence.MEDIUM,
+                    decay=DecayPattern.SLOW,
                 )
             )
 
@@ -694,6 +713,8 @@ class PriceCollector(BaseCollector):
                         window_start=csv_rows[0]["date"],
                         window_end=csv_end,
                         horizon_class=HorizonClass.STRUCTURAL,
+                        persistence=Persistence.LONG,
+                        decay=DecayPattern.SLOW,
                     )
                 )
 
@@ -736,6 +757,8 @@ class PriceCollector(BaseCollector):
                         related_claim=f"{coin} 當前即時報價與 24 小時變化",
                         source_type="price",
                         horizon_class=HorizonClass.SPOT,  # 即時報價＝當下快照，無觀察窗
+                        persistence=Persistence.SHORT,
+                        decay=DecayPattern.FAST,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -760,6 +783,8 @@ class PriceCollector(BaseCollector):
                             related_claim=f"{coin} 當前即時報價與 24 小時變化",
                             source_type="price",
                             horizon_class=HorizonClass.SPOT,
+                            persistence=Persistence.SHORT,
+                            decay=DecayPattern.FAST,
                         )
                     )
                 except Exception as exc2:  # noqa: BLE001
@@ -790,6 +815,9 @@ class PriceCollector(BaseCollector):
                         related_claim=f"{coin} 永續合約基差與資金費率（多空情緒佐證）",
                         source_type="price",
                         horizon_class=HorizonClass.SPOT,  # premiumIndex 是當下報價，非序列
+                        # design.md §3.9.1 的典型案例：資金費率訊號 1-3 天內就衰減。
+                        persistence=Persistence.SHORT,
+                        decay=DecayPattern.FAST,
                     )
                 )
             except Exception as exc:  # noqa: BLE001

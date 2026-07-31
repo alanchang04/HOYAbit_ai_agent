@@ -20,7 +20,7 @@ from agent.collectors.price import PriceCollector
 from agent.collectors.relative import compute_relative_metrics
 from agent.collectors.social import SocialCollector
 from agent.logging_utils import ExecutionLogger
-from agent.schemas import HorizonClass
+from agent.schemas import DecayPattern, HorizonClass, Persistence
 from tests.test_derivatives_collector import _build_router, _patched_client
 
 
@@ -447,3 +447,110 @@ def test_relative_metrics_is_long():
     assert draft.horizon_class == HorizonClass.LONG
     assert draft.window_start and draft.window_end
     assert draft.window_start < draft.window_end
+
+
+# --- persistence／decay（R8-1，design.md §3.9.1）--------------------------
+
+
+def test_relative_metrics_is_long_persistence():
+    """雙幣相對強弱是結構性比較，緩慢變化——跟 CME COT／供給節奏日曆同一類。"""
+    draft = compute_relative_metrics("BTC", "ETH")
+    assert draft.persistence == Persistence.LONG
+    assert draft.decay == DecayPattern.SLOW
+
+
+@pytest.mark.asyncio
+async def test_funding_rate_persistence_diverges_from_horizon(logger):
+    """design.md §3.9.1 的典型案例：funding rate 的 horizon_class 是 medium
+    （90 筆×8h≈30 天觀察窗），但 persistence 是 short（訊號 1-3 天內就衰減）——
+    這兩個維度刻意不同，證明 persistence 不是 horizon_class 的別名。"""
+    mock_get, mock_post = _build_router()
+    collector = DerivativesCollector(logger)
+
+    with patch("agent.collectors.derivatives.httpx.AsyncClient") as cls:
+        cls.return_value = _patched_client(mock_get, mock_post)
+        evidences = await collector.fetch("BTC")
+
+    funding = next(e for e in evidences if "資金費率擁擠度" in e.related_claim)
+    assert funding.horizon_class == HorizonClass.MEDIUM
+    assert funding.persistence == Persistence.SHORT
+    assert funding.decay == DecayPattern.FAST
+    assert funding.persistence.value != funding.horizon_class.value
+
+
+@pytest.mark.asyncio
+async def test_cme_cot_persistence_matches_horizon(logger):
+    """CME COT 是 design.md 明列案例：horizon=long、persistence=long/slow
+    （機構配置型倉位逐週緩慢調整，兩個維度一致，不是每個子來源都會分歧）。"""
+    mock_get, mock_post = _build_router()
+    collector = DerivativesCollector(logger)
+
+    with patch("agent.collectors.derivatives.httpx.AsyncClient") as cls:
+        cls.return_value = _patched_client(mock_get, mock_post)
+        evidences = await collector.fetch("BTC")
+
+    cot = next(e for e in evidences if "CME 期貨機構淨倉位" in e.related_claim)
+    assert cot.horizon_class == HorizonClass.LONG
+    assert cot.persistence == Persistence.LONG
+    assert cot.decay == DecayPattern.SLOW
+
+
+@pytest.mark.asyncio
+async def test_social_persistence_is_short_fast(logger):
+    """社群情緒最短命：horizon=short、persistence=short/fast，兩個維度一致。"""
+    async def mock_get(url, **kwargs):
+        return _resp(text=_RSS_FIXTURE)
+
+    collector = SocialCollector(logger)
+    with (
+        patch("agent.collectors.social.httpx.AsyncClient") as cls,
+        patch("agent.collectors.social.RSS_INTER_REQUEST_DELAY", 0),
+    ):
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC")
+
+    assert evidences
+    for ev in evidences:
+        assert ev.persistence == Persistence.SHORT
+        assert ev.decay == DecayPattern.FAST
+
+
+@pytest.mark.asyncio
+async def test_news_persistence_is_medium_slow(logger):
+    """官方公告 persistence=medium/slow，跟 horizon_class 一致（design.md 明列案例）。"""
+    async def mock_get(url, **kwargs):
+        return _resp(text=RSS_SAMPLE)
+
+    collector = NewsCollector(logger)
+    with patch("agent.collectors.news.httpx.AsyncClient") as cls:
+        cls.return_value = _client(get=mock_get)
+        evidences = await collector.fetch("BTC")
+
+    assert evidences
+    for ev in evidences:
+        assert ev.persistence == Persistence.MEDIUM
+        assert ev.decay == DecayPattern.SLOW
+
+
+@pytest.mark.asyncio
+async def test_onchain_total_supply_persistence_diverges_from_horizon(logger):
+    """鏈上總供給量是另一個「horizon≠persistence」案例：標註的是快照時間點
+    （spot），但總供給量本身是結構性緩慢變化的數字（增發/銷毀遠慢於價格波動），
+    不套用「spot=short/fast」的通用模式。直接呼叫 `_fetch_evm()`——比重建整條
+    `fetch()` 的 settings/coin_map 依賴鏈更聚焦。"""
+    async def mock_get(url, **kwargs):
+        return _resp({"result": "120000000000000000000000000"})
+
+    async def mock_post(url, **kwargs):
+        return _resp({"result": "0x1"})  # eth_blockNumber／eth_gasPrice 走 POST
+
+    collector = OnchainCollector(logger)
+    client = _client(get=mock_get, post=mock_post)
+    evidences = await collector._fetch_evm(
+        client, "ETH", ["https://rpc.example"], "https://api.etherscan.io/api", "dummy_key"
+    )
+
+    supply = next(e for e in evidences if "總供給量" in e.related_claim)
+    assert supply.horizon_class == HorizonClass.SPOT
+    assert supply.persistence == Persistence.LONG
+    assert supply.decay == DecayPattern.SLOW

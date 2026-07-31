@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 
 from agent.collectors.base import BaseCollector
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
 HTTP_TIMEOUT = 20.0
 MAX_ITEMS_PER_SOURCE = 5
@@ -262,6 +262,9 @@ class NewsCollector(BaseCollector):
                                     window_start=window_start,
                                     window_end=window_end,
                                     horizon_class=HorizonClass.MEDIUM,
+                                    # design.md §3.9.1 明列案例：news 官方公告 persistence=medium/slow。
+                                    persistence=Persistence.MEDIUM,
+                                    decay=DecayPattern.SLOW,
                                 )
                             )
                     else:
@@ -288,6 +291,9 @@ class NewsCollector(BaseCollector):
                                     window_start=window_start,
                                     window_end=window_end,
                                     horizon_class=HorizonClass.MEDIUM,
+                                    # design.md §3.9.1 明列案例：news 官方公告 persistence=medium/slow。
+                                    persistence=Persistence.MEDIUM,
+                                    decay=DecayPattern.SLOW,
                                 )
                             )
                 except Exception as exc:  # noqa: BLE001

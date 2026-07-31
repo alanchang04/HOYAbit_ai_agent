@@ -95,6 +95,30 @@ def is_current_signal(horizon: HorizonClass, primary: HorizonClass | None = None
     return HORIZON_ORDER.index(horizon) <= HORIZON_ORDER.index(target)
 
 
+class Persistence(str, Enum):
+    """訊號還有效多久（R8-1，design.md §3.9.1）。
+
+    與 `horizon_class` 回答的是不同問題，不可混為一談：
+    `horizon_class` 是「這筆觀察涵蓋多長的窗」，`persistence` 是「這個訊號
+    還能信多久」。funding 費率百分位觀察窗是 30 天（horizon=medium），但訊號
+    本身 1-3 天後就衰減——現行系統若不分這兩者，會把它跟 30 天新聞覆蓋
+    當成同等份量的證據。
+    """
+
+    SHORT = "short"    # 有效期 ≤7 天（情緒、資金費率極值等易衰減訊號）
+    MEDIUM = "medium"  # 8–30 天
+    LONG = "long"      # >30 天（估值指標、結構性供給等慢變數）
+
+
+class DecayPattern(str, Enum):
+    """訊號失效的方式（R8-1）。與 persistence 是互補資訊：persistence 回答
+    「還能信多久」，decay 回答「失效時是瞬間過期還是逐漸鈍化」。
+    """
+
+    FAST = "fast"  # 事件過後迅速失效（情緒、資金費率極值）
+    SLOW = "slow"  # 逐步衰減（估值指標、結構性供給）
+
+
 class PipelineLayer(str, Enum):
     """信任提煉管線各層標記。"""
 
@@ -167,6 +191,12 @@ class EvidenceDraft(BaseModel):
     window_start: str | None = None
     window_end: str | None = None
     horizon_class: HorizonClass = HorizonClass.SPOT
+
+    # R8-1：訊號有效期與失效方式，由 collector 決定性標註（比照 horizon_class）。
+    # 預設值 medium/slow 是「不確定就保守」——寧可低估某訊號的衰減速度，
+    # 也不要無根據地把它判成 short/fast 而錯誤壓低其份量。
+    persistence: Persistence = Persistence.MEDIUM
+    decay: DecayPattern = DecayPattern.SLOW
 
     @field_validator("fetched_at")
     @classmethod

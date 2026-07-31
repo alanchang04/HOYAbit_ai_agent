@@ -484,14 +484,14 @@ Phase 6（語氣模板）── 完全獨立，只依賴 Phase 5 的報告結構
 > 排序原則：9.1→9.3 是地基與最高價值（同時解掉 vic code review 的發現）；
 > 9.6 成本最高、價值最低，時間不夠時**第一個砍它**。
 
-- [ ] **9.1** `agent/schemas.py` 新增 `Persistence`／`DecayPattern` 兩個列舉與
+- [x] **9.1** `agent/schemas.py` 新增 `Persistence`／`DecayPattern` 兩個列舉與
   `EvidenceDraft` 的兩個對應欄位（design.md §3.9.1）
   - 皆給預設值（`persistence=MEDIUM`／`decay=SLOW`），舊 `evidence.json` 要能載入
   - **不要**把 `persistence` 跟 `horizon_class` 合併——它們回答不同問題，
     合併就是把這次要修的概念混淆再犯一次
   - _Requirements: R8-1_
 
-- [ ] **9.2** 依 design.md §3.9.1 對照表為各 collector 的子來源標註兩個新欄位
+- [x] **9.2** 依 design.md §3.9.1 對照表為各 collector 的子來源標註兩個新欄位
   - ⚠ 最能體現差異的是 funding 費率百分位：`horizon=medium` 但 `persistence=short`
   - 比照 `tests/test_collectors_horizon.py` 的作法補逐項斷言
   - _Requirements: R8-1_

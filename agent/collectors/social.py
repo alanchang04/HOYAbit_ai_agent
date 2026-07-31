@@ -24,7 +24,7 @@ import httpx
 from agent.collectors.base import BaseCollector
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
 HTTP_TIMEOUT = 20.0
 MAX_POSTS_PER_SUBREDDIT = 5
@@ -140,6 +140,10 @@ class SocialCollector(BaseCollector):
                             window_start=window_start,
                             window_end=window_end,
                             horizon_class=HorizonClass.SHORT,
+                            # design.md §3.9.1 明列案例：social 情緒 persistence=short/fast，
+                            # 社群情緒最短命，抓太長會把過期情緒當現況。
+                            persistence=Persistence.SHORT,
+                            decay=DecayPattern.FAST,
                         )
                     )
 
