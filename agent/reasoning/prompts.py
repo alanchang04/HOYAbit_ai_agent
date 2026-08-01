@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 
+from agent.collectors.coin_map import detect_coins_in_text
 from agent.filters.injection import escape_for_prompt, is_quarantined
 from agent.schemas import (
     DEFAULT_PRIMARY_HORIZON,
@@ -65,9 +66,27 @@ def _resolve_bear_framing(question_type: QuestionType, coin: str, coin2: str | N
 
 
 def classify_question_type(question: str) -> QuestionType:
-    """依關鍵字粗略判斷題型；三種題型的推理骨架皆為事實→交叉驗證→推論→結論，
+    """判斷題型；三種題型的推理骨架皆為事實→交叉驗證→推論→結論，
     差異主要在 Step C/D 的框架（比較兩幣種 / 驗證特定陳述 / 綜合市場狀態）。
+
+    **提到兩個以上幣種池成員時一律判 comparison，優先於關鍵字比對。**
+    這條覆寫是 2026-08-01 的實測發現（`JUDGE_TEST_REPORT.md` §13.2）：
+    關鍵字比對是先比中先贏，「SOL 與 XRP 何者在當前宏觀環境下風險敞口較高？」
+    一個 comparison 關鍵字都沒命中，會落回 multi_source——而 orchestrator 的
+    `coin2` 偵測**只在 comparison 分支執行**，結果是拿單一幣種的證據去回答
+    雙幣種的題目。那個錯誤發生在資料蒐集階段，後面的推理與裁判都救不回來。
+
+    命題文件明說「正式題目涵蓋但不限於以下範例題型」，實際題目現場才公布，
+    關鍵字表只認得範例的措辭。而「題目提到兩個幣種」這件事比任何措辭都更能
+    直接反映「這題要比較」，且判錯的代價不對稱：
+    - 漏判（該 comparison 卻沒判）→ 少蒐集一個幣種的資料，無法回答，救不回來。
+    - 誤判（不該 comparison 卻判了）→ 多蒐集一個幣種的資料。framing 只是要求
+      比較兩者，證據齊全，最壞情況是報告多談了一個幣種。
+
+    所以這裡刻意偏向誤判。
     """
+    if len(detect_coins_in_text(question)) >= 2:
+        return "comparison"
     for qtype, keywords in QUESTION_TYPE_KEYWORDS.items():
         for kw in keywords:
             if re.search(kw, question):
