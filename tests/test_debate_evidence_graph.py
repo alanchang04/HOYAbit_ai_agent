@@ -10,6 +10,7 @@ import pytest
 
 from agent.reasoning.prompts import (
     DEBATE_GRAPH_RULE,
+    build_step_b_prompt,
     build_step_c1_bull_prompt,
     build_step_c1_bull_rebuttal_prompt,
     build_step_c2_bear_prompt,
@@ -85,3 +86,12 @@ def test_graph_omits_content_reference():
     graph = format_evidence_graph(_linked_evidences())
     assert "active address" not in graph
     assert "ETF Approval" not in graph
+
+
+def test_step_b_prompt_carries_evidence_graph_and_grounding_instruction():
+    """Step B 交叉驗證層也要看得到關係圖——它就是在產生 consistent_signals／
+    contradictions，圖裡已經有的既定關係應該直接反映，不必重新論證一次。"""
+    prompt = build_step_b_prompt("BTC", "分析 BTC", _linked_evidences(), facts=[])
+    assert "ev-001 ── supports ──▶ ev-002" in prompt
+    assert "ev-001 ── conflicts ──▶ ev-003" in prompt
+    assert "屬既有知識庫紀錄的既定關係" in prompt

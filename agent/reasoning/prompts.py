@@ -546,12 +546,16 @@ def build_step_b_prompt(
 
 原始證據清單（供比對細節）：
 {_format_evidence_list(evidences, question_type, primary_horizon)}
-
+{_evidence_graph_section(evidences)}
 請執行【交叉驗證層】分析，輸出**三段**：
 1. consistent_signals：多個獨立來源指向同一方向的一致訊號。
    若多筆證據其實引用同一篇文章或同一原始資料，請註明「非獨立來源」以避免重複計算可信度。
+   若上方附有「證據關係圖」，圖中標示 supports 的證據對，屬既有知識庫紀錄的既定關係，
+   應直接反映進這裡，不需重新論證；圖裡沒有列出的關係仍要你自行判斷，不可因為圖不完整
+   就略過其餘證據間的一致性。
 2. contradictions：**真正的矛盾訊號**。只有「同一 horizon 帶內」{contradiction_scope}的
    方向衝突才算矛盾。{contradiction_caveat}
+   同理，證據關係圖中標示 conflicts 的證據對，只要落在上述範圍內，必須列入這裡，不可省略。
 {structural_instruction}
 
 另外輸出 direction_matrix：各 source_type 對市場方向的表態。
