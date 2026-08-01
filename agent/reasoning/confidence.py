@@ -48,9 +48,110 @@ WEIGHT_STRENGTH = 0.2
 DEBATE_ADJUSTMENT_MIN = -15
 DEBATE_ADJUSTMENT_MAX = 5
 
+# 逐點判定 → 分數（2026-08-01 新增）。
+#
+# 背景：讓裁判直接吐一個 -15~+5 的整數，實測在真實區間內幾乎沒有鑑別力。同一份輸入
+# 重打 5 次全是 −3；換三種題型、四種幣種全是 −3；把「反方打中兩項」削成「打中一項」
+# 還是 −3。只有把反方整段換成無證據的空話才會翻成 +3。也就是說模型輸出的不是
+# 「這場辯論值多少分」，而是「要調一點點」這個念頭，方向對、幅度沒有解析度
+# （±3 是它的「中等調整」代號，兩個方向都停在 3）。
+#
+# 改法：裁判本來就已經逐點判定攻防結果（debate_summary），改成每點附一個 verdict，
+# 由程式加總。分數來自可稽核的逐項判定，而不是模型對一個抽象數字的整體感覺；
+# 逐點判定也留在報告裡，讀者能自己驗算，符合 ADR-5 的可解釋訴求。
+#
+# 級距設計：debate_summary 要求 3-5 點，5 × (-3) = -15 = 下限，5 × (+1) = +5 = 上限，
+# 兩端剛好對齊既有的不對稱範圍，不需另外定義夾值語意。
+VERDICT_SCORES: dict[str, int] = {
+    "bear_valid": -3,      # 反方批評成立且正方未有效回應
+    "bear_partial": -1,    # 反方批評部分成立／雙方各有道理
+    "draw": 0,             # 打平、或該點未分出勝負
+    "bull_defended": 1,    # 正方擋下批評、論點通過壓力測試
+}
+
+# 模型不保證回 ASCII enum，中文同義詞一併認（寬鬆度與 `_coerce_adjustment()`、
+# `pipeline._coerce_bool()` 對齊，避免同一條推理鏈上兩套標準）。
+_VERDICT_ALIASES: dict[str, str] = {
+    "反方成立": "bear_valid", "反方勝": "bear_valid", "反方得點": "bear_valid",
+    "反方部分成立": "bear_partial", "部分成立": "bear_partial",
+    "打平": "draw", "平手": "draw", "未分勝負": "draw",
+    "正方擋下": "bull_defended", "正方勝": "bull_defended",
+    "正方得點": "bull_defended", "通過壓力測試": "bull_defended",
+}
+
+
+def coerce_verdict(raw) -> str | None:
+    """把裁判回報的逐點判定收斂成 VERDICT_SCORES 的鍵；無法判讀時回 None。"""
+    if not isinstance(raw, str):
+        return None
+    token = raw.strip().strip("\"'").lower()
+    if token in VERDICT_SCORES:
+        return token
+    return _VERDICT_ALIASES.get(raw.strip())
+
+
+def tally_debate_verdicts(debate_summary) -> tuple[int | None, dict[str, int]]:
+    """把 debate_summary 的逐點判定加總成調整值。
+
+    回傳 `(未夾值的加總, 各判定計數)`。**一點有效判定都沒有時回 `(None, {})`**，
+    讓上層退回舊的「裁判自報整數」路徑——而不是回 0。這個區別很重要：
+    fallback 路徑（無辯論）的 debate_summary 本來就是空陣列，回 0 會讓報告寫成
+    「裁判未提供有效的調整值」，讀起來像模型沒答，但實際上是這次根本沒有辯論。
+    """
+    counts: dict[str, int] = {}
+    if not isinstance(debate_summary, list):
+        return None, counts
+    for item in debate_summary:
+        if not isinstance(item, dict):
+            continue
+        verdict = coerce_verdict(item.get("verdict"))
+        if verdict is None:
+            # 判讀不出來時不丟棄整點，計為 draw（0 分，不影響分數）——
+            # 與本檔其他地方一致的降級優先（R6-1）。
+            verdict = "draw"
+        counts[verdict] = counts.get(verdict, 0) + 1
+    if not counts:
+        return None, counts
+    return sum(VERDICT_SCORES[v] * n for v, n in counts.items()), counts
+
+
+def format_verdict_tally(counts: dict[str, int]) -> str:
+    """把計數攤成一行可讀說明，放進報告的信心分項表格。"""
+    labels = {
+        "bear_valid": "反方批評成立", "bear_partial": "反方部分成立",
+        "draw": "打平", "bull_defended": "正方擋下",
+    }
+    parts = [
+        f"{labels[v]} {counts[v]} 點 × {VERDICT_SCORES[v]:+d}"
+        for v in ("bear_valid", "bear_partial", "draw", "bull_defended")
+        if counts.get(v)
+    ]
+    return "；".join(parts)
+
 # 最終分數夾值
 SCORE_MIN = 5
 SCORE_MAX = 95
+
+# 信心等級門檻（2026-08-01 新增）。在此之前「79%」來自本檔的決定性公式、「（中）」
+# 來自 LLM 在 Step D 自報的 confidence 欄位，兩者掛在報告同一行卻沒有任何一致性檢查——
+# 理論上可以印出「信心：92%（低）」而無人示警。實測也證明兩者脫鉤：把辯論的反方換成
+# 無證據的空話後，debate_adjustment 從 −3 翻到 +3，LLM 自報的等級仍是「中」，一動也沒動。
+#
+# 門檻取 80／60 的理由：這組值讓 2026-08-01 三題實跑（79／78／74）的顯示等級與 LLM
+# 當時自報的「中／中／中」完全一致——也就是說，這個改動不改變既有輸出的呈現，
+# 只是把它變成可複現的。與 ADR-5「拿掉 LLM 自報信心」的方向一致；
+# LLM 的 confidence 欄位仍保留在 JSON 中，只是不再作為顯示來源，兩者分歧時另行揭露。
+CONFIDENCE_TIER_HIGH = 80
+CONFIDENCE_TIER_MEDIUM = 60
+
+
+def confidence_label(score: int | float) -> str:
+    """由決定性分數推等級。同分數必同等級，不呼叫 LLM。"""
+    if score >= CONFIDENCE_TIER_HIGH:
+        return "高"
+    if score >= CONFIDENCE_TIER_MEDIUM:
+        return "中"
+    return "低"
 
 # 樣本不足以談共識時的中性值（R3-15 也用這個值）
 CONSENSUS_NEUTRAL = 50.0
@@ -256,6 +357,7 @@ def compute_confidence(
     debate_adjustment=None,
     debate_adjustment_reason: str = "",
     primary_horizon: HorizonClass | None = None,
+    debate_summary: list[dict] | None = None,
 ) -> tuple[int, dict]:
     """計算 L5 信心分數，回傳 (score, breakdown)。
 
@@ -272,9 +374,25 @@ def compute_confidence(
     strength, strength_detail = compute_evidence_strength(evidences)
 
     base = WEIGHT_DATA * data_conf + WEIGHT_CONSENSUS * consensus + WEIGHT_STRENGTH * strength
-    adjustment, raw_adjustment, clamp_note = _clamp_debate_adjustment(
-        debate_adjustment, debate_adjustment_reason
-    )
+
+    # 優先用裁判的逐點判定加總；一點有效判定都沒有（fallback 路徑／舊格式）才退回
+    # 「裁判自報一個整數」的舊路徑。
+    tally, verdict_counts = tally_debate_verdicts(debate_summary)
+    if tally is None:
+        adjustment, raw_adjustment, clamp_note = _clamp_debate_adjustment(
+            debate_adjustment, debate_adjustment_reason
+        )
+        adjustment_source = "llm_scalar"
+    else:
+        raw_adjustment = tally
+        adjustment = max(DEBATE_ADJUSTMENT_MIN, min(DEBATE_ADJUSTMENT_MAX, tally))
+        clamp_note = (
+            f"原始加總 {tally} 超出 [{DEBATE_ADJUSTMENT_MIN}, {DEBATE_ADJUSTMENT_MAX}]，已夾值"
+            if adjustment != tally
+            else ""
+        )
+        adjustment_source = "verdict_tally"
+
     final = max(SCORE_MIN, min(SCORE_MAX, round(base + adjustment)))
 
     breakdown = {
@@ -294,6 +412,9 @@ def compute_confidence(
         "debate_adjustment_raw": raw_adjustment,
         "debate_adjustment_reason": debate_adjustment_reason or "",
         "debate_adjustment_note": clamp_note,
+        "debate_adjustment_source": adjustment_source,
+        "debate_verdict_counts": verdict_counts,
+        "debate_verdict_detail": format_verdict_tally(verdict_counts),
         "primary_horizon": (primary_horizon or DEFAULT_PRIMARY_HORIZON).value,
         "structural_context_count": len(cross_validation.get("structural_context", []) or []),
         "final": final,
@@ -348,10 +469,13 @@ def build_why_lines(breakdown: dict) -> list[str]:
     # why 是條列摘要，理由過長會把整份清單淹掉（實測 LLM 回過 700+ 字的評析）。
     # 這裡截短，完整理由由報告層另外整段呈現。
     reason = _summarize_reason(breakdown.get("debate_adjustment_reason", ""))
+    # 逐點判定加總時，分數怎麼來的比裁判的散文理由更有稽核價值——讀者可以自己驗算。
+    detail = breakdown.get("debate_verdict_detail", "")
+    basis = f"{detail}（{reason}）" if detail else reason
     if adjustment < 0:
-        lines.append(f"⚠ 辯論後下修 {abs(adjustment)} 分：{reason}")
+        lines.append(f"⚠ 辯論後下修 {abs(adjustment)} 分：{basis}")
     elif adjustment > 0:
-        lines.append(f"✅ 辯論後上修 {adjustment} 分：{reason}")
+        lines.append(f"✅ 辯論後上修 {adjustment} 分：{basis}")
 
     structural_count = breakdown.get("structural_context_count", 0)
     if structural_count:

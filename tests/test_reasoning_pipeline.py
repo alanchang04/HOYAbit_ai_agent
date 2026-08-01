@@ -429,20 +429,26 @@ class TestSanitizeDebateSummary:
         return _sanitize_debate_summary(raw, set(known_ids))
 
     def test_valid_items_pass_through(self):
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}
+        ]
 
     def test_hallucinated_evidence_id_is_stripped_not_whole_item(self):
         """幻覺 id 只濾掉那個 id，這個攻防重點本身仍保留（有 point 就有價值）。"""
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "draw"}
+        ]
 
     def test_missing_point_drops_only_that_item(self):
         raw = [
             {"evidence_ids": ["ev-001"]},  # 缺 point，整條丟棄
-            {"point": "重點二", "evidence_ids": ["ev-002"]},
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"},
         ]
-        assert self._sanitize(raw) == [{"point": "重點二", "evidence_ids": ["ev-002"]}]
+        assert self._sanitize(raw) == [
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"}
+        ]
 
     def test_empty_point_string_is_dropped(self):
         raw = [{"point": "   ", "evidence_ids": []}]
@@ -453,9 +459,23 @@ class TestSanitizeDebateSummary:
         assert self._sanitize(None) == []
 
     def test_non_dict_item_is_skipped(self):
-        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": []}]
-        assert self._sanitize(raw) == [{"point": "有效重點", "evidence_ids": []}]
+        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}
+        ]
 
     def test_missing_evidence_ids_defaults_to_empty_list(self):
         raw = [{"point": "沒引用證據的重點"}]
-        assert self._sanitize(raw) == [{"point": "沒引用證據的重點", "evidence_ids": []}]
+        assert self._sanitize(raw) == [
+            {"point": "沒引用證據的重點", "evidence_ids": [], "verdict": "draw"}
+        ]
+
+    def test_unreadable_verdict_falls_back_to_draw(self):
+        """verdict 判讀不出來時計為 draw（0 分），不丟棄整點——降級優先（R6-1）。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "很嚴重"}]
+        assert self._sanitize(raw)[0]["verdict"] == "draw"
+
+    def test_chinese_verdict_alias_is_accepted(self):
+        """模型不保證回 ASCII enum，中文同義詞一併認。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "反方成立"}]
+        assert self._sanitize(raw)[0]["verdict"] == "bear_valid"
