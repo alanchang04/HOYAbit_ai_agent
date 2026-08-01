@@ -7,11 +7,12 @@
 
 | 項目 | 值 |
 |---|---|
-| Tag | `v1.0` |
-| Commit | `582652f` |
+| Tag | **`v1.1`**（回退請用這個；`v1.0` 缺一個會讓 demo 卡死的修正） |
+| Commit | `ac94bc3` |
 | 保護分支 | `release/v1`（與 tag 同點，供 v1 熱修） |
 | 部署位置 | http://52.33.16.251/ （EC2 `i-0f7f925714b7e2b30`，us-west-2） |
-| 驗收狀態 | 675 測試通過；命題三題型皆經真實 Bedrock 驗證 |
+| 驗收狀態 | 676 測試通過；命題三題型皆經真實 Bedrock 驗證 |
+| 雲端實測 | 真實執行 215 秒／信心 75／四份交付檔完整（run `07d66ed7`） |
 
 `v1.0` 是 **annotated tag**，內容不可變。就算 `main` 被 v2 寫爛、分支被刪，
 `git checkout v1.0` 永遠拿得回這份程式碼與當時的 `raw_data/`（資料已納入版控）。
@@ -23,7 +24,7 @@
 v2 開發期間評審或隊友要看 demo，但 `main` 上是半成品：
 
 ```bash
-python scripts/deploy_ec2.py --ref v1.0     # 回到 v1
+python scripts/deploy_ec2.py --ref v1.1     # 回到 v1
 python scripts/deploy_ec2.py --status       # 確認機器現在跑哪一版
 python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 ```
@@ -36,7 +37,7 @@ python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 ```bash
 git checkout release/v1        # 直接在 v1 基礎上繼續
 # 或把 main 拉回 v1：
-git push origin v1.0:main --force-with-lease
+git push origin v1.1:main --force-with-lease
 ```
 
 用 `--force-with-lease` 而非 `--force`：若期間有人推了東西上去，
