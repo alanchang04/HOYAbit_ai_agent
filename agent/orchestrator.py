@@ -39,6 +39,12 @@ from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass,
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 
+# 從硬性上限扣掉、留給「推理結束後的收尾」的時間：報告組裝、evidence.json 與
+# report_view.json 寫檔、引用檢查。這些都是本機運算沒有網路，實測都在 1 秒內，
+# 但 15 分鐘是硬性上限（命題文件執行限制第 1 條：超時主辦方可停止執行或不採計
+# 產出），所以推理層拿到的 deadline 要比真正的截止早一點，不能剛好用滿。
+REPORT_RESERVE_SECONDS = 20
+
 
 @dataclass
 class RunResult:
@@ -350,6 +356,7 @@ def run_pipeline(
         reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2, logger=logger)
     else:
         llm_client = build_llm_client(settings)
+        reasoning_deadline = start_time + settings.hard_deadline_seconds - REPORT_RESERVE_SECONDS
         logger.log(
             phase=LogPhase.REASON,
             action="llm_backend",
@@ -360,7 +367,7 @@ def run_pipeline(
         # Step A/B 在它之前、Step D 在它之後，都可能因為單次呼叫卡住而把整跑拖過 15 分鐘
         # （2026-08-01 實測 step_a_facts 卡了 1020s）。重試也要留下紀錄，否則下次一樣難查。
         if hasattr(llm_client, "deadline"):
-            llm_client.deadline = start_time + settings.hard_deadline_seconds
+            llm_client.deadline = reasoning_deadline
         if hasattr(llm_client, "on_retry"):
             llm_client.on_retry = lambda detail: logger.log(
                 phase=LogPhase.REASON,
@@ -371,7 +378,7 @@ def run_pipeline(
         try:
             reasoning_result = run_reasoning(
                 coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
-                deadline=start_time + settings.hard_deadline_seconds,
+                deadline=reasoning_deadline,
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
