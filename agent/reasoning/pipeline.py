@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 
 from agent.collectors.horizon import resolve_primary_horizon
+from agent.filters.injection import is_quarantined
 from agent.logging_utils import ExecutionLogger
 from agent.reasoning.confidence import compute_confidence, coerce_verdict
 from agent.reasoning.llm_client import LLMClient
@@ -60,6 +61,49 @@ def _remaining(deadline: float | None) -> float | None:
     return None if deadline is None else deadline - time.monotonic()
 
 
+def _log_l3_metrics(
+    logger: ExecutionLogger | None, evidences: list[Evidence], facts: list[dict]
+) -> None:
+    """記錄 L3 事實提取層的量化指標（input／kept／removed／removal_rate）。
+
+    **被注入隔離的證據不計入 input**：它們根本沒送進 Step A，模型沒有機會引用，
+    把它們算成「事實層剔除」會同時做錯兩件事——把 L2 資安層的處置記到 L3 頭上，
+    並灌高 `noise_removal_rate` 這個對外的品質指標。隔離筆數改記在同一則 log 的
+    `quarantined` 欄位，對帳時看得到差額從哪來。
+    """
+    if not logger:
+        return
+    scored_ids = {e.id for e in evidences if not is_quarantined(e)}
+    quarantined = len(evidences) - len(scored_ids)
+    input_count = len(scored_ids)
+    kept_ids: set[str] = set()
+    for f in facts:
+        kept_ids.update(f.get("evidence_ids", []))
+    # 只認在分母裡的 id：隔離筆數已排除在 input 之外，若讓它出現在分子，
+    # removal_rate 會算出負數。
+    kept_count = len(kept_ids & scored_ids)
+    removed_count = input_count - kept_count
+    removal_rate = removed_count / input_count if input_count > 0 else 0.0
+    logger.log(
+        phase=LogPhase.REASON,
+        action="l3_fact_extraction",
+        detail=(
+            f"input={input_count}, kept={kept_count}, removed={removed_count}, "
+            f"rate={removal_rate:.3f}"
+            + (f"（另有 {quarantined} 筆因注入隔離未送入，不計入）" if quarantined else "")
+        ),
+        status=LogStatus.OK,
+        layer=PipelineLayer.FACT,
+        metrics={
+            "input": input_count,
+            "kept": kept_count,
+            "removed": removed_count,
+            "removal_rate": round(removal_rate, 4),
+            "quarantined": quarantined,
+        },
+    )
+
+
 @dataclass
 class ReasoningResult:
     question_type: QuestionType
@@ -95,6 +139,10 @@ def _dry_run_reasoning(
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
+        # 與正式路徑一致：被隔離的證據不進事實層，dry-run 也不例外，
+        # 否則 dry-run 的產出會長得跟正式跑不一樣，測不出真實行為。
+        if is_quarantined(ev):
+            continue
         by_type.setdefault(ev.source_type.value, []).append(ev)
 
     facts = [
@@ -106,22 +154,7 @@ def _dry_run_reasoning(
     ]
 
     # L3 metrics：事實提取層量化
-    if logger:
-        input_count = len(evidences)
-        kept_ids: set[str] = set()
-        for f in facts:
-            kept_ids.update(f.get("evidence_ids", []))
-        kept_count = len(kept_ids)
-        removed_count = input_count - kept_count
-        removal_rate = removed_count / input_count if input_count > 0 else 0.0
-        logger.log(
-            phase=LogPhase.REASON,
-            action="l3_fact_extraction",
-            detail=f"input={input_count}, kept={kept_count}, removed={removed_count}, rate={removal_rate:.3f}",
-            status=LogStatus.OK,
-            layer=PipelineLayer.FACT,
-            metrics={"input": input_count, "kept": kept_count, "removed": removed_count, "removal_rate": round(removal_rate, 4)},
-        )
+    _log_l3_metrics(logger, evidences, facts)
 
     all_ids = [e.id for e in evidences]
     coin_label = f"{coin} 與 {coin2}" if coin2 else coin
@@ -440,7 +473,11 @@ def _real_reasoning(
     logger: ExecutionLogger | None = None,
     deadline: float | None = None,
 ) -> ReasoningResult:
-    known_ids = {e.id for e in evidences}
+    # 可被引用的 id **排除被注入隔離者**。證據清單會誠實揭露「哪幾筆被隔離」
+    # （否則模型會誤以為證據涵蓋度比實際高），但那段揭露文字本身也把 id 送到了
+    # 模型面前——若不在這裡收口，模型引用 ev-00X 時 `_sanitize_ids` 會放行，
+    # 該筆的內容就會經由 report.md 的關鍵依據列重新出現在交付檔裡。
+    known_ids = {e.id for e in evidences if not is_quarantined(e)}
     # 主視野由題目的時間範圍決定（R7-2）：問「最近一年」時 long/structural 才是
     # 當前訊號，五年結構資料不該被排除在共識投票外。未明示時沿用預設 medium。
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
@@ -468,22 +505,7 @@ def _real_reasoning(
     _log("step_a_facts", "ok", f"facts_count={len(facts)}")
 
     # L3 metrics：事實提取層量化
-    if logger:
-        input_count = len(evidences)
-        kept_ids: set[str] = set()
-        for f in facts:
-            kept_ids.update(f.get("evidence_ids", []))
-        kept_count = len(kept_ids)
-        removed_count = input_count - kept_count
-        removal_rate = removed_count / input_count if input_count > 0 else 0.0
-        logger.log(
-            phase=LogPhase.REASON,
-            action="l3_fact_extraction",
-            detail=f"input={input_count}, kept={kept_count}, removed={removed_count}, rate={removal_rate:.3f}",
-            status=LogStatus.OK,
-            layer=PipelineLayer.FACT,
-            metrics={"input": input_count, "kept": kept_count, "removed": removed_count, "removal_rate": round(removal_rate, 4)},
-        )
+    _log_l3_metrics(logger, evidences, facts)
 
     # Step B：交叉驗證層
     step_b_raw = _call_json_step(

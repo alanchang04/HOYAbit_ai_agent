@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.filters.injection import escape_for_markdown
 from agent.filters.source_weights import reputation_appendix_lines
 from agent.reasoning.confidence import confidence_label
 from agent.reasoning.pipeline import ReasoningResult
@@ -358,8 +359,13 @@ def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence]
         for eid in ids:
             ev = ev_lookup.get(eid)
             if ev:
+                # 這一列是 ` | ` 分欄，且 report.md 會被 Web UI 以 markdown 渲染後
+                # `| safe` 輸出——外部來源的內文必須跳脫，否則一個 Reddit 標題就能
+                # 拆掉欄位或在頁面上執行 JS（見 agent/filters/injection.py）。
+                flag = "⚠️[疑似注入內容] " if ev.injection_flag else ""
                 lines.append(
-                    f"  - `{eid}` | {_source_link(ev)} | {ev.fetched_at} | {ev.content_reference}"
+                    f"  - `{eid}` | {_source_link(ev)} | {ev.fetched_at} | "
+                    f"{flag}{escape_for_markdown(ev.content_reference)}"
                 )
     lines.append("")
     return lines
