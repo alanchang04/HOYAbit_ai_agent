@@ -8,6 +8,7 @@ API 額度而失敗，是最穩定的一類 price evidence。
 from __future__ import annotations
 
 import csv
+import json
 import statistics
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -52,12 +53,15 @@ VOL_COMPRESSION_PCTL_WINDOW = 90
 SERIES_WINDOW = 30
 
 # --- 缺口補齊（R1-2，ADR-1 雙軌資料）---
-# 官方 CSV 是長歷史基準，Binance 只補「CSV 末日 → 執行日」這一段供當前訊號帶指標使用。
+# 官方 CSV 是長歷史基準；Coinbase 優先、Binance 缺日備援，只補「CSV 末日 → 執行日」。
 BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_KLINES_LIMIT = 1000
+COINBASE_CANDLES_URL = "https://api.exchange.coinbase.com/products/{product}/candles"
+COINBASE_CANDLES_MAX_DAYS = 290
 # CSV 末日距執行日 <= 1 天視為無缺口，直接跳過補齊（R1-5：主辦方若當日提供新資料集，
 # 這裡自動不觸發，不需要改任何程式或設定）。
 GAP_FILL_TRIGGER_DAYS = 1
+RAW_PRICE_DIR = Path(__file__).resolve().parent.parent.parent / "raw_data" / "price"
 
 
 def load_ohlcv_all(coin: str, data_dir: str) -> list[dict]:
@@ -70,6 +74,60 @@ def load_ohlcv_all(coin: str, data_dir: str) -> list[dict]:
 
 def load_ohlcv_tail(coin: str, data_dir: str, n: int = 14) -> list[dict]:
     return load_ohlcv_all(coin, data_dir)[-n:]
+
+
+def load_verified_extension_cache(
+    coin: str,
+    official_rows: list[dict],
+    raw_price_dir: Path | None = None,
+    today: date | None = None,
+) -> list[dict]:
+    """Return only trusted post-baseline rows from the refreshed local cache.
+
+    Trust requires an update manifest for the coin, an exact official date prefix,
+    matching OHLCV values for that prefix, strictly increasing unique dates, and no
+    open/current-day candle.  A stale or tampered cache raises ValueError so callers
+    can log it and continue with the network gap-fill path.
+    """
+    if not official_rows:
+        return []
+    root = raw_price_dir or RAW_PRICE_DIR
+    path = root / coin / f"{coin}_daily_ohlcv.csv"
+    manifest_path = root / "update_manifest.json"
+    if not path.exists() or not manifest_path.exists():
+        return []
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    coin_manifest = manifest.get("coins", {}).get(coin)
+    if not isinstance(coin_manifest, dict):
+        raise ValueError(f"cache manifest has no {coin} entry")
+    with path.open("r", encoding="utf-8") as handle:
+        cached = list(csv.DictReader(handle))
+    if len(cached) < len(official_rows):
+        raise ValueError("cache is shorter than the official baseline")
+
+    fields = ("date", "open", "high", "low", "close", "volume")
+    for official, candidate in zip(official_rows, cached):
+        if official.get("date") != candidate.get("date"):
+            raise ValueError("cache does not preserve the official date prefix")
+        for field in fields[1:]:
+            try:
+                matches = float(official[field]) == float(candidate[field])
+            except (KeyError, TypeError, ValueError):
+                matches = False
+            if not matches:
+                raise ValueError(f"cache changes official {field} at {official.get('date')}")
+
+    dates = [row.get("date", "") for row in cached]
+    if dates != sorted(set(dates)):
+        raise ValueError("cache dates are not unique and strictly increasing")
+    cutoff = today or utc_today()
+    official_end = official_rows[-1]["date"]
+    extension = [row for row in cached if official_end < row["date"] < cutoff.isoformat()]
+    expected_end = coin_manifest.get("extended_end")
+    if extension and expected_end != extension[-1]["date"]:
+        raise ValueError("cache manifest extended_end does not match the CSV")
+    return extension
 
 
 def klines_to_rows(payload: list, today: date | None = None) -> list[dict]:
@@ -101,6 +159,34 @@ def klines_to_rows(payload: list, today: date | None = None) -> list[dict]:
     return rows
 
 
+def coinbase_candles_to_rows(payload: list, today: date | None = None) -> list[dict]:
+    """Coinbase candles 回應 → 官方 CSV schema，並剔除當日未收盤日 K。
+
+    Coinbase 欄位順序是 `[time, low, high, open, close, volume]`，且通常倒序回傳；
+    這裡統一轉為 UTC 日期升序，供後續接縫與指標邏輯共用。
+    """
+    cutoff = today or utc_today()
+    rows: dict[str, dict] = {}
+    if not isinstance(payload, list):
+        return []
+    for candle in payload:
+        try:
+            day = datetime.fromtimestamp(int(candle[0]), tz=timezone.utc).date()
+            if day >= cutoff:
+                continue
+            rows[day.isoformat()] = {
+                "date": day.isoformat(),
+                "open": str(candle[3]),
+                "high": str(candle[2]),
+                "low": str(candle[1]),
+                "close": str(candle[4]),
+                "volume": str(candle[5]),
+            }
+        except (TypeError, ValueError, IndexError, KeyError, OSError):
+            continue
+    return [rows[key] for key in sorted(rows)]
+
+
 def splice_ohlcv(csv_rows: list[dict], gap_rows: list[dict]) -> list[dict]:
     """併接官方 CSV 與補齊區段，依日期升序輸出。
 
@@ -120,11 +206,16 @@ def gap_days_since(csv_end: str, today: date | None = None) -> int:
         return 0
 
 
-def build_gap_note(csv_end: str, gap_rows: list[dict], gap_days: int) -> str:
+def build_gap_note(
+    csv_end: str,
+    gap_rows: list[dict],
+    gap_days: int,
+    gap_source: str = "Binance 公開日線",
+) -> str:
     """接縫揭露文字（R1-3／R1-4）。無缺口時回空字串。"""
     if gap_rows:
         return (
-            f"｜其中 {gap_rows[0]['date']} 起 {len(gap_rows)} 日採 Binance 公開日線補齊，"
+            f"｜其中 {gap_rows[0]['date']} 起 {len(gap_rows)} 日採 {gap_source}補齊，"
             f"官方基準資料集止於 {csv_end}"
         )
     if gap_days > GAP_FILL_TRIGGER_DAYS:
@@ -545,12 +636,68 @@ class PriceCollector(BaseCollector):
     name = "price_collector"
     source_type = "price"
 
-    async def _fetch_gap_klines(self, client: httpx.AsyncClient, coin: str, since: date) -> list[dict]:
-        """補齊 `since` 起至昨日的日線（R1-2）。任何失敗都回空 list 並記 SKIPPED，
+    async def _fetch_gap_klines(
+        self, client: httpx.AsyncClient, coin: str, since: date
+    ) -> tuple[list[dict], str]:
+        """以 Coinbase 優先、Binance 缺日備援補齊 `since` 起至昨日的日線。
+
+        任何失敗都降級並記 SKIPPED；只有兩個來源合併後完整涵蓋每個 UTC 日，才把
+        接縫交給指標層，避免靜默使用中間缺日的時間序列。
         不拋錯——補齊失敗只該讓分析退回純 CSV，不該讓整條 pipeline 倒（R6-1）。"""
         info = get_coin_info(coin)
+        ticker = info.ticker
+        cutoff = utc_today()
+        expected_dates = {
+            (since + timedelta(days=offset)).isoformat()
+            for offset in range(max(0, (cutoff - since).days))
+        }
+
+        coinbase_rows: dict[str, dict] = {}
+        cursor = since
+        try:
+            while cursor < cutoff:
+                chunk_end = min(cursor + timedelta(days=COINBASE_CANDLES_MAX_DAYS), cutoff)
+                resp = await client.get(
+                    COINBASE_CANDLES_URL.format(product=f"{ticker}-USD"),
+                    params={
+                        "granularity": 86_400,
+                        "start": datetime(
+                            cursor.year, cursor.month, cursor.day, tzinfo=timezone.utc
+                        ).isoformat(),
+                        "end": datetime(
+                            chunk_end.year, chunk_end.month, chunk_end.day, tzinfo=timezone.utc
+                        ).isoformat(),
+                    },
+                )
+                resp.raise_for_status()
+                for row in coinbase_candles_to_rows(resp.json(), today=cutoff):
+                    if cursor.isoformat() <= row["date"] < chunk_end.isoformat():
+                        coinbase_rows[row["date"]] = row
+                cursor = chunk_end
+        except Exception as exc:  # noqa: BLE001
+            self.log_subsource(
+                "coinbase_gap_fill", coin, LogStatus.SKIPPED,
+                f"product={ticker}-USD, error={_exc_text(exc)}",
+            )
+        else:
+            status = LogStatus.OK if coinbase_rows else LogStatus.SKIPPED
+            self.log_subsource(
+                "coinbase_gap_fill", coin, status,
+                f"product={ticker}-USD, 取得 {len(coinbase_rows)} 日",
+            )
+
+        missing_dates = expected_dates - set(coinbase_rows)
+        if not missing_dates:
+            rows = [coinbase_rows[key] for key in sorted(coinbase_rows)]
+            return rows, "Coinbase Exchange USD 公開日線"
+
         symbol = f"{info.ticker}USDT"
-        start_ms = int(datetime(since.year, since.month, since.day, tzinfo=timezone.utc).timestamp() * 1000)
+        fallback_start = min(date.fromisoformat(day) for day in missing_dates)
+        start_ms = int(
+            datetime(
+                fallback_start.year, fallback_start.month, fallback_start.day, tzinfo=timezone.utc
+            ).timestamp() * 1000
+        )
         try:
             resp = await client.get(
                 BINANCE_KLINES_URL,
@@ -562,21 +709,37 @@ class PriceCollector(BaseCollector):
                 },
             )
             resp.raise_for_status()
-            rows = klines_to_rows(resp.json())
         except Exception as exc:  # noqa: BLE001
             self.log_subsource("binance_gap_fill", coin, LogStatus.SKIPPED, f"symbol={symbol}, error={_exc_text(exc)}")
-            return []
-        if not rows:
+            return [], ""
+        binance_rows = klines_to_rows(resp.json(), today=cutoff)
+        binance_by_date = {row["date"]: row for row in binance_rows}
+        if not binance_by_date:
             self.log_subsource(
                 "binance_gap_fill", coin, LogStatus.SKIPPED,
                 f"symbol={symbol}, klines 回傳空序列或僅含當日未收盤 K 棒",
             )
-            return []
+            return [], ""
+
+        merged = dict(binance_by_date)
+        merged.update(coinbase_rows)  # 同日 Coinbase 優先。
+        still_missing = expected_dates - set(merged)
+        if still_missing:
+            self.log_subsource(
+                "binance_gap_fill", coin, LogStatus.SKIPPED,
+                f"symbol={symbol}, 合併後仍缺 {len(still_missing)} 日",
+            )
+            return [], ""
+        rows = [merged[key] for key in sorted(expected_dates)]
         self.log_subsource(
             "binance_gap_fill", coin, LogStatus.OK,
-            f"symbol={symbol}, 補齊 {len(rows)} 日（{rows[0]['date']}~{rows[-1]['date']}）",
+            f"symbol={symbol}, 補足 Coinbase 缺少的 {len(missing_dates)} 日",
         )
-        return rows
+        source = (
+            "Coinbase Exchange USD 公開日線，缺日以 Binance Spot USDT 公開日線"
+            if coinbase_rows else "Binance Spot USDT 公開日線"
+        )
+        return rows, source
 
     async def _build_ohlcv_evidences(
         self, client: httpx.AsyncClient, coin: str, data_dir: str, evidences: list[EvidenceDraft]
@@ -591,14 +754,35 @@ class PriceCollector(BaseCollector):
         gap_days = gap_days_since(csv_end)
 
         gap_rows: list[dict] = []
+        gap_source = ""
         if gap_days > GAP_FILL_TRIGGER_DAYS:
-            gap_rows = await self._fetch_gap_klines(
-                client, coin, date.fromisoformat(csv_end) + timedelta(days=1)
-            )
+            try:
+                gap_rows = load_verified_extension_cache(coin, csv_rows)
+                if gap_rows:
+                    gap_source = "已驗證的 raw_data 價格快取（Coinbase 優先／Binance 缺日備援）"
+                    self.log_subsource(
+                        "price_extension_cache", coin, LogStatus.OK,
+                        f"rows={len(gap_rows)}, end={gap_rows[-1]['date']}",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                self.log_subsource(
+                    "price_extension_cache", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}"
+                )
+
+            cached_end = gap_rows[-1]["date"] if gap_rows else csv_end
+            if gap_days_since(cached_end) > GAP_FILL_TRIGGER_DAYS:
+                network_rows, network_source = await self._fetch_gap_klines(
+                    client, coin, date.fromisoformat(cached_end) + timedelta(days=1)
+                )
+                if network_rows:
+                    gap_rows = splice_ohlcv(gap_rows, network_rows)
+                    gap_source = (
+                        f"{gap_source}，其後以 {network_source}" if gap_source else network_source
+                    )
         # 併接後的序列供當前訊號帶指標使用；長歷史指標仍只吃官方 CSV（R1-8／ADR-1）。
         spliced_rows = splice_ohlcv(csv_rows, gap_rows) if gap_rows else csv_rows
         as_of_date = spliced_rows[-1]["date"]
-        gap_note = build_gap_note(csv_end, gap_rows, gap_days)
+        gap_note = build_gap_note(csv_end, gap_rows, gap_days, gap_source or "公開交易所日線")
 
         indicator_rows = spliced_rows[-INDICATOR_WINDOW:]
         summary_rows = indicator_rows[-14:]

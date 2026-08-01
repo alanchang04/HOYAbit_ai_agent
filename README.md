@@ -89,7 +89,7 @@ docker run --rm --env-file .env hoyabit-agent \
 
 | Collector | 主要來源（免 key） | 備援 / 補充 | 已知限制 |
 |---|---|---|---|
-| price | 主辦方 OHLCV CSV（`data/`）＋ 本地技術指標（SMA/RSI/波動率/量能，純 Python 計算）＋ CoinGecko `/simple/price` | CryptoCompare `/data/pricemultifull` | 無（技術指標為決定性運算，不受網路影響） |
+| price | 主辦方 OHLCV CSV（`data/`）＋已驗證 `raw_data/price/` 快取＋本地技術指標＋CoinGecko `/simple/price` | 快取後仍缺日才依序用 Coinbase Exchange USD、Binance Spot USDT；即時報價用 CryptoCompare | 快取必須保留官方前綴且符合 manifest；當日未收盤 UTC 日 K 一律剔除；官方 CSV 保持不可變 |
 | onchain | BTC: Blockchair／ETH: publicnode EVM RPC／BNB: bsc-dataseed RPC／SOL: Solana 公開 RPC／XRP: XRPL 公開 JSON-RPC | Etherscan/BscScan（需免費 key，補充總供給量） | 免 key 端點僅提供區塊高度、Gas、TPS 等網路層指標，非地址級鏈上活躍度，如需更細緻指標建議申請 Etherscan/BscScan key |
 | news | 每幣官方發布源：BTC Bitcoin Optech Newsletter／ETH Ethereum Foundation Blog／SOL Solana Foundation News（皆 RSS）／BNB BNB Chain Blog／XRP Ripple Insights（無 RSS，退階 HTML 解析） | 無 | 2026-07-20 起改為官方源優先，不再用 CoinDesk/Cointelegraph/CryptoPanic 第三方聚合；BNB/XRP 無官方 RSS，HTML 結構若改版會失效；BTC 無單一官方實體，只有 Optech 一條技術公告管道 |
 | social | Reddit `r/<subreddit>/search.json` | 無 | **已知限制：Reddit 會封鎖部分雲端/機房 IP（回傳 403），與 User-Agent 無關。** 若比賽現場網路環境被封鎖，此來源會被標記 skipped，報告中需揭露社群資料缺失 |

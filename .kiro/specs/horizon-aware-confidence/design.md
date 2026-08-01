@@ -44,6 +44,11 @@
 
 ### ADR-1：雙軌資料（保留官方 CSV 為基準，Binance 補缺口）
 
+> **2026-08-01 資料源修訂**：延伸日線改為 Coinbase Exchange USD 優先，只有
+> Coinbase 不可用或缺少完整 UTC 日線時才以 Binance Spot USDT 補日；下文保留的
+> 「Binance 補缺口」是本 ADR 最初版本的歷史描述。官方 CSV 不可變、當日未收盤
+> K 棒剔除、CSV 同日優先等核心決策不變。
+
 **決策**：官方 CSV 作為長歷史基準（`long`/`structural` 指標的唯一來源），
 Binance 公開日線僅補「CSV 末日 → 執行日」的缺口，供 `medium` 帶指標使用。
 

@@ -1,43 +1,29 @@
 {
   "coin": "SOL",
-  "mention_count": 5,
+  "mention_count": 3,
   "items": [
     {
       "feed": "NEWS",
-      "title": "Across Protocol 攻击者退回331.8枚ETH被黑资金至以太坊多签",
-      "summary": "PANews 7月28日消息，据PeckShield 称，Across Protocol 此前在 Solana 上遭攻击，约360万美元加密资产被转出。最新链上数据显示，攻击者标记地址已向 Across Protocol Hub Pool Owner 多签地址退回331.8枚 ETH，价值约624万美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa80d-44ca-768b-b37d-ab6a79ad011d",
-      "published": "Tue, 28 Jul 2026 09:25:00 GMT"
+      "title": "美国 SOL 现货 ETF 单日净流入 39.54 万美元",
+      "summary": "PANews 8月1日消息，据 SoSoValue 数据，昨日（美东时间 7 月 31 日）SOL 现货 ETF 单日总净流入 39.54 万美元。 昨日仅 Morgan Stanley Solana Trust(MSOL) 净流入，单日净流入 39.54 万美元，目前历史总净流入达 1985.74 万美元。 截至发稿前，SOL 现货 ETF 总资产净值为 8.60 亿美元，SOL 净资产比率 2.03%，历史累计净流入已达 11.47 亿美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fbb3f-5019-716f-b0ad-42c41f2b4eae",
+      "published": "Sat, 01 Aug 2026 02:55:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "美国SOL现货ETF单日总净流入103.37万美元",
-      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）SOL 现货 ETF 单日总净流入 103.37 万美元。 昨日仅 Bitwise Solana Staking ETF(BSOL) 净流入，单日净流入 103.37 万美元，目前历史总净流入达 9.09 亿美元。 截至发稿前，SOL 现货 ETF 总资产净值为 8.89 亿美元，SOL 净资产比率 2.01%，历史累计净流入已达 11.45 亿美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa67c-6d4b-72bf-be20-f85c64ce9f1c",
-      "published": "Tue, 28 Jul 2026 02:09:00 GMT"
+      "title": "Ark Invest昨日增持约683万美元Circle股票，并买入9.87万美元3iQ Solana Staking ETF",
+      "summary": "PANews 8月1日消息，Cathie Wood 旗下 ARK 方舟基金公布 7 月 31 日交易记录，其通过旗下 ETF 买入 109127 股 Circle（CRCL）股票，按 62.61 美元价格计算，买入价值约 683 万美元。此外，还买入 11784 股 3iQ Solana Staking ETF（SOLQ.U）股票，按 8.33 美元价格计算，价值约 9.8 万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fbabe-3be7-7613-b2cd-a2dab8063023",
+      "published": "Sat, 01 Aug 2026 00:34:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "Ark Invest昨日增持1414万美元SpaceX股票，减持116万美元Robinhood股票",
-      "summary": "PANews 7月28日消息，据ARK Invest官网数据显示，Cathie Wood旗下Ark Invest周一买入124543股SpaceX（SPCX）股票，价值约1414万美元；买入27864股Tesla（TSLA）股票，价值约862万美元；买入20000股Pony AI（PONY）股票，价值约15万美元；买入12772股Kodiak AI（KDK）股票，价值约5万美元；买入4799股3iQ Solana Staking ETF（SOLQ.U）股票，价值约3万美元；卖出12119股Robinhood（HOOD）股票，价值约116万美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa636-fd92-7741-8c3d-76b8e608132c",
-      "published": "Tue, 28 Jul 2026 00:54:00 GMT"
-    },
-    {
-      "feed": "NEWS",
-      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
-      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
-      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
-      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
-    },
-    {
-      "feed": "NEWS",
-      "title": "Bitwise：以太坊、Solana和Avalanche网络更活跃更便宜，即使代币价格下跌",
-      "summary": "PANews 7月28日消息，据The Block报道，以太坊、Solana和Avalanche在过去一年中网络活动增加且使用成本降低，但ETH、SOL和AVAX价格均下跌约50%或更多。Bitwise链上研究主管Kam Benbrik表示，网络基本面与市场情绪出现明显背离——链上活动实际在增长，但协议设计使区块空间更便宜，收入因此大幅下降。 Bitwise首次季度质押报告显示，二季度末以太坊质押量达4,020万枚ETH（占总供应量三分之一），新增质押主要来自机构。",
-      "url": "https://www.panewslab.com/zh/articles/019fa606-c388-719a-bb72-5796cde5c5dc",
-      "published": "Tue, 28 Jul 2026 00:02:00 GMT"
+      "title": "Pump.fun被曝在代币解锁前集中裁员，部分员工损失七位数代币收益",
+      "summary": "PANews 7月31日消息，据Sandmark报道，Solana生态memecoin平台 Pump.fun 在2025年4月初进行裁员，时间点距员工PUMP代币首次解锁仅两个月。联合创始人 Noah Tweedale 在内部会议中称公司“增长过快”，影响快速推进，受影响员工按每服务1个月发放1周薪水作为补偿。根据2025年6月签署的代币授予协议，被裁员工原定在一年后解锁25%代币，其中一名前员工按当前币价本可获得七位数美元收益。前员工称7月中旬出现第二轮裁员，且有人在预定解锁前一天被解雇。",
+      "url": "https://www.panewslab.com/zh/articles/019fb82e-95c1-745b-9cb8-b3eab0c5756f",
+      "published": "Fri, 31 Jul 2026 12:36:00 GMT"
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-28T09:44:52Z"
+  "fetched_at": "2026-08-01T06:15:28Z"
 }

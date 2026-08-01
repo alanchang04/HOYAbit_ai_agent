@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "refresh-price-history-on-session-start",
+      "description": "Refresh complete Coinbase daily candles, use Binance for missing days, and rebuild derived price CSVs.",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "command",
+        "command": "python pipeline/update_price_history.py"
+      },
+      "timeout": 180,
+      "enabled": true
+    }
+  ]
+}
