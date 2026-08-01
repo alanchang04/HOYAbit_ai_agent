@@ -86,21 +86,40 @@ class TestRealRunCooldown:
 
 
 class TestConcurrencyLimit:
+    def setup_method(self):
+        webapp_module._release_run_slot()
+
+    def teardown_method(self):
+        webapp_module._release_run_slot()
+
     def test_only_one_real_run_at_a_time(self):
-        first = webapp_module._real_run_slot.acquire(blocking=False)
-        second = webapp_module._real_run_slot.acquire(blocking=False)
-        try:
-            assert first is True
-            assert second is False, "同時間不該允許兩個真實執行"
-        finally:
-            if first:
-                webapp_module._real_run_slot.release()
-            if second:
-                webapp_module._real_run_slot.release()
+        assert webapp_module._acquire_run_slot() is True
+        assert webapp_module._acquire_run_slot() is False, "同時間不該允許兩個真實執行"
 
     def test_slot_is_released_after_use(self):
-        webapp_module._real_run_slot.acquire(blocking=False)
-        webapp_module._real_run_slot.release()
-        got = webapp_module._real_run_slot.acquire(blocking=False)
-        assert got is True
-        webapp_module._real_run_slot.release()
+        webapp_module._acquire_run_slot()
+        webapp_module._release_run_slot()
+        assert webapp_module._acquire_run_slot() is True
+
+    def test_leaked_slot_self_heals_after_max_run_seconds(self, monkeypatch):
+        """**這是 2026-08-01 線上實際踩到的 bug 的回歸測試。**
+
+        客戶端在執行途中斷線（會場網路很常見）曾讓名額洩漏，之後所有人都拿到
+        「已有分析在執行」而實際上沒有，只能重啟服務。評審時發生等於 demo 直接死。
+        現在超過 MAX_RUN_SECONDS 就視為前一位已消失並自動接手。
+        """
+        base = 1000.0
+        monkeypatch.setattr(webapp_module.time, "monotonic", lambda: base)
+        assert webapp_module._acquire_run_slot() is True
+
+        # 還在執行時間內：後來者仍該被擋
+        monkeypatch.setattr(
+            webapp_module.time, "monotonic", lambda: base + webapp_module.MAX_RUN_SECONDS - 1
+        )
+        assert webapp_module._acquire_run_slot() is False
+
+        # 超過上限：視為洩漏，自動接手，不需人工重啟
+        monkeypatch.setattr(
+            webapp_module.time, "monotonic", lambda: base + webapp_module.MAX_RUN_SECONDS + 1
+        )
+        assert webapp_module._acquire_run_slot() is True

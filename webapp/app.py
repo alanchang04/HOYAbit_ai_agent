@@ -43,7 +43,32 @@ MAX_QUESTION_CHARS = 300
 
 # 同時間只准一個真實執行。t3.small 跑一次就吃滿，並發只會讓大家一起逾時，
 # 不如讓後來者拿到明確的「稍後再試」而不是轉圈圈轉到斷線。
-_real_run_slot = threading.Semaphore(1)
+#
+# **用「持有者開始時間」而不是 Semaphore**：2026-08-01 實測踩到——用 Semaphore 時，
+# 客戶端在執行途中斷線（會場網路很常見）會讓名額洩漏，之後**所有人**都拿到
+# 「已有分析在執行」而實際上沒有，只能重啟服務才能恢復。評審時發生等於 demo 直接死。
+# 改記下開始時間後，超過上限就視為前一位已經不在，自動接手——會自癒，不需人工介入。
+MAX_RUN_SECONDS = 900  # 命題硬性上限即 15 分鐘，超過必然已結束或已失敗
+_active_run_started_at: float | None = None
+_slot_lock = threading.Lock()
+
+
+def _acquire_run_slot() -> bool:
+    """取得真實執行名額。前一位超過 MAX_RUN_SECONDS 未釋放時視為已消失並接手。"""
+    global _active_run_started_at
+    now = time.monotonic()
+    with _slot_lock:
+        started = _active_run_started_at
+        if started is not None and (now - started) < MAX_RUN_SECONDS:
+            return False
+        _active_run_started_at = now
+        return True
+
+
+def _release_run_slot() -> None:
+    global _active_run_started_at
+    with _slot_lock:
+        _active_run_started_at = None
 
 # 同一 IP 兩次真實執行的間隔。評審看完一次結果再想下一題不只五分鐘，
 # 但足以擋掉自動化連打。
@@ -142,7 +167,7 @@ def analyze(
         guard = _check_real_run_allowed(ip)
         if guard is None:
             # 拿不到名額就直接回覆，不要排隊等——排隊只會讓瀏覽器等到斷線
-            acquired = _real_run_slot.acquire(blocking=False)
+            acquired = _acquire_run_slot()
             if not acquired:
                 _clear_cooldown(ip)  # 沒真的跑到，不該扣掉這次配額
                 guard = (
@@ -169,7 +194,7 @@ def analyze(
             error = f"{type(exc).__name__}: {exc}"
         finally:
             if acquired:
-                _real_run_slot.release()
+                _release_run_slot()
 
     # 報告分頁改為排版化 HTML 顯示（僅供 Web UI 呈現，report.md 交付檔本身不受影響）
     report_html: str = ""
