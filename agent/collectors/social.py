@@ -21,7 +21,7 @@ from xml.etree import ElementTree
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import window_back
 from agent.schemas import (
@@ -140,7 +140,7 @@ class SocialCollector(BaseCollector):
                             await asyncio.sleep(RSS_INTER_REQUEST_DELAY)
                         items = await self._fetch_via_rss(client, coin, subreddit, info.name, reddit_t)
                 except Exception as exc:  # noqa: BLE001
-                    self.log_subsource(f"reddit_{subreddit}", coin, LogStatus.ERROR, f"error={exc}")
+                    self.log_subsource(f"reddit_{subreddit}", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
                     continue
 
                 if not items:

@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.horizon import window_back
 from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
@@ -197,7 +197,7 @@ class DerivativesCollector(BaseCollector):
                     if ev is not None:
                         evidences.append(ev)
                 except Exception as exc:  # noqa: BLE001 - 單一子來源失敗不影響其他子來源
-                    self.log_subsource(sub_name, coin, LogStatus.ERROR, f"error={exc}")
+                    self.log_subsource(sub_name, coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         return evidences
 

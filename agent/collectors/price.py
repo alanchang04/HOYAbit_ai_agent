@@ -14,7 +14,7 @@ from pathlib import Path
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import utc_today
 from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
@@ -564,7 +564,7 @@ class PriceCollector(BaseCollector):
             resp.raise_for_status()
             rows = klines_to_rows(resp.json())
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("binance_gap_fill", coin, LogStatus.SKIPPED, f"symbol={symbol}, error={exc}")
+            self.log_subsource("binance_gap_fill", coin, LogStatus.SKIPPED, f"symbol={symbol}, error={_exc_text(exc)}")
             return []
         if not rows:
             self.log_subsource(
@@ -728,7 +728,7 @@ class PriceCollector(BaseCollector):
             try:
                 await self._build_ohlcv_evidences(client, coin, data_dir, evidences)
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("ohlcv_csv", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("ohlcv_csv", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             # --- 即時報價：CoinGecko（免 key），失敗則退 CryptoCompare（免 key）---
             try:
@@ -762,7 +762,7 @@ class PriceCollector(BaseCollector):
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("coingecko", coin, LogStatus.SKIPPED, f"error={exc}, fallback=cryptocompare")
+                self.log_subsource("coingecko", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}, fallback=cryptocompare")
                 try:
                     resp = await client.get(
                         "https://min-api.cryptocompare.com/data/pricemultifull",
@@ -821,6 +821,6 @@ class PriceCollector(BaseCollector):
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("perp_basis", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("perp_basis", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         return evidences

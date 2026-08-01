@@ -66,3 +66,29 @@ def test_single_failure_does_not_block_other_collectors(tmp_path):
     assert len(good_result) > 0
     assert bad_result == []
     assert hanging_result == []
+
+
+# --- 錯誤訊息可讀性（2026-08-01 賽場網路壅塞時發現）---
+
+
+class TestExceptionText:
+    """`str(exc)` 對連線類例外常常是空的，log 只留 `error=` 什麼也看不出來。
+
+    網路不穩的當下正是最需要診斷資訊的時候，所以一律帶上型別名。
+    """
+
+    def test_includes_type_when_message_empty(self):
+        from agent.collectors.base import _exc_text
+        import httpx
+
+        assert _exc_text(httpx.ConnectError("")) == "ConnectError"
+
+    def test_includes_both_type_and_message(self):
+        from agent.collectors.base import _exc_text
+
+        assert _exc_text(ValueError("bad input")) == "ValueError: bad input"
+
+    def test_whitespace_only_message_treated_as_empty(self):
+        from agent.collectors.base import _exc_text
+
+        assert _exc_text(RuntimeError("   ")) == "RuntimeError"

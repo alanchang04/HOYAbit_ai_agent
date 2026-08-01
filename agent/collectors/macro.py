@@ -9,7 +9,7 @@ from datetime import date
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.horizon import window_back
 from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
@@ -238,7 +238,7 @@ class MacroCollector(BaseCollector):
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("fear_greed", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("fear_greed", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             try:
                 # stooq 已加上瀏覽器 JS 驗證機制，無法穩定免 key 存取；改用 Frankfurter（歐洲央行公開匯率
@@ -264,7 +264,7 @@ class MacroCollector(BaseCollector):
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("frankfurter_fx", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("frankfurter_fx", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             if self.settings and getattr(self.settings, "fred_api_key", None):
                 try:
@@ -295,7 +295,7 @@ class MacroCollector(BaseCollector):
                         )
                     )
                 except Exception as exc:  # noqa: BLE001
-                    self.log_subsource("fred", coin, LogStatus.SKIPPED, f"error={exc}")
+                    self.log_subsource("fred", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}")
 
         # 併自 pipeline/fetch_supply_calendar.py + fetch_event_calendar.py：純本地
         # 靜態資料＋日期運算，零連線風險，不需要 httpx client。
@@ -326,7 +326,7 @@ class MacroCollector(BaseCollector):
                     "supply_calendar", coin, LogStatus.SKIPPED, "無對應供給事件（發行持續性，無固定日期事件）"
                 )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("supply_calendar", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("supply_calendar", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         try:
             evidences.append(
@@ -348,6 +348,6 @@ class MacroCollector(BaseCollector):
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("event_calendar", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("event_calendar", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         return evidences

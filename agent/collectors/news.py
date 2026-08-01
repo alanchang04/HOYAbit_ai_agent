@@ -12,7 +12,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.horizon import window_back
 from agent.schemas import (
     DecayPattern,
@@ -296,7 +296,7 @@ class NewsCollector(BaseCollector):
                             try:
                                 summary = await _fetch_meta_description(client, item["url"])
                             except Exception as exc:  # noqa: BLE001
-                                self.log_subsource(f"{sub_name}_summary", coin, LogStatus.SKIPPED, f"error={exc}")
+                                self.log_subsource(f"{sub_name}_summary", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}")
                             topics = tag_narrative_topics(coin, item["title"], summary)
                             topics_note = f"｜特有題材：{'・'.join(topics)}" if topics else ""
                             evidences.append(
@@ -319,7 +319,7 @@ class NewsCollector(BaseCollector):
                                 )
                             )
                 except Exception as exc:  # noqa: BLE001
-                    self.log_subsource(sub_name, coin, LogStatus.ERROR, f"error={exc}")
+                    self.log_subsource(sub_name, coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             if not evidences:
                 self.log_subsource("official_sources", coin, LogStatus.SKIPPED, "所有官方源皆未取得任何項目")

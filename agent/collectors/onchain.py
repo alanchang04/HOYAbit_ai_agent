@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import window_back
 from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
@@ -124,7 +124,7 @@ class OnchainCollector(BaseCollector):
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("blockchair", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("blockchair", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         # 併自 pipeline/fetch_onchain_history.py：快照只有「當下一個時間點」，這裡
         # 補一筆近 5 年歷史序列的近 30 天趨勢，回答「現在算力/交易量是在漲還是跌」。
@@ -158,7 +158,7 @@ class OnchainCollector(BaseCollector):
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("blockchain_info_history", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("blockchain_info_history", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         return evidences
 
@@ -221,7 +221,7 @@ class OnchainCollector(BaseCollector):
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("scan_api", coin, LogStatus.SKIPPED, f"error={exc}")
+                self.log_subsource("scan_api", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}")
 
         return evidences
 
@@ -270,7 +270,7 @@ class OnchainCollector(BaseCollector):
                 )
             ]
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("etherscan_gas_history", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("etherscan_gas_history", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
             return []
 
     async def _fetch_solana(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
@@ -297,7 +297,7 @@ class OnchainCollector(BaseCollector):
                 )
             ]
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("solana_rpc", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("solana_rpc", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
             return []
 
     async def _fetch_xrpl(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
