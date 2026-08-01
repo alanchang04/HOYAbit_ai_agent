@@ -549,3 +549,51 @@ class TestHardDeadline:
         assert result.debate == {}
         assert result.inference == []
         assert result.conclusion["market_judgment"] == "m"
+
+
+# --- 9. 題型分類：幣種數量覆寫（JUDGE_TEST_REPORT.md §13.2）---
+
+
+class TestCoinCountOverridesKeywords:
+    """題目提到 2 個以上幣種池成員時一律判 comparison。
+
+    關鍵字比對是先比中先贏，而「SOL 與 XRP 何者風險敞口較高？」一個 comparison
+    關鍵字都沒命中 → 落回 multi_source → orchestrator 的 coin2 偵測只在 comparison
+    分支執行 → 拿單一幣種證據回答雙幣種題目。錯在蒐集階段，裁判救不回來。
+    """
+
+    def _c(self, q):
+        from agent.reasoning.prompts import classify_question_type
+
+        return classify_question_type(q)
+
+    def test_two_coins_without_any_comparison_keyword(self):
+        """本次修正的目標案例——原本判 multi_source。"""
+        assert self._c("SOL 與 XRP 何者在當前宏觀環境下風險敞口較高？") == "comparison"
+
+    def test_two_coins_beats_hypothesis_keywords(self):
+        """雙幣種要勝過假設驗證的關鍵字：少收一個幣種的資料無法補救，
+        多收一個只是報告多談一個幣種。判錯的代價不對稱。"""
+        assert self._c("市場上有聲音認為 SOL 將超越 XRP，請蒐集支持與反對的證據。") == "comparison"
+
+    def test_full_name_aliases_count(self):
+        assert self._c("請評估 Bitcoin 與 Ethereum 在當前環境下的相對風險。") == "comparison"
+
+    @pytest.mark.parametrize(
+        "question,expected",
+        [
+            # 命題文件範例一／二／三逐字，三者的分類必須維持不變
+            ("分析 BTC 過去兩週的市場表現，整合價格走勢、鏈上活躍度、主要新聞事件與"
+             "社群討論熱度，給出整體市場狀態判斷，並說明各類資料之間的一致程度。", "multi_source"),
+            ("市場上有聲音認為 ETH 短期內將維持盤整、缺乏明確方向，請蒐集支持與反對"
+             "此觀點的證據，並說明你最終的判斷與理由。", "hypothesis_test"),
+            ("比較 SOL 與 XRP 在當前宏觀環境下各自的市場位置與風險特徵。", "comparison"),
+            # 命題文件的題目模板
+            ("請針對 ETH，分析其當前市場狀況，並回答指定問題。", "multi_source"),
+        ],
+    )
+    def test_official_examples_unchanged(self, question, expected):
+        assert self._c(question) == expected
+
+    def test_single_coin_is_not_forced_to_comparison(self):
+        assert self._c("分析 BTC 過去兩週的市場表現與整體市場狀態。") == "multi_source"
