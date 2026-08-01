@@ -520,3 +520,89 @@ class TestSanitizeDebateSummary:
         """模型不保證回 ASCII enum，中文同義詞一併認。"""
         raw = [{"point": "重點", "evidence_ids": [], "verdict": "反方成立"}]
         assert self._sanitize(raw)[0]["verdict"] == "bear_valid"
+
+
+class TestStepAGroundingRetry:
+    """Step A 的 fact 若沒通過 grounding 稽核（見 agent/reasoning/grounding.py），
+    要重試一次；重試乾淨就採用，重試後仍違規就直接捨棄，不讓它流進 Step B/C。
+    """
+
+    def _evidence_without_rsi(self) -> list[Evidence]:
+        return [
+            Evidence(
+                id="ev-001",
+                coin="BTC",
+                source="test-source",
+                fetched_at=now_iso(),
+                content_reference="近 14 日收盤價與成交量摘要",
+                related_claim="claim",
+                source_type="price",
+            )
+        ]
+
+    def test_violating_fact_is_dropped_and_retry_replaces_it(self):
+        violating_step_a = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 指標顯示動能減弱", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        clean_retry = (
+            '{"facts": [{"source_type": "price", "summary": "收盤價與成交量已提供", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        client = FakeLLMClient(
+            [
+                violating_step_a,
+                clean_retry,
+                STEP_B_RESPONSE,
+                BULL_RESPONSE,
+                BEAR_CONVERGED_RESPONSE,
+                STEP_D_RESPONSE,
+            ]
+        )
+
+        result = run_reasoning(
+            "BTC", "分析 BTC 市場狀態", self._evidence_without_rsi(), dry_run=False, llm_client=client
+        )
+
+        assert len(result.facts) == 1
+        assert result.facts[0]["summary"] == "收盤價與成交量已提供"
+        assert client.call_count == 6  # 5 個既有步驟 + 1 次 grounding 重試
+
+    def test_fact_still_violating_after_retry_is_dropped_not_propagated(self):
+        violating_step_a = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 指標顯示動能減弱", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        still_violating_retry = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 已降至超賣區", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        client = FakeLLMClient(
+            [
+                violating_step_a,
+                still_violating_retry,
+                STEP_B_RESPONSE,
+                BULL_RESPONSE,
+                BEAR_CONVERGED_RESPONSE,
+                STEP_D_RESPONSE,
+            ]
+        )
+
+        result = run_reasoning(
+            "BTC", "分析 BTC 市場狀態", self._evidence_without_rsi(), dry_run=False, llm_client=client
+        )
+
+        assert result.facts == []
+        assert client.call_count == 6
+
+    def test_clean_facts_do_not_trigger_a_retry_call(self):
+        """既有測試的 STEP_A_RESPONSE（summary="s"）不含任何違規，不該多花一次呼叫——
+        這條測試確保驗證器接入後沒有改變既有 happy path 的呼叫次數。"""
+        client = FakeLLMClient(
+            [STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, BEAR_CONVERGED_RESPONSE, STEP_D_RESPONSE]
+        )
+
+        result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+        assert len(result.facts) == 1
+        assert client.call_count == 5

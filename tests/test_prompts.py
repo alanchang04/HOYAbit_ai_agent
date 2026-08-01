@@ -2,10 +2,13 @@
 Step D 裁判調整欄位、SYSTEM_PROMPT 權重與尺度規則。"""
 
 from agent.reasoning.prompts import (
+    DEBATE_ADVOCACY_RULE,
+    STEP_A_GROUNDING_RULE,
     SYSTEM_PROMPT,
     _format_evidence_list,
     build_step_a_prompt,
     build_step_b_prompt,
+    build_step_c1_bull_prompt,
     build_step_d_prompt,
 )
 from agent.schemas import Evidence
@@ -116,6 +119,35 @@ def test_step_a_prompt_has_legend():
     prompt = build_step_a_prompt("BTC", "分析 BTC 過去兩週", [_ev()])
     assert "【時間尺度說明】" in prompt
     assert "【權重說明】" in prompt
+
+
+def test_step_a_prompt_has_grounding_rule():
+    """Step A 是 Step C1/C2/D 唯一看得到的內容來源，逐字轉錄規則必須出現在
+    prompt 裡（見 agent/reasoning/grounding.py 的決定性稽核與這份規則配套）。"""
+    prompt = build_step_a_prompt("BTC", "分析 BTC 過去兩週", [_ev()])
+    assert STEP_A_GROUNDING_RULE in prompt
+    assert "不得補全缺席指標" in prompt
+    assert "不得反轉方向" in prompt
+    assert "同指標多來源不得拼接" in prompt
+
+
+def test_debate_advocacy_rule_bans_ungrounded_market_lore():
+    assert "產業常識" in DEBATE_ADVOCACY_RULE
+    assert "不可自創新數字" in DEBATE_ADVOCACY_RULE
+
+
+def test_step_c1_bull_prompt_includes_advocacy_rule():
+    prompt = build_step_c1_bull_prompt(
+        "BTC", "分析 BTC 過去兩週", "multi_source", facts=[], cross_validation={}
+    )
+    assert "產業常識" in prompt
+
+
+def test_step_d_prompt_requires_invalidation_thresholds_grounded_in_facts():
+    prompt = build_step_d_prompt(
+        "BTC", "分析 BTC 過去兩週", "multi_source", facts=[], cross_validation={}, inference=[]
+    )
+    assert "不可自創全新數字" in prompt
 
 
 def test_step_b_prompt_has_three_sections_and_direction_matrix():
