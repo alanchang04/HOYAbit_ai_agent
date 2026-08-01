@@ -1168,7 +1168,170 @@ a {
   text-decoration-style: dotted;
   text-underline-offset: 2px;
 }
+
+.demo-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.demo-card p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.demo-card button {
+  flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+  .demo-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 .evidence-source a:hover {
   text-decoration-style: solid;
   opacity: 0.75;
+}
+
+/* --- Investor-first summary (v1.1) --- */
+.investor-brief {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.brief-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.brief-heading h2 {
+  margin: 0.1rem 0 0;
+  font-size: 1.35rem;
+}
+
+.brief-kicker {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.integrity-badge {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.integrity-intact {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.integrity-partial {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.integrity-degraded {
+  color: var(--error-fg);
+  background: var(--error-bg);
+}
+
+.integrity-note,
+.refinement-impact {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: #fef3c7;
+  color: #78350f;
+  font-size: 0.82rem;
+}
+
+.decision-brief {
+  margin: 1rem 0;
+  max-width: 86ch;
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.75;
+}
+
+.brief-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.brief-column {
+  background: var(--code-bg);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem;
+}
+
+.brief-column h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+}
+
+.brief-column ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.82rem;
+}
+
+.brief-column li {
+  margin-bottom: 0.4rem;
+}
+
+.brief-risk {
+  border-top-color: #dc2626;
+}
+
+.brief-watch {
+  border-top-color: #d97706;
+}
+
+.technical-detail {
+  margin-top: 1rem;
+}
+
+.technical-detail > summary {
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.technical-detail[open] > summary {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 900px) {
+  .brief-columns {
+    grid-template-columns: 1fr;
+  }
 }

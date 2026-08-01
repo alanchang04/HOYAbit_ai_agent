@@ -31,11 +31,14 @@ from agent.reasoning.llm_client import build_llm_client
 from agent.reasoning.pipeline import ReasoningResult, ReasoningStepError, run_reasoning
 from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
+from agent.report.html_export import export_html_bundle
 from agent.report.view_builder import build_report_view
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
 from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
+from agent.integrity import assess_integrity
+from agent.reasoning.consistency import enforce_reasoning_consistency
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
@@ -403,6 +406,7 @@ def run_pipeline(
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
             # 讓 report.md / evidence.json / execution_log.jsonl 仍能完整產出。
             logger.log(phase=LogPhase.REASON, action="reasoning_failed", detail=str(exc), status=LogStatus.ERROR)
+            degraded_reasons.append("推理鏈失敗，已輸出降級報告")
             reasoning_result = ReasoningResult(
                 question_type=classify_question_type(question),
                 facts=[],
@@ -428,6 +432,50 @@ def run_pipeline(
                 status=LogStatus.OK,
                 metrics=usage,
             )
+
+    # v1 報告一致性護欄：可由 Evidence 日期確定重算的事件時間，不再完全信任
+    # LLM 在不同段落的自由換算。校正會同時套用 facts／辯論／結論，避免只修畫面
+    # 而下載的 report.md 仍互相矛盾。
+    try:
+        consistency_corrections = enforce_reasoning_consistency(reasoning_result, evidences)
+        if consistency_corrections:
+            logger.log(
+                phase=LogPhase.REASON,
+                action="consistency_guard_corrected",
+                detail=(
+                    f"count={len(consistency_corrections)}, "
+                    f"events={sorted({c.event for c in consistency_corrections})}"
+                ),
+                status=LogStatus.OK,
+                layer=PipelineLayer.CONCLUSION,
+                metrics={
+                    "count": len(consistency_corrections),
+                    "corrections": [c.__dict__ for c in consistency_corrections],
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 - 護欄失敗不可吃掉整份報告，但必須降級揭露
+        degraded_reasons.append("跨段落一致性檢查失敗")
+        logger.log(
+            phase=LogPhase.REASON,
+            action="consistency_guard_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONCLUSION,
+        )
+
+    integrity = assess_integrity(evidences, coins, degraded_reasons)
+    if integrity.status != "INTACT":
+        integrity_note = f"資料完整性 {integrity.status}：{'；'.join(integrity.reasons)}"
+        limitations = reasoning_result.conclusion.setdefault("limitations", [])
+        if integrity_note not in limitations:
+            limitations.append(integrity_note)
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="integrity_assessment",
+            detail=integrity_note,
+            status=LogStatus.ERROR if integrity.status == "DEGRADED" else LogStatus.SKIPPED,
+            metrics={"integrity_status": integrity.status, "reasons": integrity.reasons},
+        )
 
     logger.log(
         phase=LogPhase.REASON,
@@ -480,12 +528,14 @@ def run_pipeline(
             confidence=reasoning_result.confidence_score,
             noise_removal_rate=noise_rate,
             total_tokens=total_tokens,
-            integrity_status="DEGRADED" if degraded_reasons else "INTACT",
+            integrity_status=integrity.status,
             raw_evidence_count=len(evidences),
             kept_fact_count=sum(
                 len(f.get("evidence_ids", [])) for f in reasoning_result.facts
             ),
-            degraded_reasons=degraded_reasons,
+            # 欄位名稱為了 report_view.json v1 相容仍保留 degraded_reasons；在
+            # PARTIAL 時同樣承載具體缺失原因，前端會依 status 使用中性警示。
+            degraded_reasons=integrity.reasons,
         )
 
         view = build_report_view(
@@ -528,6 +578,30 @@ def run_pipeline(
         detail=f"elapsed_seconds={total_elapsed:.2f}",
         status=LogStatus.OK,
     )
+
+    # 三份命題原始交付檔仍是權威來源；HTML 僅是可離線開啟的評審閱讀副本。
+    # 放在 pipeline_end 後才匯出，確保 execution_log.html 包含完整流程終點。
+    # 匯出失敗採隔離處理，不得反過來阻止正式交付檔產出。
+    try:
+        export_html_bundle(
+            out_dir=out_dir,
+            report_markdown=report_md,
+            evidences=evidences,
+            log_entries=logger.read_all(),
+            metadata={
+                "coin": coin,
+                "coin2": coin2,
+                "question": question,
+                "integrity_status": integrity.status,
+            },
+        )
+    except Exception as exc:
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="html_export_failed",
+            detail=str(exc),
+            status=LogStatus.ERROR,
+        )
 
     return RunResult(
         report_markdown=report_md,

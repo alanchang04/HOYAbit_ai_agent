@@ -30,8 +30,9 @@
           <span class="stat-value">{{ view_metrics.get("confidence", "N/A") }}%</span>
         </div>
         <div class="stat-card">
-          <span class="stat-label">雜訊剔除率</span>
-          <span class="stat-value">{{ "%.1f"|format(view_metrics.get("noise_removal_rate", 0) * 100) }}%</span>
+          <span class="stat-label">提煉介入率</span>
+          {% set result_impact = view_data.get("panel3_refinement", {}).get("refinement_impact", {}) %}
+          <span class="stat-value">{{ "%.1f"|format(result_impact.get("affected_rate", view_metrics.get("noise_removal_rate", 0)) * 100) }}%</span>
         </div>
         <div class="stat-card">
           <span class="stat-label">耗時</span>
@@ -42,14 +43,41 @@
           <span class="stat-value">{{ result.evidences|length }}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-label">Tokens</span>
-          <span class="stat-value">{{ view_metrics.get("total_tokens", "N/A") }}</span>
+          <span class="stat-label">完整性</span>
+          <span class="stat-value stat-value-tag">{{ view_metrics.get("integrity_status", "N/A") }}</span>
         </div>
       </div>
       <p class="meta">
         生成時間：{{ view_metrics.get("generated_at", "N/A") }}
-        {% if result.degraded_mode %}<span class="degraded-tag">DEGRADED</span>{% endif %}
+        {% if view_metrics.get("integrity_status") != "INTACT" %}<span class="degraded-tag">{{ view_metrics.get("integrity_status") }}</span>{% endif %}
       </p>
+
+      {% set reasoning = result.reasoning %}
+      {% set conclusion = reasoning.conclusion %}
+      <section class="investor-brief">
+        <div class="brief-heading">
+          <div><span class="brief-kicker">目前判斷</span><h2>{{ coin }}{% if coin2 %} vs {{ coin2 }}{% endif %}</h2></div>
+          <span class="integrity-badge integrity-{{ view_metrics.get('integrity_status', 'intact')|lower }}">{{ view_metrics.get("integrity_status", "INTACT") }}</span>
+        </div>
+        {% if view_metrics.get("degraded_reasons") %}
+          <div class="integrity-note">資料限制：{{ view_metrics.get("degraded_reasons")|join("；") }}</div>
+        {% endif %}
+        <p class="decision-brief">{{ conclusion.get("market_judgment", "")[:360] }}{% if conclusion.get("market_judgment", "")|length > 360 %}…{% endif %}</p>
+        <div class="brief-columns">
+          <div class="brief-column">
+            <h3>三個核心依據</h3>
+            <ul>{% for fact in reasoning.facts[:3] %}<li>{{ fact.get("summary", "") }}</li>{% else %}<li>本次沒有可顯示的核心事實</li>{% endfor %}</ul>
+          </div>
+          <div class="brief-column brief-risk">
+            <h3>主要限制</h3>
+            <ul>{% for risk in conclusion.get("limitations", [])[:2] %}<li>{{ risk }}</li>{% else %}<li>未列出重大限制</li>{% endfor %}</ul>
+          </div>
+          <div class="brief-column brief-watch">
+            <h3>推翻／觀察條件</h3>
+            <ul>{% for point in conclusion.get("invalidation_conditions", [])[:3] %}<li>{{ point }}</li>{% else %}<li>未列出具體條件</li>{% endfor %}</ul>
+          </div>
+        </div>
+      </section>
 
       <div class="downloads card">
         <a href="/view/{{ run_id }}" class="primary-link">📊 四面板檢視</a>
@@ -58,10 +86,17 @@
         <a href="/download/{{ run_id }}/evidence.json">evidence.json</a>
         <a href="/download/{{ run_id }}/execution_log.jsonl">execution_log.jsonl</a>
         <a href="/download/{{ run_id }}/report_view.json">report_view.json</a>
+        <span class="divider"></span>
+        <a href="/download/{{ run_id }}/deliverables.html">HTML 索引</a>
+        <a href="/download/{{ run_id }}/report.html">report.html</a>
+        <a href="/download/{{ run_id }}/evidence.html">evidence.html</a>
+        <a href="/download/{{ run_id }}/execution_log.html">execution_log.html</a>
       </div>
 
-      {# Tab navigation #}
-      <div class="tabs">
+      <details class="technical-detail">
+        <summary>展開完整分析報告與執行紀錄</summary>
+        {# Tab navigation #}
+        <div class="tabs">
         <nav class="tab-nav">
           <button class="tab-btn active" data-tab="report">報告</button>
           <button class="tab-btn" data-tab="timeline">執行時間線</button>
@@ -100,7 +135,8 @@
         <div class="tab-panel" id="tab-rawlog">
           <pre class="report">{{ raw_log or "（無 log 資料）" }}</pre>
         </div>
-      </div>
+        </div>
+      </details>
     {% endif %}
   </div>
 

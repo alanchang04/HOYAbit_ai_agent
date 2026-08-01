@@ -139,9 +139,13 @@ def _dry_run_reasoning(
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
+        # dry-run fixture 會刻意注入一筆重複轉載，讓評審在零成本模式也能看到
+        # 「原始證據 → 去重後事實」的實際差異。Evidence 仍完整保留供回溯，
+        # 但已標 duplicate_of 的項目不再進入事實層。
+        #
         # 與正式路徑一致：被隔離的證據不進事實層，dry-run 也不例外，
         # 否則 dry-run 的產出會長得跟正式跑不一樣，測不出真實行為。
-        if is_quarantined(ev):
+        if ev.duplicate_of is not None or is_quarantined(ev):
             continue
         by_type.setdefault(ev.source_type.value, []).append(ev)
 
@@ -156,7 +160,7 @@ def _dry_run_reasoning(
     # L3 metrics：事實提取層量化
     _log_l3_metrics(logger, evidences, facts)
 
-    all_ids = [e.id for e in evidences]
+    all_ids = [e.id for e in evidences if e.duplicate_of is None]
     coin_label = f"{coin} 與 {coin2}" if coin2 else coin
 
     cross_validation = {

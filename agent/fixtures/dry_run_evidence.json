@@ -33,6 +33,14 @@
       "related_claim": "{coin} 官方發布新聞事件",
       "horizon_class": "medium",
       "window_days": 14
+    },
+    {
+      "source": "轉載新聞站 (dry-run noise fixture)",
+      "source_url": "https://example.com/dry-run-repost",
+      "content_reference": "{coin} 官方發布源公告標題摘要（dry-run 假資料，非真實查詢結果；正式執行時依幣種讀取對應官方源，見 agent/collectors/news.py 的 OFFICIAL_SOURCES）",
+      "related_claim": "{coin} 官方發布新聞事件的重複轉載",
+      "horizon_class": "medium",
+      "window_days": 14
     }
   ],
   "social": [
@@ -41,6 +49,14 @@
       "source_url": "https://www.reddit.com/r/CryptoCurrency/search.json",
       "content_reference": "{coin} 相關討論串標題與熱度摘要（dry-run 假資料）",
       "related_claim": "{coin} 社群討論熱度與情緒",
+      "horizon_class": "short",
+      "window_days": 7
+    },
+    {
+      "source": "未查證社群貼文 (dry-run noise fixture)",
+      "source_url": "https://example.com/dry-run-promotion",
+      "content_reference": "Guaranteed {coin} 100x moonshot — can't miss（dry-run 刻意注入的拉盤話術，用於展示降權）",
+      "related_claim": "{coin} 未查證拉盤話術",
       "horizon_class": "short",
       "window_days": 7
     }

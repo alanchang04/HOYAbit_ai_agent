@@ -81,7 +81,7 @@ LLMClient 介面（agent/reasoning/llm_client.py）
 ### 穩定性設計
 
 - 每類資料都有主要來源 + 免 key 備援（例：CoinGecko 失敗退 CryptoCompare）
-- 單一 collector 有獨立 timeout（75 秒）與例外隔離，失敗只影響自己那一類證據，不拖垮其他 4 類
+- 單一 collector 有獨立 timeout（75 秒）與例外隔離，失敗只影響自己那一類證據，不拖垮其他 5 類
 - 15 分鐘硬性 deadline，超過 12 分鐘門檻會自動跳過剩餘蒐集、直接進入推理（degraded mode），已用單元測試驗證觸發邏輯正確
 
 ---
@@ -90,41 +90,41 @@ LLMClient 介面（agent/reasoning/llm_client.py）
 
 ```
                     使用者瀏覽器
-                         │ HTTPS
+                         │ HTTP:80
                          ▼
               ┌─────────────────────┐
-              │   AWS App Runner     │  ← 跑 Docker image（Web UI + CLI 共用同一份程式碼）
-              │  （自動 HTTPS／擴展） │
+              │  Amazon EC2 t3.small │  ← FastAPI Web UI + CLI 共用 run_pipeline()
+              │  us-west-2           │
               └──────────┬───────────┘
                          │
-        ┌────────────────┼────────────────────┐
-        │ InvokeModel     │                    │ HTTPS（公開 API）
+        ┌────────────────┼──────────────────────┐
+        │ Converse        │                      │ HTTPS（公開 API）
         ▼                 │                    ▼
-┌───────────────┐         │         CoinGecko／Blockchair／RSS／
-│  AWS Bedrock   │         │         Reddit／Fear&Greed／Frankfurter
-│ （Claude 模型） │         │         （5 類資料來源）
-└───────────────┘         │
+┌───────────────────┐     │         Coinbase／CoinGecko／公開 RPC／
+│  Amazon Bedrock    │     │         RSS／Reddit／Fear&Greed／衍生品 API
+│ Claude Opus 4.6    │     │         （六類資料來源）
+└───────────────────┘     │
         ▲                  │
-        │ instance role    │
-        │（bedrock:InvokeModel，不落地任何 AWS key）
+        │ EC2 instance role│
+        │（InvokeModel／Converse，不落地 AWS key）
         └──────────────────┘
 
-              ┌─────────────────────┐
-   本機/CI ──▶│   Amazon ECR         │──▶ App Runner 從這裡拉 image
-   docker push│  （Docker image 倉庫）│
-              └─────────────────────┘
+管理者 ──SSM Run Command──▶ EC2（安全群組不開 SSH 22）
 ```
 
 **設計理由**：
-- **App Runner 而非 EC2**：不用管理 VM、免自架反向代理與憑證，`docker push` 後幾分鐘就有公開 HTTPS 網址，符合比賽時間有限的情境
-- **IAM instance role 而非明碼 AWS key**：App Runner service 掛一個僅有 `bedrock:InvokeModel` 權限的 role，SDK 自動用該 role 認證，現場不用管理任何金鑰外洩風險
+- **EC2 是 Workshop 帳號的可行路徑**：App Runner 被組織 SCP 擋下；EC2 已用主辦方帳號實際完成 Bedrock 全流程，不把架構圖畫成未落地的理想方案
+- **IAM instance role 而非明碼 AWS key**：EC2 掛最小權限角色，SDK 自動認證；管理走 SSM，不開 SSH 22 port
 - **Web UI 與 CLI 共用同一個 `run_pipeline()`**：不是兩套邏輯，Demo 網址背後跑的就是比賽現場會用的同一套程式碼
+- **公開 Demo**：<http://52.33.16.251/>；目前為競賽展示用 HTTP，長期產品化會在前方補 CloudFront／ALB HTTPS
 
 ---
 
 ## 5. Demo 素材：實測結果摘錄
 
-> 以下為開發階段用 Gemini（暫代 Bedrock）跑出的真實結果，可作為簡報截圖或口頭引用素材。正式 Bedrock 驗證待存取權限確認後補上。
+> 正式展示版已在 Workshop 帳號以 Bedrock Claude Opus 4.6 完成四次真實執行：
+> 單次 30–55 筆 Evidence、約 263–370 秒，皆低於 15 分鐘上限。首頁另有約 1 秒的
+> 一鍵信任提煉 Demo，以明確標記的假資料展示 Baseline、重複轉載剔除與拉盤話術降權。
 
 ### 範例：BTC vs ETH 比較分析（29 筆真實證據，38.8 秒完成）
 
@@ -147,12 +147,12 @@ LLMClient 介面（agent/reasoning/llm_client.py）
 | 評分項 | 佔比 | 我們的對應設計 |
 |---|---|---|
 | 創意度 | 15% | 正反方辯論式推論層（非單模型自問自答）；零成本技術指標；跨幣種比較的動態對抗框架 |
-| 技術可行性 | 25% | 自刻 orchestrator 精確控制時限；LLM backend 抽象層可無痛換模型；41 個 pytest 涵蓋 schema/失敗隔離/推理邏輯/degraded mode |
+| 技術可行性 | 25% | 自刻 orchestrator 精確控制時限；LLM backend 抽象層可換模型；完整 pytest 涵蓋 schema/失敗隔離/推理邏輯/一致性護欄與 degraded mode |
 | 商業應用性 | 20% | 證據可回溯、信心可校準、限制誠實揭露，直接對應「資訊分散、判斷依據不透明」的痛點 |
 | 主題切合度 | 30% | 多源整合＋分層推理＋矛盾訊號處理＋信心校準，完整對應命題五項能力要求 |
 | 完成度 | 10% | CLI／Web UI／Docker 皆可運行，report.md／evidence.json／execution_log.jsonl 三項輸出齊全 |
 
-**尚待補強**：目前真實 LLM 驗證是用 Gemini 做的（Bedrock 存取確認中），需在存取確認後補一輪 Bedrock 正式驗證；AWS 實際部署（ECR push + App Runner 建立）尚未執行，指令已備妥待帳號確認。
+**尚待補強**：完成現場執行錄影、正式簡報與 Kiro 工作流截圖；正式交付前再用目前 EC2 網址跑一次 smoke test，並在長期產品化階段補 HTTPS。
 
 ---
 
