@@ -16,6 +16,7 @@ from agent.collectors.horizon import resolve_primary_horizon
 from agent.filters.injection import is_quarantined
 from agent.logging_utils import ExecutionLogger
 from agent.reasoning.confidence import compute_confidence, coerce_verdict
+from agent.reasoning.grounding import check_fact_grounding
 from agent.reasoning.llm_client import LLMClient
 from agent.reasoning.prompts import (
     SYSTEM_PROMPT,
@@ -369,6 +370,27 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
     return sanitized
 
 
+def _validate_facts_grounding(
+    facts: list[dict], evidences_by_id: dict[str, Evidence]
+) -> tuple[list[dict], list[tuple[dict, list[str]]]]:
+    """把 `_sanitize_facts()` 的產出分成通過 grounding 稽核／違規兩組。
+
+    `_sanitize_facts()` 只驗證結構（evidence_ids 是否存在、型別是否正確），
+    不驗證內容——模型只要引用一個真實存在的 evidence id，寫什麼都會被放行。
+    這裡補上內容稽核（見 `agent/reasoning/grounding.py`），回傳
+    (通過的 facts, [(違規的 fact, 違規原因列表), ...])。
+    """
+    clean: list[dict] = []
+    violations: list[tuple[dict, list[str]]] = []
+    for fact in facts:
+        reasons = check_fact_grounding(fact, evidences_by_id)
+        if reasons:
+            violations.append((fact, reasons))
+        else:
+            clean.append(fact)
+    return clean, violations
+
+
 def _sanitize_debate_summary(raw, known_ids: set[str]) -> list[dict]:
     """裁判整理的辯論重點摘要（{point, evidence_ids, verdict}）。格式錯誤的條目整條丟棄
     而非整段作廢——單一條目壞掉不該讓其他 3-4 點也一起消失（R6-1 降級優先）。
@@ -497,16 +519,86 @@ def _real_reasoning(
     )
 
     # Step A：事實層
-    step_a_raw = _call_json_step(
-        llm_client,
-        build_step_a_prompt(
-            coin, question, evidences, coin2=coin2, primary_horizon=primary_horizon, question_type=question_type
-        ),
-        "step_a_facts",
-        deadline=deadline,
+    evidences_by_id = {e.id: e for e in evidences}
+    step_a_prompt = build_step_a_prompt(
+        coin, question, evidences, coin2=coin2, primary_horizon=primary_horizon, question_type=question_type
     )
+    step_a_raw = _call_json_step(llm_client, step_a_prompt, "step_a_facts", deadline=deadline)
     facts = _sanitize_facts(step_a_raw.get("facts", []), known_ids)
     _log("step_a_facts", "ok", f"facts_count={len(facts)}")
+
+    # Grounding 稽核：facts 是 Step C1/C2/D 唯一看得到的內容（見
+    # `format_evidence_weight_index()`），原始證據到這裡就不再流入下游，
+    # Step A 若把數值/指標寫錯，沒有任何下游機制能發現或修正。每筆 fact
+    # 引用的數值/指標都要能在它自己宣稱的 evidence_ids 內容裡找到，找不到
+    # 就退回重試一次；重試後仍違規就直接捨棄該筆 fact（R6-1 降級優先——
+    # 寧可少一筆事實，不可讓一筆有毒的事實流進 Step B/C）。
+    facts, violations = _validate_facts_grounding(facts, evidences_by_id)
+    violations_found = len(violations)
+    recovered = 0
+    dropped = 0
+    if violations:
+        remaining = _remaining(deadline)
+        if remaining is not None and remaining < MIN_LLM_STEP_SECONDS:
+            dropped = len(violations)
+            _log(
+                "step_a_grounding_check",
+                "skipped",
+                f"{dropped} 筆 fact 未通過 grounding 稽核，剩餘時間不足以重試，直接捨棄",
+            )
+        else:
+            violations_text = "\n".join(
+                f"- {fact.get('summary', '')}（違規原因：{'; '.join(reasons)}）"
+                for fact, reasons in violations
+            )
+            retry_prompt = (
+                f"{step_a_prompt}\n\n"
+                f"你上一次的回應裡，以下事實引用了證據中不存在的數值或指標，已被拒絕：\n"
+                f"{violations_text}\n\n"
+                f"請只重新產生這幾筆對應類別的事實，且只能使用來源證據的原文數值/措辭，"
+                f"不可換算單位、代換統計量、或提及來源未提供的指標。"
+                f"其餘沒有問題的事實不用重複輸出，仍然只輸出合法 JSON，格式與原本相同。"
+            )
+            try:
+                retry_raw = _call_json_step(
+                    llm_client, retry_prompt, "step_a_facts_grounding_retry", deadline=deadline
+                )
+                retried_facts = _sanitize_facts(retry_raw.get("facts", []), known_ids)
+                retried_clean, retried_violations = _validate_facts_grounding(
+                    retried_facts, evidences_by_id
+                )
+                facts.extend(retried_clean)
+                recovered = len(retried_clean)
+                dropped = len(retried_violations)
+            except ReasoningStepError as exc:
+                dropped = len(violations)
+                _log("step_a_facts_grounding_retry", "error", f"重試失敗，捨棄違規 fact: {exc}")
+
+            if dropped:
+                _log(
+                    "step_a_grounding_check",
+                    "skipped",
+                    f"{dropped} 筆 fact 重試後仍未通過 grounding 稽核，已捨棄",
+                )
+
+    if logger:
+        logger.log(
+            phase=LogPhase.REASON,
+            action="l3_grounding_check",
+            detail=(
+                f"violations_found={violations_found}, recovered_by_retry={recovered}, "
+                f"dropped={dropped}"
+            ),
+            status=LogStatus.OK,
+            layer=PipelineLayer.FACT,
+            metrics={
+                "violations_found": violations_found,
+                "recovered_by_retry": recovered,
+                "dropped": dropped,
+            },
+        )
+    if violations_found:
+        _log("step_a_facts", "ok", f"facts_count_after_grounding={len(facts)}")
 
     # L3 metrics：事實提取層量化
     _log_l3_metrics(logger, evidences, facts)
