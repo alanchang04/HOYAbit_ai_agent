@@ -64,7 +64,38 @@
 
 ## 尚未完成 / 待辦
 
-1. **App Runner service 建立**（阻塞項，非程式問題）：ECR image 與 IAM role 都已就緒，但建立 service 被 AWS 帳號「Free plan」限制擋住（`SubscriptionRequiredException`），需要完成帳號驗證或升級方案才能繼續
+1. ~~**App Runner service 建立**（阻塞項，非程式問題）~~
+   ✅ **已解決（2026-08-01，改用 EC2 部署於主辦方帳號）**
+
+   **公開網址：http://54.213.108.52/**
+
+   | 項目 | 值 |
+   |---|---|
+   | 帳號 | `149255038012`（主辦方 Workshop Studio） |
+   | Region | `us-west-2` |
+   | 執行個體 | `i-0f7f925714b7e2b30`（t3.small, AL2023） |
+   | IAM 角色 | `hoyabit-agent-ec2-role`（僅 `bedrock:InvokeModel`／`Converse`） |
+   | 安全群組 | `hoyabit-agent-sg`（僅開 80） |
+   | 模型 | `global.anthropic.claude-opus-4-6-v1` |
+
+   **為什麼不是 App Runner**：主辦方帳號的 App Runner 被 SCP 擋
+   （`AccessDeniedException`），與先前 Alan 個人帳號卡 Free plan 是不同原因。
+   實測該帳號 ECR／ECS／Lambda／EC2／S3／CloudFront 皆可用，**只有 App Runner 被擋**。
+   選 EC2 是因為行為與本機完全一致、不必改任何程式碼，30 分鐘可上線。
+
+   **為什麼從 GitHub clone 而不是推 Docker image**：會場網路壅塞，推送含全部依賴的
+   image 太慢；讓 EC2 用 AWS 自己的網路 clone + pip install 快得多。
+
+   **憑證處理**：機器上**不存任何金鑰**，走 EC2 執行個體角色。
+   Workshop 的 STS 臨時憑證會過期，寫進機器等於埋一顆定時炸彈。
+
+   **驗收（三項皆通過）**：
+   - 四次真實執行結果可瀏覽（已隨 repo 一起部署）
+   - dry-run 0.7 秒完成，**不需任何 AWS 憑證**，評審可自行下題
+   - 真實 Bedrock 執行 230 秒完成、零錯誤 → `/view/b7f36505`
+
+   ⚠ 測試時若偶發連線中斷，是**會場網路**問題不是伺服器——同一端點加 `--retry`
+   即恢復，且回傳位元組數與本機渲染完全一致（78981／72459／99011／79673）。
 2. **Live Demo 錄影**：決賽交付項目要求的現場執行錄製影片
 3. **提案簡報**：解題方向、AI 技術應用、數據資料應用、AWS 架構圖（圖片形式）、Kiro 工作流截圖、AgentCore 取捨說明
 4. **跟 Ken 對齊兩件事**：(a) `agent/collectors/relative.py` 與已合併進來的 `pipeline/compute_relative_strength.py` 功能重疊，需決定用誰的；(b) `static/source_reputation.json` 裡兩個暫定值（dedup 分級曲線、min_sample 門檻）需要校準定案
