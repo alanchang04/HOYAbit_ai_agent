@@ -21,15 +21,23 @@ QUESTION_TYPE_KEYWORDS: dict[QuestionType, list[str]] = {
     "multi_source": ["整體市場", "整合", "市場狀態", "市場表現"],
 }
 
+# 題型 framing。**只描述分析骨架，不規定分析維度**——維度一律以題目文字為準。
+#
+# 2026-08-01 改版：原本 comparison 的 framing 寫死「請比較 A 與 B 在流動性、市場關注度、
+# 風險敞口上的差異」，那三個維度是從命題文件**範例三**抄來的。題目若問「開發者活躍度
+# 與機構託管規模」，系統會照樣注入流動性那三項——**framing 覆寫了題目的實際要求**。
+# 題型分類本來就只是粗略啟發式，不該再讓它決定「要分析什麼」。
 QUESTION_TYPE_FRAMING: dict[QuestionType, str] = {
-    "multi_source": "本題屬於「多源整合」題型：請綜合各類來源給出整體市場狀態判斷，並說明各類資料之間的一致程度。",
-    "hypothesis_test": "本題屬於「假設驗證」題型：請針對題目中的陳述，明確蒐集支持與反對的證據，並給出最終判斷與理由。",
-    "comparison": "本題屬於「比較分析」題型：若證據僅涵蓋單一幣種，請在限制中明確指出比較對象的資料不足，避免憑空比較。",
+    "multi_source": "本題偏向「多源整合」：請綜合各類來源給出整體判斷，並說明各類資料之間的一致程度。",
+    "hypothesis_test": "本題偏向「假設驗證」：請針對題目中的陳述，明確蒐集支持與反對的證據，並給出最終判斷與理由。",
+    "comparison": "本題偏向「比較分析」：請比較題目所涉幣種之間的差異。",
 }
-# comparison 題型且已知第二幣種時，覆寫上面的通用 framing，改用具體幣種名稱
-COMPARISON_FRAMING_WITH_COIN2 = (
-    "本題屬於「比較分析」題型：請比較 {coin} 與 {coin2} 在流動性、市場關注度、風險敞口上的差異，"
-    "並說明在什麼條件下各自更值得優先關注。"
+
+# 所有題型共用的收束句：題型分類只是輔助，實際要回答什麼一律以題目文字為準。
+QUESTION_PRIMACY_RULE = (
+    "上述題型標記只是輔助判斷，**實際要分析什麼、比較哪些維度、回答哪個問題，"
+    "一律以題目原文為準**。題目若指定了特定的分析維度或角度，就照它指定的做，"
+    "不要替換成其他維度；題目若沒有指定，再自行選擇最能回答該題的面向，並說明為何這樣選。"
 )
 
 BULL_FRAMING: dict[QuestionType, str] = {
@@ -43,14 +51,41 @@ BEAR_FRAMING: dict[QuestionType, str] = {
     "comparison": "你要建構「當前市場位置對本幣種相對不利/風險較高」的論證。",
 }
 # comparison 題型且已知第二幣種時，覆寫成「正方挺 coin、反方挺 coin2」的具體對抗框架
-BULL_FRAMING_COMPARISON_WITH_COIN2 = "你要建構「{coin} 相對於 {coin2} 更值得優先關注」的論證。"
-BEAR_FRAMING_COMPARISON_WITH_COIN2 = "你要建構「{coin2} 相對於 {coin} 更值得優先關注」的論證（也就是反對正方對 {coin} 的偏好）。"
+BULL_FRAMING_COMPARISON_WITH_COIN2 = (
+    "你要建構「{coin} 相對於 {coin2} 更值得優先關注」的論證，"
+    "**依題目實際指定的比較維度**展開，不要自行替換成其他維度。"
+)
+BEAR_FRAMING_COMPARISON_WITH_COIN2 = (
+    "你要建構「{coin2} 相對於 {coin} 更值得優先關注」的論證（也就是反對正方對 {coin} 的偏好），"
+    "**依題目實際指定的比較維度**展開，不要自行替換成其他維度。"
+)
 
 
-def _resolve_framing(question_type: QuestionType, coin: str, coin2: str | None) -> str:
-    if question_type == "comparison" and coin2:
-        return COMPARISON_FRAMING_WITH_COIN2.format(coin=coin, coin2=coin2)
-    return QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])
+def _coin_header(coin: str, coin2: str | None, coins: list[str] | None = None) -> str:
+    """prompt 開頭的「幣種：」那一行。有三個以上幣種時全部列出，不只列前兩個。"""
+    all_coins = coins or ([coin] + ([coin2] if coin2 else []))
+    return "／".join(all_coins)
+
+
+def _resolve_framing(
+    question_type: QuestionType,
+    coin: str,
+    coin2: str | None,
+    coins: list[str] | None = None,
+) -> str:
+    """題型 framing ＋ 本次有證據的幣種 ＋「以題目為準」的收束句。
+
+    `coins` 是本次實際蒐集了證據的完整幣種清單（主幣在前）。給它是為了支援
+    三個以上幣種的題目——`coin2` 只裝得下一個，但證據可能涵蓋更多。
+    未提供時退回 `[coin, coin2]`，維持既有行為。
+    """
+    all_coins = coins or ([coin] + ([coin2] if coin2 else []))
+    parts = [QUESTION_TYPE_FRAMING.get(question_type, QUESTION_TYPE_FRAMING["multi_source"])]
+    if len(all_coins) > 1:
+        joined = "、".join(all_coins)
+        parts.append(f"本次已蒐集證據的幣種：{joined}（每筆證據都標了 coin 欄位）。")
+    parts.append(QUESTION_PRIMACY_RULE)
+    return "\n".join(parts)
 
 
 def _resolve_bull_framing(question_type: QuestionType, coin: str, coin2: str | None) -> str:
@@ -65,28 +100,43 @@ def _resolve_bear_framing(question_type: QuestionType, coin: str, coin2: str | N
     return BEAR_FRAMING.get(question_type, BEAR_FRAMING["multi_source"])
 
 
+# 「題目提到多個幣種，但重點不是拿它們互相比較」的訊號。例如
+# 「分析 SOL 當前狀況，並說明其與 BTC 的相關性是否鬆動」——主體是 SOL，
+# BTC 只是參照物；判成 comparison 會讓正反方去爭「SOL 還是 BTC 更值得關注」，
+# 那不是題目要問的。
+_SECONDARY_COIN_MARKERS = (
+    r"相關性", r"連動", r"脫鉤", r"背離", r"領先|落後",
+    r"的關係", r"受.*影響", r"帶動",
+)
+
+
 def classify_question_type(question: str) -> QuestionType:
-    """判斷題型；三種題型的推理骨架皆為事實→交叉驗證→推論→結論，
-    差異主要在 Step C/D 的框架（比較兩幣種 / 驗證特定陳述 / 綜合市場狀態）。
+    """判斷題型。三種題型的推理骨架相同（事實→交叉驗證→推論→結論），
+    差異只在 Step C/D 的框架，**分類錯誤不會讓分析停擺，只會讓框架選得不理想**。
 
-    **提到兩個以上幣種池成員時一律判 comparison，優先於關鍵字比對。**
-    這條覆寫是 2026-08-01 的實測發現（`JUDGE_TEST_REPORT.md` §13.2）：
-    關鍵字比對是先比中先贏，「SOL 與 XRP 何者在當前宏觀環境下風險敞口較高？」
-    一個 comparison 關鍵字都沒命中，會落回 multi_source——而 orchestrator 的
-    `coin2` 偵測**只在 comparison 分支執行**，結果是拿單一幣種的證據去回答
-    雙幣種的題目。那個錯誤發生在資料蒐集階段，後面的推理與裁判都救不回來。
+    因此這裡刻意保持粗略、把細節留給 LLM：framing 只告訴模型「本題偏向哪一類」，
+    後面緊跟著 `QUESTION_PRIMACY_RULE`——實際要分析什麼一律以題目原文為準。
+    分類器唯一必須做對的事，是讓 orchestrator 知道**要不要去蒐集第二個幣種的資料**，
+    因為那個決定發生在資料蒐集階段，事後無法補救。
 
-    命題文件明說「正式題目涵蓋但不限於以下範例題型」，實際題目現場才公布，
-    關鍵字表只認得範例的措辭。而「題目提到兩個幣種」這件事比任何措辭都更能
-    直接反映「這題要比較」，且判錯的代價不對稱：
-    - 漏判（該 comparison 卻沒判）→ 少蒐集一個幣種的資料，無法回答，救不回來。
-    - 誤判（不該 comparison 卻判了）→ 多蒐集一個幣種的資料。framing 只是要求
-      比較兩者，證據齊全，最壞情況是報告多談了一個幣種。
+    幣種數量的處理（2026-08-01，`JUDGE_TEST_REPORT.md` §13.2）：
+    關鍵字比對是先比中先贏，「SOL 與 XRP 何者風險敞口較高？」一個 comparison
+    關鍵字都沒命中，會落回 multi_source → `coin2` 不偵測 → 拿單一幣種證據回答
+    雙幣種題目。所以提到兩個以上幣種時傾向判 comparison。
 
-    所以這裡刻意偏向誤判。
+    但**不是無條件覆寫**：題目可能提到別的幣種只是拿來當參照
+    （「SOL 與 BTC 的相關性是否鬆動」），那種情況主體仍是單一幣種。
+    有 `_SECONDARY_COIN_MARKERS` 的關係型措辭、且沒有明確的比較動詞時，
+    就尊重原本的關鍵字判斷。
     """
-    if len(detect_coins_in_text(question)) >= 2:
-        return "comparison"
+    coins = detect_coins_in_text(question)
+    if len(coins) >= 2:
+        explicit_comparison = any(
+            re.search(kw, question) for kw in QUESTION_TYPE_KEYWORDS["comparison"]
+        )
+        relational = any(re.search(m, question) for m in _SECONDARY_COIN_MARKERS)
+        if explicit_comparison or not relational:
+            return "comparison"
     for qtype, keywords in QUESTION_TYPE_KEYWORDS.items():
         for kw in keywords:
             if re.search(kw, question):
@@ -461,11 +511,12 @@ def build_step_c_prompt(
     cross_validation: dict,
     coin2: str | None = None,
     evidences: list[Evidence] | None = None,
+    coins: list[str] | None = None,
 ) -> str:
     """單模型推論層 prompt（正反方辯論失敗時的 fallback，不分角色，一次產出多個假設）。"""
-    framing = _resolve_framing(question_type, coin, coin2)
+    framing = _resolve_framing(question_type, coin, coin2, coins=coins)
     return f"""題目：{question}
-幣種：{coin}{f'／{coin2}' if coin2 else ''}
+幣種：{_coin_header(coin, coin2, coins)}
 {framing}
 
 事實層：
@@ -865,6 +916,7 @@ def build_step_d_prompt(
     coin2: str | None = None,
     debate: dict | None = None,
     evidences: list[Evidence] | None = None,
+    coins: list[str] | None = None,
 ) -> str:
     """結論層（裁判）prompt。
 
@@ -873,9 +925,9 @@ def build_step_d_prompt(
     丟掉權重欄位，Step B 的 cross_validation 也不含權重（2026-08-01 實跑 dump 驗證）。
     裁判等於只能吃辯士自己在論證文字裡寫的 `（weight=0.80）`，而那正是它要裁決的兩造。
     """
-    framing = _resolve_framing(question_type, coin, coin2)
+    framing = _resolve_framing(question_type, coin, coin2, coins=coins)
     return f"""題目：{question}
-幣種：{coin}{f'／{coin2}' if coin2 else ''}
+幣種：{_coin_header(coin, coin2, coins)}
 {framing}
 
 事實層：

@@ -597,3 +597,113 @@ class TestCoinCountOverridesKeywords:
 
     def test_single_coin_is_not_forced_to_comparison(self):
         assert self._c("分析 BTC 過去兩週的市場表現與整體市場狀態。") == "multi_source"
+
+
+# --- 10. 彈性化：分類只給骨架，維度交給 LLM（JUDGE_TEST_REPORT.md §17）---
+
+
+class TestQuestionPrimacy:
+    """framing 不得規定分析維度——維度一律以題目原文為準。
+
+    改版前 comparison 的 framing 寫死「請比較 A 與 B 在流動性、市場關注度、
+    風險敞口上的差異」，那三項是從命題文件範例三抄來的。題目若問「開發者活躍度
+    與機構託管規模」，系統會照樣注入流動性那三項，framing 覆寫了題目的實際要求。
+    """
+
+    def _framing(self, qtype="comparison", coin="BTC", coin2="ETH", coins=None):
+        from agent.reasoning.prompts import _resolve_framing
+
+        return _resolve_framing(qtype, coin, coin2, coins=coins)
+
+    def test_framing_no_longer_prescribes_dimensions(self):
+        f = self._framing()
+        for hardcoded in ("流動性", "市場關注度", "風險敞口"):
+            assert hardcoded not in f, f"framing 仍寫死維度「{hardcoded}」"
+
+    def test_primacy_rule_is_attached_to_every_type(self):
+        from agent.reasoning.prompts import QUESTION_PRIMACY_RULE
+
+        for qtype in ("multi_source", "hypothesis_test", "comparison"):
+            assert QUESTION_PRIMACY_RULE in self._framing(qtype)
+
+    def test_framing_lists_all_coins_with_evidence(self):
+        """三個以上幣種時 `coin2` 裝不下，framing 要用完整清單。"""
+        f = self._framing(coins=["BTC", "ETH", "SOL"])
+        assert "BTC、ETH、SOL" in f
+
+    def test_coin_header_covers_three_coins(self):
+        from agent.reasoning.prompts import build_step_d_prompt
+
+        p = build_step_d_prompt(
+            "BTC", "比較 BTC、ETH 與 SOL", "comparison", [], {}, [],
+            coin2="ETH", coins=["BTC", "ETH", "SOL"],
+        )
+        assert "幣種：BTC／ETH／SOL" in p
+
+
+class TestRelationalQuestionsAreNotForcedToComparison:
+    """題目提到別的幣種不一定是要比較——也可能只是拿它當參照。
+
+    「分析 SOL 當前狀況，並說明其與 BTC 的相關性是否鬆動」的主體是 SOL，
+    判成 comparison 會讓正反方去爭「SOL 還是 BTC 更值得關注」，那不是題目要問的。
+    """
+
+    def _c(self, q):
+        from agent.reasoning.prompts import classify_question_type
+
+        return classify_question_type(q)
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "分析 SOL 當前市場狀況，並說明其與 BTC 的相關性是否鬆動。",
+            "分析 ETH 近期表現，說明其與 BTC 的連動是否減弱。",
+            "分析 SOL 當前市場狀況，說明其是否已與 BTC 脫鉤。",
+        ],
+    )
+    def test_relational_phrasing_stays_single_subject(self, question):
+        assert self._c(question) != "comparison"
+
+    def test_explicit_comparison_verb_still_wins(self):
+        """關係型措辭遇上明確的比較動詞時，仍判為 comparison。"""
+        assert self._c("比較 SOL 與 BTC 的相關性強弱。") == "comparison"
+
+    def test_plain_two_coin_question_is_still_comparison(self):
+        """沒有關係型措辭的雙幣種題目，維持 comparison（86e3380 的核心案例）。"""
+        assert self._c("SOL 與 XRP 何者在當前宏觀環境下風險敞口較高？") == "comparison"
+
+
+class TestUncoveredCoinsAreDisclosed:
+    """題目提到但沒蒐集到證據的幣種，必須在報告最上方揭露。
+
+    `86e3380` 讓「≥2 個幣種」判 comparison，但 orchestrator 只取第一個非主幣當
+    `coin2`，第三個幣直接被忽略。若不揭露，讀者會以為這份比較涵蓋了題目要求的
+    全部對象——那是拿不存在的證據作答。
+    """
+
+    def _report(self, uncovered):
+        from agent.reasoning.pipeline import ReasoningResult
+        from agent.report.builder import build_report_markdown
+        from agent.schemas import Evidence, now_iso
+
+        ev = [Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
+                       content_reference="r", related_claim="c", source_type="price")]
+        result = ReasoningResult(
+            question_type="comparison",
+            facts=[{"source_type": "price", "summary": "s", "evidence_ids": ["ev-001"]}],
+            conclusion={"market_judgment": "m", "confidence": "中", "evidence_ids": ["ev-001"]},
+        )
+        return build_report_markdown(
+            "BTC", "比較 BTC、ETH 與 SOL 三者的風險特徵。", result, ev,
+            coin2="ETH", uncovered_coins=uncovered,
+        )
+
+    def test_uncovered_coin_is_flagged_before_any_conclusion(self):
+        report = self._report(["SOL"])
+        assert "SOL" in report and "未蒐集其證據" in report
+        # 必須出現在結論之前，否則讀者已經讀完比較才知道少了誰
+        assert report.index("未蒐集其證據") < report.index("## 1. 結論／市場判斷")
+
+    def test_no_note_when_all_coins_covered(self):
+        assert "未蒐集其證據" not in self._report(None)
+        assert "未蒐集其證據" not in self._report([])

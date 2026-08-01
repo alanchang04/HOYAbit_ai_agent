@@ -310,6 +310,7 @@ def build_report_markdown(
     result: ReasoningResult,
     evidences: list[Evidence],
     coin2: str | None = None,
+    uncovered_coins: list[str] | None = None,
 ) -> str:
     validate_evidence_references(result, evidences)
     ev_by_id = {e.id for e in evidences}
@@ -326,6 +327,17 @@ def build_report_markdown(
     horizon_gap = _primary_horizon_gap_note(result, evidences)
     if horizon_gap:
         lines.append(horizon_gap)
+        lines.append("")
+
+    # 題目提到、但本次沒有蒐集到證據的幣種。放在報告最上方而不是塞進「已知限制」
+    # 條列裡——讀者必須在讀任何比較結論之前就知道「這份比較少了誰」，
+    # 否則會誤以為結論涵蓋了題目要求的全部對象。
+    if uncovered_coins:
+        covered = coin + (f"／{coin2}" if coin2 else "")
+        lines.append(
+            f"> ⚠ 題目提到 **{'、'.join(uncovered_coins)}**，但本次**未蒐集其證據**，"
+            f"以下比較僅涵蓋 {covered}。缺漏對象的任何結論都不應由本報告推得。"
+        )
         lines.append("")
 
     lines.extend(_build_executive_summary_lines(result))

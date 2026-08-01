@@ -173,11 +173,28 @@ def run_pipeline(
     # 否則嘗試從題目文字自動偵測（題目模板通常會直接寫出「比較【幣種A】與
     # 【幣種B】」）。偵測不到就維持單幣種證據，report 會依既有 framing
     # 在限制中明確揭露比較對象資料不足，而非憑空比較。
+    # 題目提到但本次不會蒐集的幣種（多於 MAX_COMPARISON_COINS 時）。報告要誠實揭露，
+    # 不能讓模型去比較一個它根本沒有資料的幣。
+    uncovered_coins: list[str] = []
     if question_type == "comparison":
-        if coin2 is None:
-            detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
-            if detected:
-                coin2 = detected[0]
+        detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
+        if coin2 is None and detected:
+            coin2 = detected[0]
+        # 題目提到三個以上幣種時，`coin2` 只裝得下一個。其餘的既然蒐集不到，
+        # 就必須讓下游知道——否則模型會拿「題目要我比較 SOL」和「證據裡沒有 SOL」
+        # 硬湊，那是憑空比較。
+        extra = [c for c in detected if c != (coin2 or "").upper()]
+        if extra:
+            uncovered_coins = extra
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="comparison_coins_uncovered",
+                detail=(
+                    f"題目提到 {', '.join(extra)} 但本次僅蒐集 {coin.upper()}"
+                    f"{f'／{coin2}' if coin2 else ''} 的證據，報告需揭露此限制"
+                ),
+                status=LogStatus.SKIPPED,
+            )
         if coin2:
             coin2 = coin2.upper()
             logger.log(
@@ -317,6 +334,15 @@ def run_pipeline(
         )
         degraded_reasons.append("L2 prompt injection filter skipped（本次證據未經注入過濾）")
 
+    # 題目提到但沒蒐集到的幣種，必須進 degraded 理由——報告的「已知限制」會照實揭露，
+    # 讀者才知道這份比較沒有涵蓋題目要求的全部對象。命題文件的評分標準明列
+    # 「對不確定性與限制的清楚說明」，揭露本身就是得分項，隱瞞才是失分。
+    if uncovered_coins:
+        degraded_reasons.append(
+            f"題目提到 {', '.join(uncovered_coins)} 但本次未蒐集其證據，"
+            f"比較範圍僅涵蓋 {coin.upper()}" + (f"／{coin2}" if coin2 else "")
+        )
+
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
         json.dumps([e.model_dump() for e in evidences], ensure_ascii=False, indent=2),
@@ -417,7 +443,10 @@ def run_pipeline(
             status=LogStatus.OK if "error" not in baseline_result else LogStatus.ERROR,
         )
 
-    report_md = build_report_markdown(coin, question, reasoning_result, evidences, coin2=coin2)
+    report_md = build_report_markdown(
+        coin, question, reasoning_result, evidences, coin2=coin2,
+        uncovered_coins=uncovered_coins,
+    )
     report_path = out_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
     logger.log(phase=LogPhase.REPORT, action="report_written", detail=str(report_path), status=LogStatus.OK)

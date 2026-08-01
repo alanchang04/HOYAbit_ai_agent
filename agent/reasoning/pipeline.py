@@ -478,6 +478,15 @@ def _real_reasoning(
     # 模型面前——若不在這裡收口，模型引用 ev-00X 時 `_sanitize_ids` 會放行，
     # 該筆的內容就會經由 report.md 的關鍵依據列重新出現在交付檔裡。
     known_ids = {e.id for e in evidences if not is_quarantined(e)}
+    # 本次實際有證據的幣種清單，主幣在前、其餘依 evidence 出現順序去重。
+    # `coin2` 只裝得下一個幣，但題目可能提到三個以上（orchestrator 只蒐集得到它
+    # 解析出來的那些）。framing 需要知道「證據實際涵蓋哪些幣」，才不會叫模型去比較
+    # 一個它根本沒有資料的幣種。
+    coins_with_evidence = [coin.upper()] + [
+        c
+        for c in dict.fromkeys(e.coin.upper() for e in evidences if e.coin)
+        if c != coin.upper()
+    ]
     # 主視野由題目的時間範圍決定（R7-2）：問「最近一年」時 long/structural 才是
     # 當前訊號，五年結構資料不該被排除在共識投票外。未明示時沿用預設 medium。
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
@@ -564,7 +573,7 @@ def _real_reasoning(
             llm_client,
             build_step_c_prompt(
                 coin, question, question_type, facts, cross_validation,
-                coin2=coin2, evidences=evidences,
+                coin2=coin2, evidences=evidences, coins=coins_with_evidence,
             ),
             "step_c_inference_fallback",
             deadline=deadline,
@@ -764,7 +773,7 @@ def _real_reasoning(
         llm_client,
         build_step_d_prompt(
             coin, question, question_type, facts, cross_validation, inference,
-            coin2=coin2, debate=debate, evidences=evidences,
+            coin2=coin2, debate=debate, evidences=evidences, coins=coins_with_evidence,
         ),
         "step_d_conclusion",
         deadline=deadline,
