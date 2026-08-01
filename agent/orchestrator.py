@@ -37,6 +37,7 @@ from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
 from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
+from agent.filters.validation import build_validation_results
 from agent.integrity import assess_integrity
 from agent.reasoning.consistency import enforce_reasoning_consistency
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
@@ -150,8 +151,19 @@ def _resolve_chain(coin: str) -> str | None:
         return None
 
 
-def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Evidence]:
-    evidences = []
+def assign_evidence_ids(
+    drafts: list[EvidenceDraft], logger=None
+) -> tuple[list[Evidence], list[dict]]:
+    """把 collector 產出的草稿建構成正式 `Evidence`，並分配全域唯一 id。
+
+    回傳 `(evidences, quarantined)`——`quarantined` 是建構失敗（缺欄位、型別
+    錯誤）的草稿紀錄。**這是真正的「Invalid Evidence quarantine」，不是只有
+    dedup 降權**：以前 `Evidence(id=..., **payload)` 沒有任何防護，單一一筆
+    壞資料的 collector 輸出會讓 pydantic ValidationError 直接炸穿整條
+    pipeline。一筆證據建構失敗不該賠上其餘所有正常證據（R6-1 降級優先）。
+    """
+    evidences: list[Evidence] = []
+    quarantined: list[dict] = []
     for i, draft in enumerate(drafts, start=1):
         payload = draft.model_dump()
         # 補上「人看的頁面」。集中在這裡推導而非散在 7 個 collector 的 32 個
@@ -162,7 +174,26 @@ def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Eviden
             payload["reference_url"] = resolve_reference_url(
                 payload.get("source_url"), draft.coin, _resolve_chain(draft.coin)
             )
-        ev = Evidence(id=f"ev-{i:03d}", **payload)
+        try:
+            ev = Evidence(id=f"ev-{i:03d}", **payload)
+        except Exception as exc:  # noqa: BLE001 - 任何一筆壞資料都不該中斷整條 pipeline
+            quarantined.append(
+                {
+                    "index": i,
+                    "source": draft.source,
+                    "coin": draft.coin,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            if logger is not None:
+                logger.log(
+                    phase=LogPhase.COLLECT,
+                    action="evidence_quarantined",
+                    detail=f"draft#{i}（{draft.source}）建構失敗已隔離: {type(exc).__name__}: {exc}",
+                    status=LogStatus.SKIPPED,
+                    layer=PipelineLayer.SOURCE,
+                )
+            continue
         # horizon-aware R2-3：標註缺漏／矛盾只記警示 log，絕不拋錯或過濾掉證據（R6-1 降級優先）。
         issue = _horizon_annotation_issue(ev) if logger is not None else None
         if issue:
@@ -174,7 +205,7 @@ def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Eviden
                 layer=PipelineLayer.SOURCE,
             )
         evidences.append(ev)
-    return evidences
+    return evidences, quarantined
 
 
 def run_pipeline(
@@ -268,7 +299,9 @@ def run_pipeline(
             collect_all(collectors, coins, remaining_before_collect, primary_horizon=primary_horizon)
         )
 
-    evidences = assign_evidence_ids(drafts, logger=logger)
+    evidences, quarantined_drafts = assign_evidence_ids(drafts, logger=logger)
+    if quarantined_drafts:
+        degraded_reasons.append(f"{len(quarantined_drafts)} 筆證據建構失敗已隔離（缺欄位或型別錯誤）")
 
     # Phase 2（R12，Ken 設計）：去重先行 → 話術掃描 → 四因子權重 → L2 決策紀錄
     dedup_result = None
@@ -369,6 +402,28 @@ def run_pipeline(
         action="evidence_written",
         detail=f"count={len(evidences)}, path={evidence_path}",
         status=LogStatus.OK,
+    )
+
+    # 統一 Validation Result（v1.2 新增，ValidatedEvidence gate 的稽核輸出）：
+    # 把 source_weight／injection_flag／dedup verdict 這些已經算好的既有檢查結果
+    # 彙總成一筆 per-evidence 紀錄，寫成獨立檔案——刻意不塞進 evidence.json，
+    # 那份檔案的頂層是 list（webapp／report 已經假設這個形狀），改成 dict 會
+    # 動到既有讀取邏輯。
+    validation_results = build_validation_results(evidences, breakdowns, filter_decisions)
+    validation_path = out_dir / "validation_results.json"
+    validation_path.write_text(
+        json.dumps([vars(r) for r in validation_results], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.log(
+        phase=LogPhase.COLLECT,
+        action="validation_results_written",
+        detail=(
+            f"count={len(validation_results)}, quarantined={len(quarantined_drafts)}, "
+            f"path={validation_path}"
+        ),
+        status=LogStatus.OK,
+        layer=PipelineLayer.SOURCE,
     )
 
     def log_step(step: str, status: str, detail: str = "") -> None:

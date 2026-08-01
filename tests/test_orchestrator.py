@@ -34,9 +34,10 @@ def test_assign_ids_warns_on_spot_with_long_window():
     logger = _RecordingLogger()
     drafts = [_draft(window_start="2021-06-01", window_end="2026-05-31")]  # horizon_class 預設 spot
 
-    evidences = assign_evidence_ids(drafts, logger=logger)
+    evidences, quarantined = assign_evidence_ids(drafts, logger=logger)
 
     assert len(evidences) == 1  # 證據保留，未被過濾
+    assert quarantined == []
     warnings = [e for e in logger.entries if e.get("action") == "horizon_annotation_warning"]
     assert len(warnings) == 1
     assert warnings[0]["status"] == LogStatus.SKIPPED
