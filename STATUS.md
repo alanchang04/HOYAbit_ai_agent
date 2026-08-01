@@ -67,7 +67,7 @@
 1. ~~**App Runner service 建立**（阻塞項，非程式問題）~~
    ✅ **已解決（2026-08-01，改用 EC2 部署於主辦方帳號）**
 
-   **公開網址：http://54.213.108.52/**
+   **公開網址：http://52.33.16.251/**（Elastic IP，固定不變）
 
    | 項目 | 值 |
    |---|---|
@@ -75,7 +75,8 @@
    | Region | `us-west-2` |
    | 執行個體 | `i-0f7f925714b7e2b30`（t3.small, AL2023） |
    | IAM 角色 | `hoyabit-agent-ec2-role`（僅 `bedrock:InvokeModel`／`Converse`） |
-   | 安全群組 | `hoyabit-agent-sg`（僅開 80） |
+   | 安全群組 | `hoyabit-agent-sg`（僅開 80，未開 SSH） |
+   | 管理方式 | SSM Run Command（`AmazonSSMManagedInstanceCore`），不開 22 port |
    | 模型 | `global.anthropic.claude-opus-4-6-v1` |
 
    **為什麼不是 App Runner**：主辦方帳號的 App Runner 被 SCP 擋
