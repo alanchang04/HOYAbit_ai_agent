@@ -7,15 +7,15 @@
 
 | 項目 | 值 |
 |---|---|
-| Tag | **`v1.1`**（回退請用這個；`v1.0` 缺一個會讓 demo 卡死的修正） |
-| Commit | `ac94bc3` |
+| Tag | **`v1.2`**（回退請用這個；`v1.0`／`v1.1` 缺後續回補的 P0/P1 修正） |
+| Commit | `fd19940` |
 | 保護分支 | `release/v1`（與 tag 同點，供 v1 熱修） |
-| 部署位置 | http://52.33.16.251/ （EC2 `i-0f7f925714b7e2b30`，us-west-2） |
-| 驗收狀態 | 676 測試通過；命題三題型皆經真實 Bedrock 驗證 |
-| 雲端實測 | 真實執行 215 秒／信心 75／四份交付檔完整（run `07d66ed7`） |
+| 部署位置 | http://52.33.16.251/ （EC2 `i-0f7f925714b7e2b30`，us-west-2，需重新部署此 tag） |
+| 驗收狀態 | 821 測試通過；命題三題型皆經真實 Bedrock 驗證（延續 v1.1 驗收基礎） |
+| 相對 v1.1 的新增 | 裁判逐點判定＋Bedrock 真 15 分鐘硬限制、prompt injection 偵測與隔離、HTML 離線輸出＋完整性三態、雙幣種題型優先判 comparison、Step A grounding 稽核（防止幻覺數值/指標流入辯論鏈）、related_claims 附加結構、CLI 每次執行獨立 run id、統一 Evidence Validation Result＋真正的 Invalid Evidence quarantine、collector 成功呼叫補記 endpoint/params log |
 
-`v1.0` 是 **annotated tag**，內容不可變。就算 `main` 被 v2 寫爛、分支被刪，
-`git checkout v1.0` 永遠拿得回這份程式碼與當時的 `raw_data/`（資料已納入版控）。
+`v1.0`／`v1.1`／`v1.2` 都是 **annotated tag**，內容不可變。就算 `main` 被 v2 寫爛、分支被刪，
+`git checkout v1.2` 永遠拿得回這份程式碼與當時的 `raw_data/`（資料已納入版控）。
 
 ## 三道退路（由輕到重）
 
@@ -24,7 +24,7 @@
 v2 開發期間評審或隊友要看 demo，但 `main` 上是半成品：
 
 ```bash
-python scripts/deploy_ec2.py --ref v1.1     # 回到 v1
+python scripts/deploy_ec2.py --ref v1.2     # 回到 v1
 python scripts/deploy_ec2.py --status       # 確認機器現在跑哪一版
 python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 ```
@@ -37,7 +37,7 @@ python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 ```bash
 git checkout release/v1        # 直接在 v1 基礎上繼續
 # 或把 main 拉回 v1：
-git push origin v1.1:main --force-with-lease
+git push origin v1.2:main --force-with-lease
 ```
 
 用 `--force-with-lease` 而非 `--force`：若期間有人推了東西上去，
@@ -53,7 +53,7 @@ user-data 會自動 clone 指定版本並啟動。IAM 角色、安全群組、El
 ## v2 的工作方式
 
 ```
-main  ────────●  v1.0 ← 永遠保持可交付、可展示
+main  ────────●  v1.2 ← 永遠保持可交付、可展示
               │
               └──● v2-dev ← 所有 v2 改動在這裡
 ```
@@ -67,7 +67,7 @@ main  ────────●  v1.0 ← 永遠保持可交付、可展示
    - 全套測試通過
    - 命題三種題型各跑一次真實 Bedrock，皆能完整產出四份交付檔
    - 部署後網頁與四面板正常
-4. **合併前先在 `main` 上打 `v1.1`、`v1.2`…** 標記 v1 的任何熱修，
+4. **合併前先在 `main` 上打 `v1.2`、`v1.3`…** 標記 v1 的任何熱修，
    確保回退點永遠是最新的可用 v1，而不是三天前的。
 
 ## 需要注意的邊界
