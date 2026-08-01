@@ -26,6 +26,9 @@ def test_dry_run_report_view_all_fields_populated(tmp_path: Path) -> None:
     # 確認基本產出存在
     view_path = tmp_path / "report_view.json"
     assert view_path.exists(), "report_view.json 未產出"
+    assert (tmp_path / "validation_results.json").exists()
+    assert (tmp_path / "research_context.json").exists()
+    assert (tmp_path / "run_manifest.json").exists()
 
     view = json.loads(view_path.read_text(encoding="utf-8"))
 
@@ -97,6 +100,27 @@ def test_dry_run_report_view_all_fields_populated(tmp_path: Path) -> None:
     # 確認 limitations 和 invalidation_conditions 也有值
     assert len(panel4["limitations"]) >= 1
     assert len(panel4["invalidation_conditions"]) >= 1
+
+    # --- Evidence Audit / decision lineage ---
+    audit = view["evidence_audit"]
+    assert audit["summary"]["total"] >= len(result.evidences)
+    assert audit["items"]
+    assert all("fact_grounding" in item["checks"] for item in audit["items"])
+    assert audit["claim_coverage"]
+    assert any(claim["supporting_evidence_ids"] for claim in audit["claim_coverage"])
+    assert any(edge["relation"] == "informs" for edge in audit["relationships"])
+
+    certificate = json.loads((tmp_path / "validation_results.json").read_text(encoding="utf-8"))
+    assert certificate["schema_version"] == "2.0"
+    assert certificate["summary"]["total"] == len(certificate["results"])
+
+    manifest = json.loads((tmp_path / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["run_id"] == tmp_path.name
+    assert manifest["prompt"]["sha256"]
+    assert manifest["software"]["git_commit"]
+    artifact_names = {item["filename"] for item in manifest["artifacts"]}
+    assert {"report.md", "evidence.json", "validation_results.json", "research_context.json"} <= artifact_names
+    assert all(item["sha256"] for item in manifest["artifacts"])
 
 
 def test_dry_run_report_view_source_weights_assigned(tmp_path: Path) -> None:

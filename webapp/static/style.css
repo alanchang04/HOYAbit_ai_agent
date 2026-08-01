@@ -15,6 +15,109 @@
   --radius-sm: 6px;
 }
 
+/* --- Evidence Audit / Validation Certificate --- */
+.audit-section {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.audit-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.audit-heading h2 { margin: 0.15rem 0; }
+.audit-downloads { display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.82rem; }
+.audit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+.audit-summary-grid > div {
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.audit-summary-grid strong { display: block; font-size: 1.25rem; }
+.audit-summary-grid span { color: var(--muted); font-size: 0.7rem; }
+.audit-cards { display: grid; gap: 0.55rem; }
+.audit-card {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.audit-card-degraded { border-left-color: #b7791f; }
+.audit-card-quarantined, .audit-card-invalid { border-left-color: var(--error-fg); }
+.audit-card > summary {
+  cursor: pointer;
+  padding: 0.65rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  background: var(--code-bg);
+}
+.audit-source { color: var(--muted); font-size: 0.8rem; flex: 1; }
+.validation-badge, .coverage-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.validation-validated, .coverage-covered { background: #e6f4ea; color: #176b35; }
+.validation-degraded, .coverage-contested { background: #fff4d6; color: #8a5a00; }
+.validation-quarantined, .validation-invalid, .coverage-unlinked { background: var(--error-bg); color: var(--error-fg); }
+.audit-card-body { padding: 0.8rem; }
+.audit-meta { display: flex; gap: 0.8rem; flex-wrap: wrap; font-size: 0.76rem; color: var(--muted); }
+.audit-content { font-size: 0.83rem; margin: 0.65rem 0; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.45rem; }
+.check-chip { padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.72rem; }
+.check-chip > span, .check-chip > strong { display: block; }
+.check-chip small { display: block; color: var(--muted); margin-top: 0.2rem; }
+.check-pass { border-color: #8fcf9f; }
+.check-warn { border-color: #d7ad55; }
+.check-fail { border-color: var(--error-fg); background: var(--error-bg); }
+.check-not_applicable { opacity: 0.72; }
+.audit-reasons { color: var(--error-fg); font-size: 0.76rem; }
+.claim-links { margin-top: 0.65rem; font-size: 0.75rem; display: grid; gap: 0.25rem; }
+.lineage-details { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.8rem; }
+.lineage-details > summary { cursor: pointer; font-weight: 700; }
+.table-scroll { overflow-x: auto; margin-top: 0.65rem; }
+.lineage-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.lineage-table th, .lineage-table td { border: 1px solid var(--border); padding: 0.45rem; vertical-align: top; }
+.relationship-list { display: grid; gap: 0.35rem; margin-top: 0.65rem; }
+.relationship-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+}
+.relationship-row span { min-width: 0; overflow-wrap: anywhere; }
+.relationship-row small { display: block; color: var(--muted); }
+.relationship-row strong { color: var(--accent); white-space: nowrap; }
+.relationship-row em { color: var(--error-fg); grid-column: 1 / -1; }
+.relationship-violation { border-color: var(--error-fg); background: var(--error-bg); }
+@media (max-width: 700px) {
+  .audit-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .relationship-row { grid-template-columns: 1fr; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #101216;

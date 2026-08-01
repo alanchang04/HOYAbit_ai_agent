@@ -39,6 +39,11 @@ def _feature_eligible(evidence: Any, validation_by_id: dict[str, Any]) -> bool:
         return False
     if str(_get(result, "dedup_verdict", "")).lower() == "removed":
         return False
+    certificate_status = str(_get(result, "status", "")).lower()
+    if certificate_status in {"invalid", "quarantined", "rejected"}:
+        return False
+    if certificate_status in {"validated", "degraded"}:
+        return True
     return not (
         _get(result, "timestamp_valid", True) is False
         or _get(result, "data_integrity_ok", True) is False

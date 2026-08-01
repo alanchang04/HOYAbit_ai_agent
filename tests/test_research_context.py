@@ -114,12 +114,18 @@ def test_graph_preserves_topics_claims_duplicates_and_quarantine() -> None:
     assert graph.stats["duplicate_evidence"] == 1
     assert graph.stats["quarantined_evidence"] == 1
     assert graph.stats["invalid_evidence"] == 1
+    assert any(node.id == "quarantine:draft:004" for node in graph.nodes)
     assert not any(
         edge.source == "ev-002" and edge.metadata.get("validation_violation")
         for edge in graph.edges
     )
     assert any(
-        edge.source == "claim:fact:001" and edge.relation == "about"
+        edge.source == "fact-001" and edge.relation == "maps_to"
+        for edge in graph.edges
+    )
+    topic_ids = {node.id for node in graph.nodes if node.kind == "topic"}
+    assert any(
+        edge.target in topic_ids and edge.relation == "about"
         for edge in graph.edges
     )
 
@@ -130,6 +136,24 @@ def test_unknown_evidence_ids_do_not_create_dangling_edges() -> None:
     graph = build_evidence_graph([_evidence("ev-001", "RSI14=55.0")], result)
 
     assert all(edge.source != "ev-999" and edge.target != "ev-999" for edge in graph.edges)
+
+
+def test_degraded_certificate_remains_feature_eligible() -> None:
+    evidence = _evidence("ev-001", "RSI14=55.0")
+    validation = SimpleNamespace(
+        evidence_id="ev-001",
+        status="DEGRADED",
+        injection_flag=None,
+        dedup_verdict=None,
+        timestamp_valid=False,
+        data_integrity_ok=False,
+        source_reliability=0.8,
+        source_grade="A",
+    )
+    context = build_research_context(
+        [evidence], _reasoning_result(), validation_results=[validation]
+    )
+    assert any(feature.evidence_id == "ev-001" for feature in context.structured_features)
 
 
 def test_research_context_is_deterministic_and_writable(tmp_path) -> None:

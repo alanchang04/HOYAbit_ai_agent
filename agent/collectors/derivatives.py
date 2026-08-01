@@ -181,7 +181,11 @@ class DerivativesCollector(BaseCollector):
             return []
 
         evidences: list[EvidenceDraft] = []
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
+        ) as client:
             for fetch_fn, sub_name in (
                 (self._fetch_funding_rate_percentile, "funding_rate_percentile"),
                 (self._fetch_oi_price_quadrant, "oi_price_quadrant"),

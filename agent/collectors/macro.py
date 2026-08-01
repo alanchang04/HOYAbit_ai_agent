@@ -204,7 +204,11 @@ class MacroCollector(BaseCollector):
     async def fetch(self, coin: str, **kwargs) -> list[EvidenceDraft]:
         evidences: list[EvidenceDraft] = []
 
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
+        ) as client:
             try:
                 fng_params = {"limit": FNG_WINDOW}
                 resp = await client.get("https://api.alternative.me/fng/", params=fng_params)

@@ -126,6 +126,10 @@ class ReasoningResult:
     # 依主題分組的事實重述（v1.2 新增，附加欄位，不動 Evidence.related_claim）。
     # 見 `_build_related_claims()`。
     related_claims: list[dict] = field(default_factory=list)
+    # Step A grounding 的逐筆稽核軌跡。只記曾經違規的 Fact；最終通過的 Fact
+    # 可由 ``facts`` 決定性重驗。Validation Certificate 用這份資料揭露被修復／
+    # 捨棄的內容，避免 aggregate log 掩蓋是哪一筆 Evidence 受到影響。
+    grounding_audit: list[dict] = field(default_factory=list)
 
 
 class ReasoningStepError(RuntimeError):
@@ -577,6 +581,7 @@ def _real_reasoning(
     # 就退回重試一次；重試後仍違規就直接捨棄該筆 fact（R6-1 降級優先——
     # 寧可少一筆事實，不可讓一筆有毒的事實流進 Step B/C）。
     facts, violations = _validate_facts_grounding(facts, evidences_by_id)
+    grounding_audit: list[dict] = []
     violations_found = len(violations)
     recovered = 0
     dropped = 0
@@ -584,6 +589,16 @@ def _real_reasoning(
         remaining = _remaining(deadline)
         if remaining is not None and remaining < MIN_LLM_STEP_SECONDS:
             dropped = len(violations)
+            grounding_audit.extend(
+                {
+                    "fact_summary": fact.get("summary", ""),
+                    "evidence_ids": fact.get("evidence_ids", []) or [],
+                    "reasons": reasons,
+                    "outcome": "dropped",
+                    "detail": "deadline 不足，未重試",
+                }
+                for fact, reasons in violations
+            )
             _log(
                 "step_a_grounding_check",
                 "skipped",
@@ -613,8 +628,50 @@ def _real_reasoning(
                 facts.extend(retried_clean)
                 recovered = len(retried_clean)
                 dropped = len(retried_violations)
+                recovered_ids = {
+                    evidence_id
+                    for fact in retried_clean
+                    for evidence_id in (fact.get("evidence_ids", []) or [])
+                }
+                for fact, reasons in violations:
+                    evidence_ids = fact.get("evidence_ids", []) or []
+                    was_recovered = bool(set(evidence_ids) & recovered_ids)
+                    grounding_audit.append(
+                        {
+                            "fact_summary": fact.get("summary", ""),
+                            "evidence_ids": evidence_ids,
+                            "reasons": reasons,
+                            "outcome": "recovered" if was_recovered else "dropped",
+                            "detail": "重試後產生通過稽核的替代 Fact" if was_recovered else "重試後仍未通過",
+                        }
+                    )
+                # 若模型重試時額外產生新的違規 Fact，也要保留，不能只記第一次的問題。
+                for fact, reasons in retried_violations:
+                    if not any(
+                        item["fact_summary"] == fact.get("summary", "")
+                        for item in grounding_audit
+                    ):
+                        grounding_audit.append(
+                            {
+                                "fact_summary": fact.get("summary", ""),
+                                "evidence_ids": fact.get("evidence_ids", []) or [],
+                                "reasons": reasons,
+                                "outcome": "dropped",
+                                "detail": "重試產物仍未通過",
+                            }
+                        )
             except ReasoningStepError as exc:
                 dropped = len(violations)
+                grounding_audit.extend(
+                    {
+                        "fact_summary": fact.get("summary", ""),
+                        "evidence_ids": fact.get("evidence_ids", []) or [],
+                        "reasons": reasons,
+                        "outcome": "dropped",
+                        "detail": f"grounding 重試失敗：{exc}",
+                    }
+                    for fact, reasons in violations
+                )
                 _log("step_a_facts_grounding_retry", "error", f"重試失敗，捨棄違規 fact: {exc}")
 
             if dropped:
@@ -982,6 +1039,7 @@ def _real_reasoning(
         primary_horizon=primary_horizon.value,
         primary_horizon_basis=primary_horizon_basis,
         related_claims=_build_related_claims(facts),
+        grounding_audit=grounding_audit,
     )
 
 

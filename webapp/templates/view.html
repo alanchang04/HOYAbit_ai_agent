@@ -97,6 +97,115 @@
       </div>
     </section>
 
+    {% set audit = view.get("evidence_audit", {}) %}
+    {% if audit %}
+    <section class="audit-section" id="evidence-audit">
+      <div class="audit-heading">
+        <div>
+          <span class="brief-kicker">Validation Certificate</span>
+          <h2>Evidence Audit</h2>
+          <p class="note">每筆資料的驗證結果與決策血緣直接呈現於此，不必下載 JSON 才能查核。</p>
+        </div>
+        <div class="audit-downloads">
+          <a href="/download/{{ run_id }}/validation_results.json">Validation Certificate</a>
+          <a href="/download/{{ run_id }}/research_context.json">Research Context</a>
+          <a href="/download/{{ run_id }}/run_manifest.json">Run Manifest</a>
+        </div>
+      </div>
+
+      {% set a_summary = audit.get("summary", {}) %}
+      <div class="audit-summary-grid">
+        <div><strong>{{ a_summary.get("validated", 0) }}</strong><span>VALIDATED</span></div>
+        <div><strong>{{ a_summary.get("degraded", 0) }}</strong><span>DEGRADED</span></div>
+        <div><strong>{{ a_summary.get("quarantined", 0) }}</strong><span>QUARANTINED</span></div>
+        <div><strong>{{ a_summary.get("invalid", 0) }}</strong><span>INVALID</span></div>
+      </div>
+
+      <div class="audit-cards">
+        {% for item in audit.get("items", []) %}
+        <details class="audit-card audit-card-{{ item.status|lower }}"{% if item.status in ["QUARANTINED", "INVALID"] %} open{% endif %}>
+          <summary>
+            <span class="fingerprint-badge">{{ item.fingerprint or "Q" }}</span>
+            <code>{{ item.evidence_id }}</code>
+            <span class="validation-badge validation-{{ item.status|lower }}">{{ item.status }}</span>
+            <span class="audit-source">{{ item.source or "Schema 建構前資料" }}</span>
+          </summary>
+          <div class="audit-card-body">
+            <div class="audit-meta">
+              <span>幣種：{{ item.coin or "—" }}</span>
+              <span>類別：{{ item.source_type or "—" }}</span>
+              <span>來源等級：{{ item.source_grade or "—" }}</span>
+              <span>權重：{% if item.source_weight is not none %}{{ "%.2f"|format(item.source_weight) }}{% else %}—{% endif %}</span>
+            </div>
+            {% if item.content_reference %}<p class="audit-content">{{ item.content_reference }}</p>{% endif %}
+            <div class="check-grid">
+              {% for check_name, check in item.checks.items() %}
+              <div class="check-chip check-{{ check.status }}" title="{{ check.reason }}">
+                <span>{{ check_name|replace('_', ' ') }}</span>
+                <strong>{{ check.status }}</strong>
+                <small>{{ check.reason }}</small>
+                {% if check.fact_ids %}<small>Facts：{{ check.fact_ids|join(', ') }}</small>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% if item.reasons %}
+            <ul class="audit-reasons">{% for reason in item.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+            {% endif %}
+            {% if item.claims %}
+            <div class="claim-links">
+              <strong>引用 Claim／Fact：</strong>
+              {% for claim in item.claims %}
+                <span><code>{{ claim.target }}</code>（{{ claim.relation }}）{{ claim.target_label }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+
+      <details class="lineage-details" open>
+        <summary>Claim Coverage 與決策血緣：{{ audit.get("lineage_label", "") }}</summary>
+        <div class="table-scroll">
+          <table class="lineage-table">
+            <thead><tr><th>節點</th><th>角色</th><th>Coverage</th><th>支持 Evidence</th><th>反對 Evidence</th><th>隔離／無效 Evidence</th><th>內容</th></tr></thead>
+            <tbody>
+              {% for claim in audit.get("claim_coverage", []) %}
+              <tr>
+                <td><code>{{ claim.claim_id }}</code></td>
+                <td>{{ claim.role }}</td>
+                <td><span class="coverage-badge coverage-{{ claim.coverage|lower }}">{{ claim.coverage }}</span></td>
+                <td>{{ claim.supporting_evidence_ids|join(', ') or '—' }}</td>
+                <td>{{ claim.contradicting_evidence_ids|join(', ') or '—' }}</td>
+                <td>{{ claim.excluded_evidence_ids|join(', ') or '—' }}</td>
+                <td>{{ claim.text }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="data-missing">本次沒有 Claim 節點</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="lineage-details">
+        <summary>完整 Evidence Relationship Graph（{{ audit.get("relationships", [])|length }} 條 edge）</summary>
+        <div class="relationship-list">
+          {% for edge in audit.get("relationships", []) %}
+          <div class="relationship-row{% if edge.validation_violation %} relationship-violation{% endif %}">
+            <span><small>{{ edge.source_role }}</small><code>{{ edge.source }}</code> {{ edge.source_label }}</span>
+            <strong>— {{ edge.relation }} →</strong>
+            <span><small>{{ edge.target_role }}</small><code>{{ edge.target }}</code> {{ edge.target_label }}</span>
+            {% if edge.validation_violation %}<em>Validation violation</em>{% endif %}
+          </div>
+          {% else %}
+          <p class="data-missing">本次沒有可顯示的關係。</p>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+    {% endif %}
+
     {# Four-panel grid #}
     <details class="technical-detail">
       <summary>展開信任提煉四面板、完整辯論與 Evidence</summary>

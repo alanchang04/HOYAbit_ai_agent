@@ -125,7 +125,10 @@ class SocialCollector(BaseCollector):
         horizon_class = horizon_for_days(window_days)
 
         async with httpx.AsyncClient(
-            timeout=HTTP_TIMEOUT, headers={"User-Agent": REDDIT_USER_AGENT}, follow_redirects=True
+            timeout=HTTP_TIMEOUT,
+            headers={"User-Agent": REDDIT_USER_AGENT},
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
         ) as client:
             token = await self._get_oauth_token(client, coin)
 

@@ -72,7 +72,11 @@ class OnchainCollector(BaseCollector):
 
     async def fetch(self, coin: str, **kwargs) -> list[EvidenceDraft]:
         info = get_coin_info(coin)
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
+        ) as client:
             if info.chain == "bitcoin":
                 return await self._fetch_bitcoin(client, coin)
             if info.chain == "evm":

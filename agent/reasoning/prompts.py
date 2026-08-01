@@ -17,6 +17,11 @@ from agent.schemas import (
     is_current_signal,
 )
 
+# Written into run_manifest.json together with a SHA-256 of this source file.
+# Human-readable version identifies semantic prompt changes; the hash catches
+# any unversioned edit and makes a run auditable even in a dirty worktree.
+PROMPT_VERSION = "v1.2-transparency-1"
+
 QUESTION_TYPE_KEYWORDS: dict[QuestionType, list[str]] = {
     "comparison": ["比較", "相較", "對比", "vs", "與.*相比"],
     "hypothesis_test": ["市場上有聲音認為", "是否", "驗證", "支持與反對", "正確嗎"],

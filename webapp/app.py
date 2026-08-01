@@ -39,6 +39,7 @@ ALLOWED_DOWNLOAD_FILENAMES = {
     "report_view.json",
     "validation_results.json",
     "research_context.json",
+    "run_manifest.json",
     "report.html",
     "evidence.html",
     "execution_log.html",

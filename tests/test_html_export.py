@@ -71,6 +71,7 @@ def test_export_html_bundle_preserves_original_contract_and_escapes_content(tmp_
         "report_view.json",
         "validation_results.json",
         "research_context.json",
+        "run_manifest.json",
     ):
         assert original in index
     assert "GitHub repository" in index

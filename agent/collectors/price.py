@@ -912,7 +912,11 @@ class PriceCollector(BaseCollector):
         info = get_coin_info(coin)
         data_dir = self.settings.data_dir if self.settings else "data"
 
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
+        ) as client:
             # --- 主要來源：主辦方提供之共同基準 OHLCV CSV（＋缺口補齊）---
             try:
                 await self._build_ohlcv_evidences(client, coin, data_dir, evidences)

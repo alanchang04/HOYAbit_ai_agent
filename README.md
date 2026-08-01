@@ -34,14 +34,15 @@ cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 - `evidence.json`：證據清單
 - `execution_log.jsonl`：執行紀錄
 - `report_view.json`：四面板機器可讀資料
-- `validation_results.json`：逐筆 Evidence Validation 稽核結果
+- `validation_results.json`：版本化 Evidence Validation Certificate（逐項 pass/warn/fail、Grounding 與 quarantine）
 - `research_context.json`：Structured Features、Knowledge Lite 與 Evidence Relationship Graph
+- `run_manifest.json`：Run ID、Git/模型/Prompt/設定、資料/API 與產物 SHA-256 指紋
 - `report.html`：Final Report 的 standalone 離線閱讀版
 - `evidence.html`：Evidence List 的 standalone 離線閱讀版
 - `execution_log.html`：Execution Log 的 standalone 離線閱讀版
 - `deliverables.html`：評審交付物索引與原始檔／HTML 對照
 
-前三份原始檔仍是命題要求的權威正式交付物；`report_view.json` 與兩份 validation/research sidecar 提供額外稽核與展示能力，HTML 則是方便評審直接用瀏覽器閱讀的補充。
+前三份原始檔仍是命題要求的權威正式交付物；`report_view.json`、Validation／Research sidecar 與 run manifest 提供額外稽核、決策血緣與重現能力，HTML 則是方便評審直接用瀏覽器閱讀的補充。
 Source / Config 則以 GitHub repository、`README.md`、`.env.example` 與原始碼樹交付，不以 HTML 取代。
 
 ### 決賽提交檢查
@@ -177,7 +178,7 @@ docker run --rm --env-file .env hoyabit-agent \
         │ → research_context.json                     │
         └────────────────────────┬───────────────────┘
                                   ▼
- report.md ／ evidence.json ／ execution_log.jsonl ／ validation_results.json ／ research_context.json
+ report.md ／ evidence.json ／ execution_log.jsonl ／ validation_results.json ／ research_context.json ／ run_manifest.json
 ```
 
 **設計重點：**

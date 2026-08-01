@@ -33,15 +33,16 @@ from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
 from agent.report.html_export import export_html_bundle
 from agent.report.view_builder import build_report_view
+from agent.run_manifest import write_run_manifest
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
 from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
-from agent.filters.validation import build_validation_results
+from agent.filters.validation import build_validation_certificate, build_validation_results
 from agent.integrity import assess_integrity
 from agent.reasoning.consistency import enforce_reasoning_consistency
 from agent.research.context import write_research_context
-from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
+from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics, now_iso
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 
@@ -183,6 +184,9 @@ def assign_evidence_ids(
                     "index": i,
                     "source": draft.source,
                     "coin": draft.coin,
+                    "source_type": draft.source_type.value,
+                    "fetched_at": draft.fetched_at,
+                    "content_reference": draft.content_reference,
                     "reason": f"{type(exc).__name__}: {exc}",
                 }
             )
@@ -219,6 +223,7 @@ def run_pipeline(
 ) -> RunResult:
     settings = get_settings()
     start_time = time.monotonic()
+    started_at = now_iso()
 
     out_dir = Path(output_dir or settings.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -407,33 +412,51 @@ def run_pipeline(
         status=LogStatus.OK,
     )
 
-    # 統一 Validation Result（v1.2 新增，ValidatedEvidence gate 的稽核輸出）：
-    # 把 source_weight／injection_flag／dedup verdict 這些已經算好的既有檢查結果
-    # 彙總成一筆 per-evidence 紀錄，寫成獨立檔案——刻意不塞進 evidence.json，
-    # 那份檔案的頂層是 list（webapp／report 已經假設這個形狀），改成 dict 會
-    # 動到既有讀取邏輯。
-    validation_results = build_validation_results(evidences, breakdowns, filter_decisions)
-    validation_path = out_dir / "validation_results.json"
-    validation_path.write_text(
-        json.dumps([vars(r) for r in validation_results], ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    # 推理前先執行真正的 ValidatedEvidence gate。完整 Certificate 會在 Step A
+    # grounding 後重建；這裡的 preliminary 結果只負責阻擋 schema／時間／資料完整性
+    # 明確失敗與 injection quarantine，不因低權重或 duplicate 抹掉稽核原文。
+    preliminary_validation = build_validation_results(
+        evidences,
+        breakdowns,
+        filter_decisions,
+        quarantined_drafts=quarantined_drafts,
+        primary_horizon=primary_horizon,
     )
+    blocked_evidence_ids = {
+        result.evidence_id
+        for result in preliminary_validation
+        if not result.pre_schema_quarantine and result.status in {"INVALID", "QUARANTINED"}
+    }
+    reasoning_evidences = [
+        evidence for evidence in evidences if evidence.id not in blocked_evidence_ids
+    ]
     logger.log(
         phase=LogPhase.COLLECT,
-        action="validation_results_written",
+        action="validated_evidence_gate",
         detail=(
-            f"count={len(validation_results)}, quarantined={len(quarantined_drafts)}, "
-            f"path={validation_path}"
+            f"total={len(evidences)}, admitted={len(reasoning_evidences)}, "
+            f"blocked={len(blocked_evidence_ids)}, pre_schema_invalid={len(quarantined_drafts)}"
         ),
-        status=LogStatus.OK,
+        status=LogStatus.ERROR if blocked_evidence_ids else LogStatus.OK,
         layer=PipelineLayer.SOURCE,
+        metrics={
+            "total": len(evidences),
+            "admitted": len(reasoning_evidences),
+            "blocked": len(blocked_evidence_ids),
+            "blocked_evidence_ids": sorted(blocked_evidence_ids),
+            "pre_schema_invalid": len(quarantined_drafts),
+        },
     )
+    if blocked_evidence_ids:
+        degraded_reasons.append(
+            f"ValidatedEvidence gate 阻擋 {len(blocked_evidence_ids)} 筆無效／隔離 Evidence"
+        )
 
     def log_step(step: str, status: str, detail: str = "") -> None:
         logger.log(phase=LogPhase.REASON, action=step, detail=detail, status=LogStatus(status))
 
     if dry_run:
-        reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2, logger=logger)
+        reasoning_result = run_reasoning(coin, question, reasoning_evidences, dry_run=True, coin2=coin2, logger=logger)
     else:
         llm_client = build_llm_client(settings)
         reasoning_deadline = start_time + settings.hard_deadline_seconds - REPORT_RESERVE_SECONDS
@@ -457,7 +480,7 @@ def run_pipeline(
             )
         try:
             reasoning_result = run_reasoning(
-                coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
+                coin, question, reasoning_evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
                 deadline=reasoning_deadline,
             )
         except ReasoningStepError as exc:
@@ -521,10 +544,38 @@ def run_pipeline(
             layer=PipelineLayer.CONCLUSION,
         )
 
+    # Step A 完成後產生最終 Validation Certificate。每筆結果包含真實時間／資料
+    # 完整性判定、Fact grounding、duplicate／injection 與統一狀態；schema 建構前
+    # 被隔離的草稿也在同一份 results 主清單中，不再只存在 execution log。
+    validation_results = build_validation_results(
+        evidences,
+        breakdowns,
+        filter_decisions,
+        facts=reasoning_result.facts,
+        grounding_audit=reasoning_result.grounding_audit,
+        quarantined_drafts=quarantined_drafts,
+        primary_horizon=primary_horizon,
+    )
+    validation_certificate = build_validation_certificate(validation_results)
+    validation_path = out_dir / "validation_results.json"
+    validation_path.write_text(
+        json.dumps(validation_certificate, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.log(
+        phase=LogPhase.REASON,
+        action="validation_certificate_written",
+        detail=f"path={validation_path}, total={len(validation_results)}",
+        status=LogStatus.OK,
+        layer=PipelineLayer.FACT,
+        metrics=validation_certificate["summary"],
+    )
+
     # v2-reference sidecar：只把既有 Evidence／Reasoning 關係結構化，不回寫結論、
     # 不重算 confidence，也不進入 LLM。失敗隔離以維持 v1.2 正式交付；但若 graph
     # 發現 invalid/quarantined Evidence 仍被推理引用，代表 ValidatedEvidence gate
     # 真正漏水，必須降級揭露，不能只把異常藏在 sidecar。
+    research_context = None
     try:
         research_path, research_context = write_research_context(
             out_dir,
@@ -562,7 +613,7 @@ def run_pipeline(
             status=LogStatus.ERROR,
         )
 
-    integrity = assess_integrity(evidences, coins, degraded_reasons)
+    integrity = assess_integrity(reasoning_evidences, coins, degraded_reasons)
     if integrity.status != "INTACT":
         integrity_note = f"資料完整性 {integrity.status}：{'；'.join(integrity.reasons)}"
         limitations = reasoning_result.conclusion.setdefault("limitations", [])
@@ -647,6 +698,8 @@ def run_pipeline(
             coin=coin,
             coin2=coin2,
             question=question,
+            validation_results=validation_results,
+            research_context=research_context,
         )
         if view:
             logger.log(
@@ -699,6 +752,41 @@ def run_pipeline(
             phase=LogPhase.REPORT,
             action="html_export_failed",
             detail=str(exc),
+            status=LogStatus.ERROR,
+        )
+
+    # 最後才寫 reproducibility manifest：此時 report/view/sidecars/HTML 與完整 log
+    # 都已定稿，SHA-256 才能代表評審實際收到的檔案。先把準備事件寫入 log，再
+    # 計算 execution_log.jsonl 的 hash；manifest 自身依規格排除 self-hash。
+    completed_at = now_iso()
+    run_id = out_dir.name
+    try:
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="run_manifest_prepared",
+            detail=f"run_id={run_id}",
+            status=LogStatus.OK,
+        )
+        write_run_manifest(
+            out_dir,
+            run_id=run_id,
+            coin=coin,
+            coin2=coin2,
+            question=question,
+            question_type=question_type,
+            primary_horizon=primary_horizon.value,
+            dry_run=dry_run,
+            settings=settings,
+            started_at=started_at,
+            completed_at=completed_at,
+            elapsed_seconds=total_elapsed,
+            log_entries=logger.read_all(),
+        )
+    except Exception as exc:  # manifest failure must not erase the official v1 deliverables
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="run_manifest_failed",
+            detail=f"{type(exc).__name__}: {exc}",
             status=LogStatus.ERROR,
         )
 

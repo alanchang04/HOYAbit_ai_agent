@@ -56,6 +56,7 @@ def test_result_page_renders(dry_run_result: dict) -> None:
     assert "execution_log.html" in dry_run_result["html"]
     assert "validation_results.json" in dry_run_result["html"]
     assert "research_context.json" in dry_run_result["html"]
+    assert "run_manifest.json" in dry_run_result["html"]
 
 
 def test_result_page_stat_cards_not_na(dry_run_result: dict) -> None:
@@ -73,7 +74,7 @@ def test_result_page_stat_cards_not_na(dry_run_result: dict) -> None:
     assert "<h2 " in body.group(1)  # toc extension 加了 id 屬性，標題不再是裸 <h2>
 
 
-@pytest.mark.parametrize("filename", ["validation_results.json", "research_context.json"])
+@pytest.mark.parametrize("filename", ["validation_results.json", "research_context.json", "run_manifest.json"])
 def test_validation_sidecars_are_downloadable(
     client: TestClient, dry_run_result: dict, filename: str
 ) -> None:
@@ -100,6 +101,11 @@ def test_view_page_renders_four_panels(client: TestClient, dry_run_result: dict)
     assert "F9 情緒分布（詞典法）" in html
     # 面板①的證據項目有實際渲染（非空面板）
     assert "fingerprint-badge" in html
+    assert "Evidence Audit" in html
+    assert "Validation Certificate" in html
+    assert "Claim Coverage" in html
+    assert "Evidence Relationship Graph" in html
+    assert "fact_grounding" in html
 
 
 def test_view_page_l5_layer_expanded_by_default(client: TestClient, dry_run_result: dict) -> None:

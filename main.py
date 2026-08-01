@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"證據筆數：{len(result.evidences)}")
     print(
         "已產出 report.md / evidence.json / execution_log.jsonl / "
-        f"validation_results.json / research_context.json 於 {output_dir}/"
+        f"validation_results.json / research_context.json / run_manifest.json 於 {output_dir}/"
     )
     return 0
 

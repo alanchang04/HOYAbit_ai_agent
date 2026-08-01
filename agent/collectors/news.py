@@ -253,7 +253,10 @@ class NewsCollector(BaseCollector):
         window_start, window_end = window_back(recency_window_days, end=now.date())
 
         async with httpx.AsyncClient(
-            timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}, follow_redirects=True
+            timeout=HTTP_TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
+            follow_redirects=True,
+            event_hooks=self.http_event_hooks(),
         ) as client:
             for source in sources:
                 sub_name = source["name"].lower().replace(" ", "_")

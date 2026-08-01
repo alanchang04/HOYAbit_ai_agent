@@ -50,7 +50,7 @@ class KnowledgeCard(BaseModel):
 
 class GraphNode(BaseModel):
     id: str
-    kind: Literal["evidence", "claim", "topic", "signal"]
+    kind: Literal["evidence", "fact", "claim", "topic", "signal"]
     label: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -63,6 +63,8 @@ class GraphEdge(BaseModel):
         "contradicts",
         "cited_by",
         "about",
+        "maps_to",
+        "informs",
         "duplicate_of",
         "contributes_to_direction",
     ]

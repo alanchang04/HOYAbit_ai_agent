@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from agent.filters.source_weights import WeightBreakdown
-from agent.filters.validation import build_validation_results
+from agent.filters.validation import build_validation_certificate, build_validation_results
 from agent.orchestrator import assign_evidence_ids
-from agent.schemas import Evidence, EvidenceDraft, FilterDecision, FilterVerdict, now_iso
+from agent.schemas import Evidence, EvidenceDraft, FilterDecision, FilterVerdict, HorizonClass, now_iso
 
 
 def _ev(ev_id: str = "ev-001", injection_flag: str | None = None) -> Evidence:
@@ -16,7 +18,7 @@ def _ev(ev_id: str = "ev-001", injection_flag: str | None = None) -> Evidence:
         coin="BTC",
         source="test-source",
         fetched_at=now_iso(),
-        content_reference="ref",
+        content_reference="Price reference value=100",
         related_claim="claim",
         source_type="price",
         source_weight=0.5,
@@ -71,6 +73,78 @@ class TestBuildValidationResults:
         evs = [_ev("ev-001"), _ev("ev-002")]
         results = build_validation_results(evs, {}, [])
         assert [r.evidence_id for r in results] == ["ev-001", "ev-002"]
+
+    def test_stale_timestamp_is_degraded_not_silently_valid(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ev = _ev()
+        ev.fetched_at = old
+        [result] = build_validation_results([ev], {}, [])
+        assert result.status == "DEGRADED"
+        assert result.checks["timestamp"].status == "warn"
+        assert result.timestamp_valid is False
+        assert "並非本次即時抓取" in result.checks["timestamp"].reason
+
+    def test_fact_grounding_is_per_evidence_with_fact_ids(self):
+        ev = _ev()
+        ev.content_reference = "RSI14=45.2"
+        facts = [{"summary": "RSI14 為 45.2", "evidence_ids": ["ev-001"]}]
+        [result] = build_validation_results([ev], {}, [], facts=facts)
+        check = result.checks["fact_grounding"]
+        assert check.status == "pass"
+        assert check.fact_ids == ["fact-001"]
+
+    def test_pre_schema_quarantine_is_in_certificate_main_results(self):
+        results = build_validation_results(
+            [_ev()],
+            {},
+            [],
+            quarantined_drafts=[
+                {
+                    "index": 2,
+                    "coin": "BTC",
+                    "source": "broken",
+                    "source_type": "price",
+                    "content_reference": "bad payload",
+                    "reason": "ValidationError: invalid source_type",
+                }
+            ],
+        )
+        certificate = build_validation_certificate(results)
+        assert certificate["schema_version"] == "2.0"
+        assert certificate["summary"]["invalid"] == 1
+        quarantined = certificate["results"][1]
+        assert quarantined["evidence_id"] == "quarantine:draft:002"
+        assert quarantined["status"] == "INVALID"
+        assert quarantined["pre_schema_quarantine"] is True
+        assert quarantined["checks"]["schema"]["status"] == "fail"
+
+    def test_invalid_data_integrity_blocks_record(self):
+        ev = _ev()
+        ev.source_weight = float("nan")
+        [result] = build_validation_results([ev], {}, [])
+        assert result.status == "INVALID"
+        assert result.checks["data_integrity"].status == "fail"
+
+    def test_narrative_integrity_requires_traceable_url(self):
+        ev = _ev()
+        ev.source_type = "news"
+        ev.content_reference = "A sufficiently long narrative item without a traceable source URL."
+        [result] = build_validation_results([ev], {}, [])
+        check = result.checks["data_integrity"]
+        assert check.status == "warn"
+        assert result.data_integrity_ok is False
+        assert check.details["policy"] == "narrative"
+        assert check.details["has_traceable_url"] is False
+
+    def test_timestamp_reports_large_question_horizon_mismatch(self):
+        ev = _ev()
+        [result] = build_validation_results(
+            [ev], {}, [], primary_horizon=HorizonClass.STRUCTURAL
+        )
+        check = result.checks["timestamp"]
+        assert check.status == "warn"
+        assert check.details["horizon_alignment"] == "supplemental"
+        assert check.details["horizon_gap"] == 4
 
 
 def _draft(**overrides) -> EvidenceDraft:
