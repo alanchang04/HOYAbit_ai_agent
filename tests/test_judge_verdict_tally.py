@@ -295,8 +295,14 @@ class TestFirstRoundTiming:
     而該輪實際是 bull 20.7 + bear 31.9 = 52.6s——低估四成。
     """
 
-    def _run(self, bull_delay, bear_delay, budget):
+    @pytest.fixture(autouse=True)
+    def _patch(self, monkeypatch):
+        self._mp = monkeypatch
+
+    def _run(self, bull_delay, bear_delay, budget, monkeypatch=None):
         import time as _time
+
+        from agent.reasoning import pipeline as _pipeline
 
         from agent.reasoning.pipeline import run_reasoning
         from agent.schemas import Evidence, now_iso
@@ -326,6 +332,10 @@ class TestFirstRoundTiming:
 
         ev = [Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
                        content_reference="r", related_claim="c", source_type="price")]
+        # 這兩個常數是「整段跳過辯論」的門檻（見 TestHardDeadline）；本組測的是
+        # 輪與輪之間的 gate，把門檻壓到極小以免兩者互相干擾。
+        self._mp.setattr(_pipeline, "STEP_D_RESERVE_SECONDS", 0.05)
+        self._mp.setattr(_pipeline, "MIN_LLM_STEP_SECONDS", 0.01)
         client = SlowClient()
         return run_reasoning(
             "BTC", "分析 BTC 市場表現", ev, dry_run=False, llm_client=client,
@@ -417,3 +427,125 @@ class TestBedrockTimeouts:
         c.on_retry = seen.append
         assert c._sleep_before_retry(1, RuntimeError("boom")) is False
         assert "放棄重試" in seen[0]
+
+
+# --- 8. 15 分鐘硬性上限（禁止超時）---
+
+
+class TestHardDeadline:
+    """兩層保證，缺一不可：
+
+    1. **不啟動**：剩餘時間不足以完成一次呼叫時，`_call_json_step` 直接放棄該步驟。
+    2. **不超時**：已經發出的請求也不能跑過截止時間——`BedrockClient` 依剩餘預算
+       收緊該次的 socket read timeout。
+
+    只有第 1 層是不夠的：在截止前 1 秒發出的請求，照樣能跑滿 150 秒的 read timeout。
+    """
+
+    def test_effective_timeout_never_outlives_the_deadline(self):
+        """任何在截止前發出的請求都必須在截止前結束。"""
+        import time
+
+        from agent.config import Settings
+        from agent.reasoning.bedrock_client import BedrockClient
+
+        c = BedrockClient(Settings())
+        for remaining in (20, 40, 90, 200, 600, 900):
+            c.deadline = time.monotonic() + remaining
+            timeout = c._effective_timeout()
+            assert timeout is not None
+            # 連線逾時 + 讀取逾時 + 安全邊際 必須裝得進剩餘預算
+            worst_case = timeout + c.settings.llm_connect_timeout_seconds + c.SAFETY_MARGIN_SECONDS
+            assert worst_case <= remaining + 1, f"remaining={remaining} timeout={timeout}"
+
+    def test_effective_timeout_is_capped_by_the_configured_value(self):
+        """預算充裕時不能無限放大 timeout，仍以設定值為上限。"""
+        import time
+
+        from agent.config import Settings
+        from agent.reasoning.bedrock_client import BedrockClient
+
+        c = BedrockClient(Settings())
+        c.deadline = time.monotonic() + 10_000
+        assert c._effective_timeout() == Settings().llm_read_timeout_seconds
+
+    def test_no_request_is_sent_when_budget_is_exhausted(self):
+        import time
+
+        from agent.config import Settings
+        from agent.reasoning.bedrock_client import BedrockClient
+
+        c = BedrockClient(Settings())
+        c.deadline = time.monotonic() + 2  # 連 connect_timeout + margin 都不夠
+        assert c._effective_timeout() is None
+
+    def test_pipeline_stops_issuing_calls_and_stays_within_budget(self):
+        """整條推理鏈在預算內收手：呼叫次數受限，且總耗時不超過預算太多。
+
+        假 client 不會自己遵守 deadline（那是 BedrockClient 的責任，另有測試），
+        所以這裡驗的是「不啟動」那一層：預算用完後不再發新呼叫。
+        """
+        import time as _time
+
+        from agent.reasoning.pipeline import ReasoningStepError, run_reasoning
+        from agent.schemas import Evidence, now_iso
+
+        step_a = '{"facts": [{"source_type": "price", "summary": "s", "evidence_ids": ["ev-001"]}]}'
+        step_b = '{"consistent_signals": [], "contradictions": []}'
+        per_call = 0.2
+
+        class SlowClient:
+            def __init__(self):
+                self.calls = 0
+                self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+
+            def converse(self, system_prompt, user_prompt, max_tokens=2048):
+                self.calls += 1
+                _time.sleep(per_call)
+                return step_a if self.calls == 1 else step_b
+
+        ev = [Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
+                       content_reference="r", related_claim="c", source_type="price")]
+        client = SlowClient()
+        budget = 0.5
+        started = _time.monotonic()
+        with pytest.raises(ReasoningStepError):
+            run_reasoning("BTC", "分析 BTC 市場表現", ev, dry_run=False, llm_client=client,
+                          deadline=started + budget)
+        elapsed = _time.monotonic() - started
+        # 預算 0.5s、每次呼叫 0.2s：最多發 2 次就會因剩餘 < MIN 而放棄。
+        assert client.calls <= 3
+        assert elapsed <= budget + per_call + 0.3, f"elapsed={elapsed:.2f}s"
+
+    def test_debate_is_skipped_entirely_when_only_the_judge_fits(self):
+        """時間只夠給裁判時整段跳過辯論——沒有結論的辯論沒有價值。"""
+        import time as _time
+
+        from agent.reasoning import pipeline as _pipeline
+        from agent.reasoning.pipeline import run_reasoning
+        from agent.schemas import Evidence, now_iso
+
+        step_a = '{"facts": [{"source_type": "price", "summary": "s", "evidence_ids": ["ev-001"]}]}'
+        step_b = '{"consistent_signals": [], "contradictions": []}'
+        step_d = ('{"market_judgment": "m", "confidence": "中", "limitations": [], '
+                  '"invalidation_conditions": [], "evidence_ids": [], "follow_up_watchpoints": []}')
+
+        class Client:
+            def __init__(self):
+                self.script = [step_a, step_b, step_d]
+                self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+                self.calls = 0
+
+            def converse(self, system_prompt, user_prompt, max_tokens=2048):
+                self.calls += 1
+                return self.script.pop(0)
+
+        ev = [Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
+                       content_reference="r", related_claim="c", source_type="price")]
+        client = Client()
+        result = run_reasoning("BTC", "分析 BTC 市場表現", ev, dry_run=False, llm_client=client,
+                               deadline=_time.monotonic() + _pipeline.STEP_D_RESERVE_SECONDS + 1)
+        assert client.calls == 3          # A、B、裁判——沒有任何辯論呼叫
+        assert result.debate == {}
+        assert result.inference == []
+        assert result.conclusion["market_judgment"] == "m"

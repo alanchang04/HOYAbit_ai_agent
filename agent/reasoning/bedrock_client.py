@@ -25,6 +25,11 @@
   代價是 throttling 的重試也只剩應用層的 3 次——可接受，因為現在看得見。
 - **每次重試都要記錄**（`on_retry`），並在**每次嘗試前檢查總時間預算**（`deadline`）。
   預算不足時直接失敗，把剩下的時間留給下游步驟，而不是把整跑拖過 15 分鐘。
+- **單次呼叫的 read timeout 依剩餘預算收緊**。只擋「不啟動」是不夠的：
+  在截止前 1 秒發出的請求，照樣能跑滿 150 秒的 read timeout 才回來。
+  timeout 取 `min(設定值, 剩餘 − 連線逾時 − 安全邊際)`，
+  這樣**任何在截止前發出的請求都不可能跑過截止時間**。
+  botocore 的 timeout 綁在 client 上、無法逐次指定，所以依 timeout 值快取多個 client。
 """
 
 from __future__ import annotations
@@ -48,7 +53,9 @@ class BedrockClient:
         self.settings = settings
         self.max_retries = max_retries
         self.base_backoff_seconds = base_backoff_seconds
-        self._client = None
+        # botocore 的 read_timeout 綁在 client 建構時、無法逐次覆寫，
+        # 因此依「有效 timeout 秒數」快取多個 client（同秒數共用同一個）。
+        self._clients: dict[int, object] = {}
         self.usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
         # 由 orchestrator 設定：`time.monotonic()` 的絕對值，代表整跑的硬性截止時間。
         # None 代表不限時（測試與 scripts/ 的單次驗證皆如此）。
@@ -57,14 +64,22 @@ class BedrockClient:
         # 上面那次 1020 秒的卡頓之所以難查，正是因為重試完全沒有紀錄。
         self.on_retry: Callable[[str], None] | None = None
 
+    # 收到截止時間前留給「解析回應＋寫報告」的安全邊際。
+    SAFETY_MARGIN_SECONDS = 5
+
     @property
     def client(self):
-        if self._client is None:
-            self._client = boto3.client(
+        """不限時（deadline=None）時用設定值建的 client。"""
+        return self._client_with_timeout(self.settings.llm_read_timeout_seconds)
+
+    def _client_with_timeout(self, read_timeout: int):
+        key = int(read_timeout)
+        if key not in self._clients:
+            self._clients[key] = boto3.client(
                 "bedrock-runtime",
                 region_name=self.settings.aws_region,
                 config=Config(
-                    read_timeout=self.settings.llm_read_timeout_seconds,
+                    read_timeout=key,
                     connect_timeout=self.settings.llm_connect_timeout_seconds,
                     # 重試政策只留應用層一份，理由見檔頭。
                     # botocore 的 `max_attempts` 算的是「重試次數」不是「總嘗試次數」，
@@ -72,7 +87,22 @@ class BedrockClient:
                     retries={"mode": "standard", "max_attempts": 0},
                 ),
             )
-        return self._client
+        return self._clients[key]
+
+    def _effective_timeout(self) -> int | None:
+        """這次呼叫可用的 read timeout；剩餘預算不足以發出任何請求時回 None。
+
+        取 `min(設定值, 剩餘 − 連線逾時 − 安全邊際)`：只要請求是在截止前發出的，
+        它就不可能跑過截止時間。這是 15 分鐘上限的「不超時」那一半保證。
+        """
+        configured = self.settings.llm_read_timeout_seconds
+        remaining = self._remaining_seconds()
+        if remaining is None:
+            return configured
+        usable = remaining - self.settings.llm_connect_timeout_seconds - self.SAFETY_MARGIN_SECONDS
+        if usable < 1:
+            return None
+        return max(1, min(configured, int(usable)))
 
     def _remaining_seconds(self) -> float | None:
         return None if self.deadline is None else self.deadline - time.monotonic()
@@ -95,13 +125,15 @@ class BedrockClient:
         """
         last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 1):
-            remaining = self._remaining_seconds()
-            if remaining is not None and remaining <= 0:
+            timeout = self._effective_timeout()
+            if timeout is None:
+                remaining = self._remaining_seconds()
                 raise BedrockClientError(
-                    f"已超過整跑時間預算（剩餘 {remaining:.1f}s），第 {attempt} 次嘗試前中止"
+                    f"剩餘時間預算 {remaining:.1f}s 不足以發出請求，第 {attempt} 次嘗試前中止"
+                    f"（確保整跑不超過硬性上限）"
                 )
             try:
-                response = self.client.converse(
+                response = self._client_with_timeout(timeout).converse(
                     modelId=self.settings.bedrock_model_id,
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": user_prompt}]}],
