@@ -132,7 +132,7 @@ class SocialCollector(BaseCollector):
             for index, subreddit in enumerate(info.subreddits):
                 try:
                     if token:
-                        items = await self._fetch_via_oauth(client, token, subreddit, info.name, reddit_t)
+                        items = await self._fetch_via_oauth(client, token, coin, subreddit, info.name, reddit_t)
                     else:
                         # RSS 每個窗口只准一次請求，第二個 subreddit 起先讓一手，
                         # 否則必定吃 429（實測連打會全滅）。
@@ -181,12 +181,17 @@ class SocialCollector(BaseCollector):
         if not client_id or not client_secret:
             return None
         try:
+            token_body = {"grant_type": "client_credentials"}
             resp = await client.post(
                 OAUTH_TOKEN_URL,
                 auth=(client_id, client_secret),
-                data={"grant_type": "client_credentials"},
+                data=token_body,
             )
             resp.raise_for_status()
+            self.log_subsource(
+                "reddit_oauth", coin, LogStatus.OK,
+                f"endpoint={OAUTH_TOKEN_URL}, body={token_body}",
+            )
             token = resp.json().get("access_token")
             if token:
                 self.log_subsource("reddit_oauth", coin, LogStatus.OK, "已取得 app-only token")
@@ -199,14 +204,19 @@ class SocialCollector(BaseCollector):
             return None
 
     async def _fetch_via_oauth(
-        self, client: httpx.AsyncClient, token: str, subreddit: str, query: str, t: str = "week"
+        self, client: httpx.AsyncClient, token: str, coin: str, subreddit: str, query: str, t: str = "week"
     ) -> list[dict]:
+        params = _search_params(query, t)
         resp = await client.get(
             OAUTH_SEARCH_URL.format(subreddit=subreddit),
-            params=_search_params(query, t),
+            params=params,
             headers={"Authorization": f"Bearer {token}"},
         )
         resp.raise_for_status()
+        self.log_subsource(
+            f"reddit_{subreddit}", coin, LogStatus.OK,
+            f"endpoint={OAUTH_SEARCH_URL.format(subreddit=subreddit)}, params={params}",
+        )
         out = []
         for post in resp.json()["data"]["children"]:
             p = post["data"]
@@ -226,7 +236,8 @@ class SocialCollector(BaseCollector):
     ) -> list[dict]:
         """免 key 路徑。429 時依 `x-ratelimit-reset` 等待後重試一次。"""
         url = f"https://www.reddit.com/r/{subreddit}/search.rss"
-        resp = await client.get(url, params=_search_params(query, t))
+        params = _search_params(query, t)
+        resp = await client.get(url, params=params)
 
         if resp.status_code == 429:
             wait = _retry_after_seconds(resp)
@@ -234,9 +245,13 @@ class SocialCollector(BaseCollector):
                 f"reddit_{subreddit}", coin, LogStatus.SKIPPED, f"429 限流，等待 {wait:.0f}s 後重試"
             )
             await asyncio.sleep(wait)
-            resp = await client.get(url, params=_search_params(query, t))
+            resp = await client.get(url, params=params)
 
         resp.raise_for_status()
+        self.log_subsource(
+            f"reddit_{subreddit}", coin, LogStatus.OK,
+            f"endpoint={url}, params={params}",
+        )
         return [
             {
                 "link": item["link"],
