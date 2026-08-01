@@ -150,7 +150,7 @@ LLMClient 介面（agent/reasoning/llm_client.py）
 | 技術可行性 | 25% | 自刻 orchestrator 精確控制時限；LLM backend 抽象層可換模型；完整 pytest 涵蓋 schema/失敗隔離/推理邏輯/一致性護欄與 degraded mode |
 | 商業應用性 | 20% | 證據可回溯、信心可校準、限制誠實揭露，直接對應「資訊分散、判斷依據不透明」的痛點 |
 | 主題切合度 | 30% | 多源整合＋分層推理＋矛盾訊號處理＋信心校準，完整對應命題五項能力要求 |
-| 完成度 | 10% | CLI／Web UI／Docker 皆可運行，report.md／evidence.json／execution_log.jsonl 三項輸出齊全 |
+| 完成度 | 10% | CLI／Web UI／Docker 皆可運行，三項正式輸出齊全，另附 validation_results.json／research_context.json 稽核 sidecar；v1.2 final 834 項測試全過 |
 
 **尚待補強**：完成現場執行錄影、正式簡報與 Kiro 工作流截圖；正式交付前再用目前 EC2 網址跑一次 smoke test，並在長期產品化階段補 HTTPS。
 

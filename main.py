@@ -84,7 +84,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"執行完成，耗時 {result.elapsed_seconds:.2f} 秒（degraded_mode={result.degraded_mode}）")
     print(f"證據筆數：{len(result.evidences)}")
-    print(f"已產出 report.md / evidence.json / execution_log.jsonl 於 {output_dir}/")
+    print(
+        "已產出 report.md / evidence.json / execution_log.jsonl / "
+        f"validation_results.json / research_context.json 於 {output_dir}/"
+    )
     return 0
 
 

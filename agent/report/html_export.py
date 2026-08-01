@@ -152,6 +152,7 @@ def _index_body(metadata: dict[str, Any]) -> str:
         '<div class="deliverable"><strong>Evidence List</strong><div><a href="evidence.json">evidence.json</a>（權威原檔） · <a href="evidence.html">evidence.html</a>（閱讀版）</div></div>'
         '<div class="deliverable"><strong>Execution Log</strong><div><a href="execution_log.jsonl">execution_log.jsonl</a>（權威原檔） · <a href="execution_log.html">execution_log.html</a>（閱讀版）</div></div>'
         '<div class="deliverable"><strong>Interactive View</strong><div><a href="report_view.json">report_view.json</a>；啟動 Web UI 後可使用四面板檢視。</div></div>'
+        '<div class="deliverable"><strong>Validation Audit</strong><div><a href="validation_results.json">validation_results.json</a>（逐筆驗證結果） · <a href="research_context.json">research_context.json</a>（Structured Features／Knowledge／Evidence Graph）。</div></div>'
         '<div class="deliverable"><strong>Source / Config</strong><div>由 GitHub repository、<code>README.md</code>、<code>.env.example</code> 與原始碼樹交付；不複製成 HTML，避免與可執行版本分叉。</div></div>'
         '<h2>決賽提交包（命題文件第 3 頁）</h2>'
         '<div class="deliverable"><strong>1. 提案簡報</strong><div>內容底稿為 repository 的 <code>PITCH_REFERENCE.md</code>；正式提交仍應匯出為投影片或 PDF，並包含解題方向、AI 技術、數據應用與 AWS 架構圖。</div></div>'

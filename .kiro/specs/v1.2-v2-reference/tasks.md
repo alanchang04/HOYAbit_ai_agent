@@ -8,4 +8,4 @@
 - [x] T6 實作 `research_context.json` writer 與穩定排序。
 - [x] T7 建立單元測試與 sidecar 整合測試。
 - [x] T8 撰寫 Claude 完成後的最小合併步驟。
-- [ ] T9 完整 v1.2 測試後才接入 orchestrator／Web UI。
+- [x] T9 在 Claude v1.2 完成後接入 orchestrator／Web 下載介面並執行完整測試。

@@ -28,17 +28,20 @@ cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 .venv/Scripts/python.exe main.py --coin BTC --question "比較 BTC 與 ETH 在流動性與風險敞口上的差異..."
 ```
 
-輸出於 `output/` 目錄：
+未指定 `--output-dir` 時，每次 CLI 執行會輸出於獨立的 `output/cli_runs/<run-id>/`：
 
 - `report.md`：分析報告
 - `evidence.json`：證據清單
 - `execution_log.jsonl`：執行紀錄
+- `report_view.json`：四面板機器可讀資料
+- `validation_results.json`：逐筆 Evidence Validation 稽核結果
+- `research_context.json`：Structured Features、Knowledge Lite 與 Evidence Relationship Graph
 - `report.html`：Final Report 的 standalone 離線閱讀版
 - `evidence.html`：Evidence List 的 standalone 離線閱讀版
 - `execution_log.html`：Execution Log 的 standalone 離線閱讀版
 - `deliverables.html`：評審交付物索引與原始檔／HTML 對照
 
-前三份原始檔仍是權威、機器可讀的正式交付物；HTML 只是方便評審直接用瀏覽器閱讀的補充。
+前三份原始檔仍是命題要求的權威正式交付物；`report_view.json` 與兩份 validation/research sidecar 提供額外稽核與展示能力，HTML 則是方便評審直接用瀏覽器閱讀的補充。
 Source / Config 則以 GitHub repository、`README.md`、`.env.example` 與原始碼樹交付，不以 HTML 取代。
 
 ### 決賽提交檢查
@@ -146,6 +149,7 @@ docker run --rm --env-file .env hoyabit-agent \
         │ Phase 2：證據化                            │
         │ assign_evidence_ids()                     │
         │ → 統一分配 ev-001, ev-002... → evidence.json│
+        │ → Validation Result → validation_results.json│
         └────────────────────────┬───────────────────┘
                                   │ list[Evidence]
                                   ▼
@@ -169,9 +173,11 @@ docker run --rm --env-file .env hoyabit-agent \
         │ Phase 4：報告生成（agent/report/builder.py）│
         │ 組裝 report.md，強制檢查引用的 evidence id   │
         │ 必須存在於 evidence.json（否則 fail fast）   │
+        │ 輸出 Structured Feature／Knowledge／Graph     │
+        │ → research_context.json                     │
         └────────────────────────┬───────────────────┘
                                   ▼
-              report.md ／ evidence.json ／ execution_log.jsonl
+ report.md ／ evidence.json ／ execution_log.jsonl ／ validation_results.json ／ research_context.json
 ```
 
 **設計重點：**
@@ -198,6 +204,8 @@ agent/
     gemini_client.py         # Gemini 實作（開發階段暫代後端）
     prompts.py               # 四步推理 prompt 模板、題型分支、正反方 framing
     pipeline.py               # 四步推理鏈組裝（含辯論與 fallback）
+  filters/validation.py     # 統一 Evidence Validation Result
+  research/                # Structured Features／Knowledge Lite／Evidence Graph sidecar
   report/                 # report.md 組裝與 evidence 對應檢查
   fixtures/               # --dry-run 用假資料
 webapp/

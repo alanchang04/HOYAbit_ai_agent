@@ -64,7 +64,14 @@ def test_export_html_bundle_preserves_original_contract_and_escapes_content(tmp_
     assert "pipeline_end" in log and "elapsed_seconds=42.0 &lt;unsafe&gt;" in log
 
     index = (tmp_path / "deliverables.html").read_text(encoding="utf-8")
-    for original in ("report.md", "evidence.json", "execution_log.jsonl", "report_view.json"):
+    for original in (
+        "report.md",
+        "evidence.json",
+        "execution_log.jsonl",
+        "report_view.json",
+        "validation_results.json",
+        "research_context.json",
+    ):
         assert original in index
     assert "GitHub repository" in index
     assert "提案簡報" in index

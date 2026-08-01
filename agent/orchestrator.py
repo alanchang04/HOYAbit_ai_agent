@@ -40,6 +40,7 @@ from agent.filters.source_weights import apply_source_weights
 from agent.filters.validation import build_validation_results
 from agent.integrity import assess_integrity
 from agent.reasoning.consistency import enforce_reasoning_consistency
+from agent.research.context import write_research_context
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
@@ -280,7 +281,9 @@ def run_pipeline(
 
     elapsed = time.monotonic() - start_time
     remaining_before_collect = settings.hard_deadline_seconds - elapsed
-    degraded_mode = elapsed > settings.degraded_mode_trigger_seconds
+    # 邊界值也代表預算已用完。使用 `>` 會在 Windows 的第一個 monotonic tick
+    # 剛好仍為 0 時讓 trigger=0 的執行漏過 gate，形成平台相依的 flaky 行為。
+    degraded_mode = elapsed >= settings.degraded_mode_trigger_seconds
 
     # 追蹤 degraded 原因，任一項非空時最終 integrity_status="DEGRADED"
     degraded_reasons: list[str] = []
@@ -516,6 +519,47 @@ def run_pipeline(
             detail=f"{type(exc).__name__}: {exc}",
             status=LogStatus.ERROR,
             layer=PipelineLayer.CONCLUSION,
+        )
+
+    # v2-reference sidecar：只把既有 Evidence／Reasoning 關係結構化，不回寫結論、
+    # 不重算 confidence，也不進入 LLM。失敗隔離以維持 v1.2 正式交付；但若 graph
+    # 發現 invalid/quarantined Evidence 仍被推理引用，代表 ValidatedEvidence gate
+    # 真正漏水，必須降級揭露，不能只把異常藏在 sidecar。
+    try:
+        research_path, research_context = write_research_context(
+            out_dir,
+            evidences,
+            reasoning_result,
+            question=question,
+            question_type=reasoning_result.question_type,
+            validation_results=validation_results,
+            quarantined_drafts=quarantined_drafts,
+        )
+        graph = research_context.evidence_graph
+        violations = graph.stats.get("validation_violations", 0)
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="research_context_written",
+            detail=f"path={research_path}, validation_violations={violations}",
+            status=LogStatus.ERROR if violations else LogStatus.OK,
+            metrics={
+                "features": len(research_context.structured_features),
+                "knowledge_cards": len(research_context.knowledge_cards),
+                "graph_nodes": len(graph.nodes),
+                "graph_edges": len(graph.edges),
+                **graph.stats,
+            },
+        )
+        if violations:
+            degraded_reasons.append(
+                f"ValidatedEvidence gate 發現 {violations} 條無效／隔離證據引用"
+            )
+    except Exception as exc:  # noqa: BLE001 - 額外 sidecar 不可阻止命題正式交付
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="research_context_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            status=LogStatus.ERROR,
         )
 
     integrity = assess_integrity(evidences, coins, degraded_reasons)

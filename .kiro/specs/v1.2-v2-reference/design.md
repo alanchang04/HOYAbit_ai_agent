@@ -57,9 +57,9 @@ Graph 不推導新方向，只轉錄 reasoning 已存在的關係。若 invalid/
 
 ## Merge strategy
 
-本 branch 不修改 `agent/schemas.py`、`agent/orchestrator.py`、`agent/report/view_builder.py`，降低與 Claude 工作的衝突。合併後再以單一 integration commit：
+原始平行 branch 不修改 `agent/schemas.py`、`agent/orchestrator.py`、`agent/report/view_builder.py`，以降低與 Claude 工作的衝突。Claude v1.2 完成後，由單一 integration commit：
 
-1. reasoning 完成後呼叫 `write_research_context()`；
+1. reasoning 與一致性校正完成後呼叫 `write_research_context()`；
 2. Execution Log 記錄 sidecar 成功／失敗；
 3. Web UI 選擇性讀取 graph，不影響舊 schema。
 

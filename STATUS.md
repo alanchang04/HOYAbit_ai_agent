@@ -1,6 +1,6 @@
 # 專案進度說明（HOYA BIT 2026 雲湧智生黑客松）
 
-> 最後更新：2026-08-01
+> 最後更新：2026-08-02（v1.2 final integration）
 
 ## 已完成
 
@@ -10,6 +10,8 @@
 - `agent/logging_utils.py`：`execution_log.jsonl` 逐行寫入
 - `main.py`：CLI 進入點（`--coin` / `--coin2` / `--question` / `--dry-run`）
 - `--dry-run` fixture 流程（不打任何真實 API/LLM，供賽前排練）
+- `agent/filters/validation.py`：逐筆統一 Validation Result；Evidence 建構失敗採單筆 quarantine
+- `agent/research/`：Validated Evidence → Structured Features → Knowledge Lite → Evidence Relationship Graph，輸出 `research_context.json`
 
 ### Stage 2：六類真實 collector
 - `agent/collectors/base.py`：統一 timeout（預設 75 秒）＋ try/except 隔離，單一來源失敗不影響全流程
@@ -47,17 +49,19 @@
 ### Stage 4：報告生成
 - `agent/report/builder.py`：組裝 `report.md`（執行摘要／結論／關鍵依據／正反方多輪辯論與矛盾訊號／信心說明／後續觀察重點／信源分級附錄），強制檢查引用的 evidence id 必須存在
 - `agent/report/text_formatting.py`：LLM 長文（市場判斷／正反方論證）改用 markdown 渲染，處理內嵌括號編號與中文序數詞（首先/其次/第三...）兩種列點寫法，解決長篇論述變成一整面文字牆的問題
+- 額外輸出 `validation_results.json` 與 `research_context.json`；invalid/quarantined Evidence 若仍被推理引用會標示 gate violation 並降級揭露
 
 ### Stage 5：整合測試
 - 5 幣種（BTC/ETH/SOL/BNB/XRP）collector 皆重新驗證
 - **真實 Bedrock 端到端驗證**（2026-07-24，Claude Sonnet 4.5，region `ap-northeast-1`）：多源整合（BTC）、假設驗證（ETH）、比較分析（BTC vs SOL）三種題型皆完整跑完多輪辯論，report.md／四面板渲染正確
 - Degraded mode 與跨 5 幣種推理鏈離線測試（FakeLLMClient，不耗真實額度）
-- 682 個 pytest 全數通過（v1.1 安全護欄與投資者摘要改版後）
+- **834 個 pytest 全數通過**（2026-08-02 v1.2 final；含 deadline 邊界、Validation gate、claim mapping、research sidecar 與 Web 下載契約）
 
 ### Stage 6：Web UI 與 Docker
 - `webapp/app.py`：FastAPI Web UI，與 CLI 共用同一個 `run_pipeline()`
 - 四面板檢視（`/view/{run_id}`）：原始證據流／未過濾基準對照／信任提煉流水線（逐層 log、多輪辯論逐輪顯示，L5 層預設展開）／分析報告（含執行摘要卡片）
 - `report.md` 的「報告」分頁改為排版化 HTML 顯示（原本是把 markdown 原始碼塞進純文字框）
+- Web／HTML 索引可下載 `validation_results.json` 與 `research_context.json`
 - Dockerfile／`.dockerignore`：本機已驗證 build 成功、容器內完整跑過 dry-run 分析
 - **Docker image 已 push 到 ECR**（`hoyabit-agent:latest`，`ap-northeast-1`）
 - App Runner 所需 IAM role（ECR 存取角色＋Bedrock 呼叫用 instance role）已建立

@@ -2,7 +2,7 @@
 
 ## 本 branch 提供什麼
 
-`feat/v1.2-v2-reference` 刻意只新增 sidecar 模組，不修改 Claude 正在處理的 Validation gate、claim mapping、Execution Log、Evidence schema 或 orchestrator。
+原始 `feat/v1.2-v2-reference` 刻意只新增 sidecar 模組，沒有修改 Claude 當時正在處理的 Validation gate、claim mapping、Execution Log、Evidence schema 或 orchestrator。最終整合版已在 Claude v1.2 完成後接上 orchestrator 與 Web 下載介面。
 
 新增輸出 `research_context.json`，內容包含：
 
@@ -12,15 +12,16 @@
 
 這份 sidecar 是決賽展示與稽核資料，不改變 v1.2 的推理、judge 或 confidence。
 
-## Claude 完成後的合併順序
+## 本次採用的合併順序
 
-1. Claude 先把 v1.2 變更 commit 到 `release/v1.2`。
-2. 在新的 integration branch 合併／cherry-pick本 branch。
-3. 先跑 `tests/test_research_features.py` 與 `tests/test_research_context.py`。
-4. 檢查 Claude 的新欄位名稱；若與 adapter 預設不同，只修改 `agent/research/graph.py` 的 `_validation_status()`、`_validation_issues()` 或 `_related_claims()`。
-5. 完整 pytest 通過後，再做唯一的 runtime integration commit。
+1. 以 Claude 發布的 `v1.2` tag 為基線。
+2. 只 cherry-pick sidecar commit，避免重複合併兩邊 P0/P1 歷史。
+3. adapter 直接接收 Claude 的 `validation_results`，並讀取 `ReasoningResult.related_claims`。
+4. Structured Features 僅從 validated、非 duplicate Evidence 產生。
+5. orchestrator 在 reasoning consistency 校正後寫入 `research_context.json`；失敗隔離，gate violation 則降級揭露。
+6. Web／HTML 索引開放下載 `validation_results.json` 與 `research_context.json`。
 
-## 建議的 runtime integration
+## 已採用的 runtime integration
 
 在 `reasoning_result` 已完成、`evidences` 已通過 v1.2 gate、既有正式交付檔不受影響的位置加入：
 
@@ -34,6 +35,8 @@ try:
         reasoning_result,
         question=question,
         question_type=reasoning_result.question_type,
+        validation_results=validation_results,
+        quarantined_drafts=quarantined_drafts,
     )
     logger.log(
         phase=LogPhase.REPORT,

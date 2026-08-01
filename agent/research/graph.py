@@ -24,7 +24,17 @@ def _stable_id(prefix: str, value: str) -> str:
     return f"{prefix}:{digest}"
 
 
-def _validation_status(evidence: Any) -> str:
+def _validation_status(evidence: Any, validation_result: Any = None) -> str:
+    if validation_result is not None:
+        if str(_get(validation_result, "injection_flag", "")).lower() == "high":
+            return "quarantined"
+        if str(_get(validation_result, "dedup_verdict", "")).lower() == "removed":
+            return "duplicate"
+        if _get(validation_result, "timestamp_valid", True) is False:
+            return "invalid"
+        if _get(validation_result, "data_integrity_ok", True) is False:
+            return "invalid"
+        return "validated"
     explicit = _get(evidence, "validation_status")
     if explicit:
         return _enum_value(explicit).lower()
@@ -39,7 +49,7 @@ def _validation_status(evidence: Any) -> str:
     return "valid"
 
 
-def _validation_issues(evidence: Any) -> list[Any]:
+def _validation_issues(evidence: Any, validation_result: Any = None) -> list[Any]:
     issues = _get(evidence, "validation_issues")
     if issues is None:
         result = _get(evidence, "validation_result")
@@ -48,6 +58,17 @@ def _validation_issues(evidence: Any) -> list[Any]:
     injection_reason = _get(evidence, "injection_reason")
     if injection_reason and injection_reason not in output:
         output.append(injection_reason)
+    if validation_result is not None:
+        if _get(validation_result, "timestamp_valid", True) is False:
+            output.append("invalid_timestamp")
+        if _get(validation_result, "data_integrity_ok", True) is False:
+            output.append("data_integrity_failed")
+        injection_flag = _get(validation_result, "injection_flag")
+        if injection_flag:
+            output.append(f"injection:{injection_flag}")
+        dedup_verdict = _get(validation_result, "dedup_verdict")
+        if dedup_verdict:
+            output.append(f"dedup:{dedup_verdict}")
     return output
 
 
@@ -62,7 +83,13 @@ def _related_claims(evidence: Any) -> list[Any]:
     return claims if isinstance(claims, list) else []
 
 
-def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> EvidenceGraph:
+def build_evidence_graph(
+    evidences: Iterable[Any],
+    reasoning_result: Any,
+    *,
+    validation_results: Iterable[Any] | None = None,
+    quarantined_drafts: Iterable[dict] | None = None,
+) -> EvidenceGraph:
     """忠實轉錄既有關係；不產生新方向、不修改 reasoning_result。"""
 
     evidence_list = sorted(list(evidences), key=lambda item: str(_get(item, "id", "")))
@@ -70,6 +97,11 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
     nodes: dict[str, GraphNode] = {}
     edges: list[GraphEdge] = []
     statuses: dict[str, str] = {}
+    validation_by_id = {
+        str(_get(result, "evidence_id", "")): result
+        for result in (validation_results or [])
+        if _get(result, "evidence_id")
+    }
 
     def add_node(node: GraphNode) -> None:
         nodes.setdefault(node.id, node)
@@ -83,7 +115,7 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
         metadata: dict[str, Any] | None = None,
     ) -> None:
         edge_meta = dict(metadata or {})
-        if source in statuses and statuses[source] not in {"valid", "validated", "ok"}:
+        if source in statuses and statuses[source] in {"invalid", "quarantined", "rejected"}:
             edge_meta["validation_violation"] = relation not in {"duplicate_of", "about"}
             edge_meta["source_validation_status"] = statuses[source]
         edges.append(
@@ -100,8 +132,18 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
         evidence_id = str(_get(evidence, "id", ""))
         if not evidence_id:
             continue
-        status = _validation_status(evidence)
+        validation_result = validation_by_id.get(evidence_id)
+        status = _validation_status(evidence, validation_result)
         statuses[evidence_id] = status
+        validation_metadata = {}
+        if validation_result is not None:
+            validation_metadata = {
+                "source_reliability": _get(validation_result, "source_reliability"),
+                "source_grade": _get(validation_result, "source_grade", ""),
+                "timestamp_valid": _get(validation_result, "timestamp_valid", True),
+                "data_integrity_ok": _get(validation_result, "data_integrity_ok", True),
+                "dedup_verdict": _get(validation_result, "dedup_verdict"),
+            }
         add_node(
             GraphNode(
                 id=evidence_id,
@@ -113,7 +155,8 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
                     "source_type": _enum_value(_get(evidence, "source_type")),
                     "source_weight": _get(evidence, "source_weight", 0.0),
                     "validation_status": status,
-                    "validation_issues": _validation_issues(evidence),
+                    "validation_issues": _validation_issues(evidence, validation_result),
+                    "validation_result": validation_metadata,
                 },
             )
         )
@@ -144,7 +187,27 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
         if isinstance(duplicate_of, str) and duplicate_of in known:
             add_edge(evidence_id, duplicate_of, "duplicate_of")
 
+    for draft in quarantined_drafts or []:
+        index = _get(draft, "index", "unknown")
+        node_id = f"quarantine:draft:{index}"
+        statuses[node_id] = "invalid"
+        add_node(
+            GraphNode(
+                id=node_id,
+                kind="evidence",
+                label=str(_get(draft, "reason", "Evidence construction failed"))[:240],
+                metadata={
+                    "coin": str(_get(draft, "coin", "")),
+                    "source": str(_get(draft, "source", "")),
+                    "validation_status": "invalid",
+                    "validation_issues": [str(_get(draft, "reason", "construction_failed"))],
+                    "pre_schema_quarantine": True,
+                },
+            )
+        )
+
     facts = _get(reasoning_result, "facts", [])
+    fact_claim_ids_by_text: dict[str, list[str]] = {}
     if isinstance(facts, list):
         for index, fact in enumerate(facts, 1):
             if not isinstance(fact, dict):
@@ -154,8 +217,46 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
                 continue
             claim_id = f"claim:fact:{index:03d}"
             add_node(GraphNode(id=claim_id, kind="claim", label=text, metadata={"layer": "fact"}))
+            fact_claim_ids_by_text.setdefault(text, []).append(claim_id)
             for evidence_id in _ids(fact.get("evidence_ids"), known):
                 add_edge(evidence_id, claim_id, "supports")
+
+    related_claim_groups = _get(reasoning_result, "related_claims", [])
+    if isinstance(related_claim_groups, list):
+        for group in related_claim_groups:
+            if not isinstance(group, dict):
+                continue
+            topic = str(group.get("topic", "")).strip()
+            claims = group.get("related_claims", [])
+            if not topic or not isinstance(claims, list):
+                continue
+            topic_id = _stable_id("topic:mapped", topic)
+            add_node(
+                GraphNode(
+                    id=topic_id,
+                    kind="topic",
+                    label=topic,
+                    metadata={"source": "reasoning_result.related_claims"},
+                )
+            )
+            for claim in claims:
+                claim_text = str(claim).strip()
+                if not claim_text:
+                    continue
+                claim_ids = fact_claim_ids_by_text.get(claim_text)
+                if not claim_ids:
+                    claim_id = _stable_id("claim:grouped", claim_text)
+                    add_node(
+                        GraphNode(
+                            id=claim_id,
+                            kind="claim",
+                            label=claim_text,
+                            metadata={"layer": "claim_mapping"},
+                        )
+                    )
+                    claim_ids = [claim_id]
+                for claim_id in claim_ids:
+                    add_edge(claim_id, topic_id, "about")
 
     inference = _get(reasoning_result, "inference", [])
     if isinstance(inference, list):
@@ -246,6 +347,10 @@ def build_evidence_graph(evidences: Iterable[Any], reasoning_result: Any) -> Evi
             "signal_nodes": sum(node.kind == "signal" for node in ordered_nodes),
             "edges": len(ordered_edges),
             "validation_violations": violations,
+            "validated_evidence": sum(status in {"valid", "validated", "ok"} for status in statuses.values()),
+            "duplicate_evidence": sum(status == "duplicate" for status in statuses.values()),
+            "quarantined_evidence": sum(status == "quarantined" for status in statuses.values()),
+            "invalid_evidence": sum(status in {"invalid", "rejected"} for status in statuses.values()),
         },
     )
 

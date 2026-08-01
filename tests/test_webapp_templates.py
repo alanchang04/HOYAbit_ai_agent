@@ -54,6 +54,8 @@ def test_result_page_renders(dry_run_result: dict) -> None:
     assert "report.html" in dry_run_result["html"]
     assert "evidence.html" in dry_run_result["html"]
     assert "execution_log.html" in dry_run_result["html"]
+    assert "validation_results.json" in dry_run_result["html"]
+    assert "research_context.json" in dry_run_result["html"]
 
 
 def test_result_page_stat_cards_not_na(dry_run_result: dict) -> None:
@@ -69,6 +71,15 @@ def test_result_page_stat_cards_not_na(dry_run_result: dict) -> None:
     assert body is not None
     assert "##" not in body.group(1)
     assert "<h2 " in body.group(1)  # toc extension 加了 id 屬性，標題不再是裸 <h2>
+
+
+@pytest.mark.parametrize("filename", ["validation_results.json", "research_context.json"])
+def test_validation_sidecars_are_downloadable(
+    client: TestClient, dry_run_result: dict, filename: str
+) -> None:
+    response = client.get(f"/download/{dry_run_result['run_id']}/{filename}")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
 
 
 def test_view_page_renders_four_panels(client: TestClient, dry_run_result: dict) -> None:
