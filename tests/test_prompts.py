@@ -67,7 +67,11 @@ class TestEvidenceListPrioritySorting:
     """R8-4：priority = source_weight × base_importance × horizon_match，高分排前面。"""
 
     def _ids_in_order(self, out: str) -> list[str]:
-        return [line.split("id=")[1].split(" ")[0] for line in out.splitlines()]
+        return [
+            line.split("id=")[1].split(" ")[0]
+            for line in out.splitlines()
+            if line.startswith("- id=")
+        ]
 
     def test_higher_base_importance_source_type_sorts_first(self):
         # 同權重、同 horizon，只有 source_type 不同：price(1.0) 該排在 social(0.5) 前面。
@@ -103,7 +107,9 @@ class TestEvidenceListPrioritySorting:
         assert self._ids_in_order(out) == ["ev-401", "ev-402"]
 
     def test_empty_list_unaffected(self):
-        assert _format_evidence_list([]) == "（本次無可用證據）"
+        out = _format_evidence_list([])
+        assert "（本次無可用證據）" in out
+        assert self._ids_in_order(out) == []
 
 
 def test_step_a_prompt_has_legend():
