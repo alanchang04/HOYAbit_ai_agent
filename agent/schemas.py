@@ -160,6 +160,13 @@ class EvidenceDraft(BaseModel):
     dedup_rate: float | None = None
     duplicate_of: str | None = None  # 被去重剔除時，指向保留的那筆證據 id
 
+    # 資安：prompt injection 偵測（agent/filters/injection.py）。
+    # "high" = 隔離（不送進任何 LLM prompt，但證據本身完整保留可回溯）；
+    # "medium" = 僅標記，照常送進 LLM。None = 未命中。
+    # 有預設值以維持向後相容：舊 evidence.json 無此欄位仍可載入（R2-9）。
+    injection_flag: str | None = None
+    injection_reason: str = ""
+
     # horizon-aware R2: 時間尺度標註（由 collector 決定性填入，見 .kiro/steering/horizon-annotation.md）
     # window_end ≠ fetched_at：前者是「觀察涵蓋到哪一天」，後者是「何時抓的」。
     # 官方 CSV 證據的 fetched_at 是執行日，但 window_end 是 CSV 末日——這兩個值不同正是本欄位存在的理由。

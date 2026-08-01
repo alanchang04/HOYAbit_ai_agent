@@ -32,6 +32,7 @@ from agent.report.builder import build_report_markdown
 from agent.report.view_builder import build_report_view
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
+from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
@@ -297,6 +298,24 @@ def run_pipeline(
                 detail=str(exc),
                 status=LogStatus.ERROR,
             )
+
+    # L2 資安層：prompt injection 偵測。放在最後一個「會新增證據」的步驟之後、
+    # 寫檔之前，確保比較題型補進來的相對指標證據也一起掃到。
+    # high 命中者標記 injection_flag="high"，由 prompts 層排除出 LLM 清單；
+    # 證據本身仍完整寫進 evidence.json（比照 dedup 的可回溯慣例）。
+    try:
+        filter_decisions += apply_injection_filter(evidences, logger)
+    except Exception as exc:
+        # 這層失效等於「本次沒有注入防護」，必須進 degraded 理由讓報告誠實揭露，
+        # 不能像其他 L2 check 一樣默默跳過。
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_injection_failed",
+            detail=f"注入偵測失敗，本次證據未經注入過濾: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+        degraded_reasons.append("L2 prompt injection filter skipped（本次證據未經注入過濾）")
 
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
