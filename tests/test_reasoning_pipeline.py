@@ -205,9 +205,30 @@ def test_has_new_points_unparseable_value_keeps_debating():
     assert result.debate["round_count"] == 2
 
 
-def test_deadline_stops_the_debate_before_starting_another_round():
-    """剩餘時間不足時要收在當輪，把時間留給裁判。"""
-    client = FakeLLMClient(
+def test_deadline_stops_the_debate_before_starting_another_round(monkeypatch):
+    """剩餘時間不足時要收在當輪，把時間留給裁判。
+
+    2026-08-01 契約變更：本測試原本用「已經超時」的 deadline，並期望裁判仍然跑完。
+    那與 15 分鐘硬性上限不相容——超時之後再發 LLM 呼叫只會讓整跑更晚結束，
+    而超時後的產出主辦方可以不採計。現在超時就完全不發呼叫（見
+    `test_expired_deadline_makes_no_llm_call`），所以這裡改用「還有一輪份的預算、
+    但不夠再開一輪」的情境來測輪與輪之間的 gate。
+    """
+    from agent.reasoning import pipeline as _pipeline
+
+    # 「整段跳過辯論」的門檻另有專門測試，這裡壓到極小以免兩者互相干擾。
+    monkeypatch.setattr(_pipeline, "STEP_D_RESERVE_SECONDS", 0.01)
+    monkeypatch.setattr(_pipeline, "MIN_LLM_STEP_SECONDS", 0.01)
+
+    class SlowFakeClient(FakeLLMClient):
+        """每次呼叫睡一下。gate 的 needed 是「上一輪實測秒數 × 係數」，
+        瞬間回應的假 client 會讓 needed≈0、gate 永遠不觸發，測不到東西。"""
+
+        def converse(self, system_prompt, user_prompt, max_tokens=2048):
+            time.sleep(0.05)
+            return super().converse(system_prompt, user_prompt, max_tokens)
+
+    client = SlowFakeClient(
         [
             STEP_A_RESPONSE,
             STEP_B_RESPONSE,
@@ -218,19 +239,39 @@ def test_deadline_stops_the_debate_before_starting_another_round():
         ]
     )
 
+    # 預算：A+B+第1輪約 0.2s，剩約 0.1s；再開一輪需要 0.1×2.2=0.22s → gate 觸發，
+    # 但仍夠讓裁判跑完（MIN 已壓到 0.01）。
     result = run_reasoning(
         "BTC",
         "分析 BTC 市場狀態",
         _evidences(),
         dry_run=False,
         llm_client=client,
-        deadline=time.monotonic() - 1,  # 已經超時
+        deadline=time.monotonic() + 0.3,
     )
 
     assert result.debate["round_count"] == 1
     assert result.debate["stopped_reason"] == "deadline"
     assert result.conclusion["market_judgment"] == "mj"  # 裁判仍然跑完
     assert client.call_count == 5  # 沒有進第二輪
+
+
+def test_expired_deadline_makes_no_llm_call():
+    """deadline 已過時一次 LLM 呼叫都不發，讓 orchestrator 走降級報告。
+
+    15 分鐘是硬性上限（命題文件執行限制第 1 條），超時後的產出主辦方可停止執行
+    或不採計——「有產出但超時」比「誠實降級但準時」還糟。
+    """
+    from agent.reasoning.pipeline import ReasoningStepError
+
+    client = FakeLLMClient([STEP_A_RESPONSE])
+    with pytest.raises(ReasoningStepError) as exc:
+        run_reasoning(
+            "BTC", "分析 BTC 市場狀態", _evidences(),
+            dry_run=False, llm_client=client, deadline=time.monotonic() - 1,
+        )
+    assert "時間預算不足" in str(exc.value)
+    assert client.call_count == 0
 
 
 def test_no_deadline_means_unlimited():
@@ -429,20 +470,26 @@ class TestSanitizeDebateSummary:
         return _sanitize_debate_summary(raw, set(known_ids))
 
     def test_valid_items_pass_through(self):
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}
+        ]
 
     def test_hallucinated_evidence_id_is_stripped_not_whole_item(self):
         """幻覺 id 只濾掉那個 id，這個攻防重點本身仍保留（有 point 就有價值）。"""
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "draw"}
+        ]
 
     def test_missing_point_drops_only_that_item(self):
         raw = [
             {"evidence_ids": ["ev-001"]},  # 缺 point，整條丟棄
-            {"point": "重點二", "evidence_ids": ["ev-002"]},
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"},
         ]
-        assert self._sanitize(raw) == [{"point": "重點二", "evidence_ids": ["ev-002"]}]
+        assert self._sanitize(raw) == [
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"}
+        ]
 
     def test_empty_point_string_is_dropped(self):
         raw = [{"point": "   ", "evidence_ids": []}]
@@ -453,9 +500,23 @@ class TestSanitizeDebateSummary:
         assert self._sanitize(None) == []
 
     def test_non_dict_item_is_skipped(self):
-        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": []}]
-        assert self._sanitize(raw) == [{"point": "有效重點", "evidence_ids": []}]
+        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}
+        ]
 
     def test_missing_evidence_ids_defaults_to_empty_list(self):
         raw = [{"point": "沒引用證據的重點"}]
-        assert self._sanitize(raw) == [{"point": "沒引用證據的重點", "evidence_ids": []}]
+        assert self._sanitize(raw) == [
+            {"point": "沒引用證據的重點", "evidence_ids": [], "verdict": "draw"}
+        ]
+
+    def test_unreadable_verdict_falls_back_to_draw(self):
+        """verdict 判讀不出來時計為 draw（0 分），不丟棄整點——降級優先（R6-1）。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "很嚴重"}]
+        assert self._sanitize(raw)[0]["verdict"] == "draw"
+
+    def test_chinese_verdict_alias_is_accepted(self):
+        """模型不保證回 ASCII enum，中文同義詞一併認。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "反方成立"}]
+        assert self._sanitize(raw)[0]["verdict"] == "bear_valid"

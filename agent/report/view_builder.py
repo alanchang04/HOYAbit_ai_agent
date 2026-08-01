@@ -11,11 +11,13 @@ import logging
 import re
 from pathlib import Path
 
+from agent.reasoning.confidence import confidence_label
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import (
     Evidence,
     FilterDecision,
+    FilterVerdict,
     LogEntry,
     LogStatus,
     PipelineLayer,
@@ -135,6 +137,10 @@ def _build_panel1(
                 "content_reference": ev.content_reference,
                 "coin": ev.coin,
                 "filter_decisions": decisions_by_ev.get(ev.id, []),
+                # 資安旗標：Web UI 據此標示「這筆被判定含注入內容／已隔離」。
+                # 模板已走 Jinja autoescape，內文本身不需要在這裡跳脫。
+                "injection_flag": getattr(ev, "injection_flag", None),
+                "injection_reason": getattr(ev, "injection_reason", ""),
             }
         )
 
@@ -212,6 +218,10 @@ def _build_panel3(
     pr_hits = [fd for fd in filter_decisions if fd.check_code == "PR"]
     dedup_removed = [fd for fd in filter_decisions if fd.check_code == "DEDUP"]
     f10_pairs = [fd for fd in filter_decisions if fd.check_code == "F10"]
+    # INJ：high 走 REMOVED（已隔離、未進 LLM），medium 走 KEPT（僅標記）
+    inj_all = [fd for fd in filter_decisions if fd.check_code == "INJ"]
+    inj_quarantined = [fd for fd in inj_all if fd.verdict == FilterVerdict.REMOVED]
+    inj_flagged = [fd for fd in inj_all if fd.verdict != FilterVerdict.REMOVED]
 
     def _fd_items(fds: list[FilterDecision]) -> list[dict]:
         return [
@@ -238,6 +248,15 @@ def _build_panel3(
             },
             # F10 模板相似度已由 Phase 2 去重（DEDUP）取代，保留欄位相容
             {"code": "F10", "pairs": _fd_items(f10_pairs)},
+            {
+                "code": "INJ",
+                "quarantined": _fd_items(inj_quarantined),
+                "flagged": _fd_items(inj_flagged),
+                "note": (
+                    f"prompt injection 掃描：{len(inj_quarantined)} 筆隔離（未送入 LLM）、"
+                    f"{len(inj_flagged)} 筆標記"
+                ),
+            },
             (
                 {"code": "F9", **{k: v for k, v in f9_metrics.items()}}
                 if f9_metrics.get("enabled")
@@ -455,7 +474,10 @@ def _build_panel4(
     limitations = conclusion.get("limitations", [])
     compact_watchpoints = invalidation_conditions or reasoning_result.follow_up_watchpoints
     summary = {
-        "confidence_label": conclusion.get("confidence", "未知"),
+        # 與 report.md 讀同一個來源：等級由決定性分數推得，不用 LLM 自報的
+        # conclusion["confidence"]。兩邊各讀各的等於把不一致從「報告內」搬到
+        # 「報告與面板之間」，問題沒有解決只是換了位置。
+        "confidence_label": confidence_label(reasoning_result.confidence_score),
         "decision_brief": _compact_text(conclusion.get("market_judgment", "")),
         "top_facts": core_facts[:3],
         "top_risks": limitations[:2],

@@ -191,7 +191,7 @@
               {% if layer.layer == "L1_source" %}
                 權威 {{ layer.summary.authoritative }} / 一般 {{ layer.summary.normal }} / 低信度 {{ layer.summary.low }}
               {% elif layer.layer == "L2_content" %}
-                話術命中 {{ layer.checks[0].hits|length }} 筆，去重剔除 {{ layer.checks[1].removed|length }} 筆
+                話術命中 {{ layer.checks[0].hits|length }} 筆，去重剔除 {{ layer.checks[1].removed|length }} 筆{% set inj = layer.checks|selectattr("code", "equalto", "INJ")|list %}{% if inj %}，注入隔離 {{ inj[0].quarantined|length }} 筆{% endif %}
               {% elif layer.layer == "L3_fact" %}
                 輸入 {{ layer.input }} → 保留 {{ layer.kept }}（剔除率 {{ "%.1f"|format(layer.removal_rate * 100) }}%）
               {% elif layer.layer == "L4_cross" %}
@@ -232,6 +232,14 @@
                   {% else %}
                     <p class="data-missing">F9 情緒分布：未啟用</p>
                   {% endif %}
+                {% elif check.code == "INJ" %}
+                  <p><strong>Prompt injection 掃描</strong>：{{ check.note }}</p>
+                  {% for item in check.quarantined %}
+                    <div class="filter-hit">🚫 {{ item.fingerprint }} — {{ item.reason }}</div>
+                  {% endfor %}
+                  {% for item in check.flagged %}
+                    <div class="filter-hit">⚠️ {{ item.fingerprint }} — {{ item.reason }}</div>
+                  {% endfor %}
                 {% endif %}
               {% endfor %}
 

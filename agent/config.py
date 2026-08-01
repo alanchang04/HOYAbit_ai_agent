@@ -44,6 +44,16 @@ class Settings:
     collector_timeout_seconds: int = field(
         default_factory=lambda: int(os.getenv("COLLECTOR_TIMEOUT_SECONDS", "75"))
     )
+    # 單次 LLM 呼叫的 socket 讀取上限。boto3 預設是 60s，而實測正常呼叫最慢的
+    # step_d_conclusion 已經到 56.5s（27 次呼叫樣本），只有 6% 餘裕——稍微慢一點就會
+    # 觸發 ReadTimeout，然後被 botocore 與應用層兩層重試放大成十幾分鐘（見
+    # `bedrock_client.BedrockClient` 的註解）。150s 約為實測最大值的 2.7 倍。
+    llm_read_timeout_seconds: int = field(
+        default_factory=lambda: int(os.getenv("LLM_READ_TIMEOUT_SECONDS", "150"))
+    )
+    llm_connect_timeout_seconds: int = field(
+        default_factory=lambda: int(os.getenv("LLM_CONNECT_TIMEOUT_SECONDS", "10"))
+    )
 
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
     output_dir: str = field(default_factory=lambda: os.getenv("OUTPUT_DIR", "output"))

@@ -35,12 +35,19 @@ from agent.report.html_export import export_html_bundle
 from agent.report.view_builder import build_report_view
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
+from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
 from agent.integrity import assess_integrity
 from agent.reasoning.consistency import enforce_reasoning_consistency
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
+
+# 從硬性上限扣掉、留給「推理結束後的收尾」的時間：報告組裝、evidence.json 與
+# report_view.json 寫檔、引用檢查。這些都是本機運算沒有網路，實測都在 1 秒內，
+# 但 15 分鐘是硬性上限（命題文件執行限制第 1 條：超時主辦方可停止執行或不採計
+# 產出），所以推理層拿到的 deadline 要比真正的截止早一點，不能剛好用滿。
+REPORT_RESERVE_SECONDS = 20
 
 
 @dataclass
@@ -334,6 +341,24 @@ def run_pipeline(
                 status=LogStatus.ERROR,
             )
 
+    # L2 資安層：prompt injection 偵測。放在最後一個「會新增證據」的步驟之後、
+    # 寫檔之前，確保比較題型補進來的相對指標證據也一起掃到。
+    # high 命中者標記 injection_flag="high"，由 prompts 層排除出 LLM 清單；
+    # 證據本身仍完整寫進 evidence.json（比照 dedup 的可回溯慣例）。
+    try:
+        filter_decisions += apply_injection_filter(evidences, logger)
+    except Exception as exc:
+        # 這層失效等於「本次沒有注入防護」，必須進 degraded 理由讓報告誠實揭露，
+        # 不能像其他 L2 check 一樣默默跳過。
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_injection_failed",
+            detail=f"注入偵測失敗，本次證據未經注入過濾: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+        degraded_reasons.append("L2 prompt injection filter skipped（本次證據未經注入過濾）")
+
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
         json.dumps([e.model_dump() for e in evidences], ensure_ascii=False, indent=2),
@@ -353,16 +378,29 @@ def run_pipeline(
         reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2, logger=logger)
     else:
         llm_client = build_llm_client(settings)
+        reasoning_deadline = start_time + settings.hard_deadline_seconds - REPORT_RESERVE_SECONDS
         logger.log(
             phase=LogPhase.REASON,
             action="llm_backend",
             detail=f"backend={settings.llm_backend}",
             status=LogStatus.OK,
         )
+        # 把同一個硬性 deadline 也交給 LLM client：辯論輪之間的 gate 只擋得住第 2 輪，
+        # Step A/B 在它之前、Step D 在它之後，都可能因為單次呼叫卡住而把整跑拖過 15 分鐘
+        # （2026-08-01 實測 step_a_facts 卡了 1020s）。重試也要留下紀錄，否則下次一樣難查。
+        if hasattr(llm_client, "deadline"):
+            llm_client.deadline = reasoning_deadline
+        if hasattr(llm_client, "on_retry"):
+            llm_client.on_retry = lambda detail: logger.log(
+                phase=LogPhase.REASON,
+                action="llm_retry",
+                detail=detail,
+                status=LogStatus.SKIPPED,
+            )
         try:
             reasoning_result = run_reasoning(
                 coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
-                deadline=start_time + settings.hard_deadline_seconds,
+                deadline=reasoning_deadline,
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
