@@ -111,7 +111,7 @@ class TestTallyDrivesConfidence:
         _, bd = compute_confidence(
             [], {}, debate_summary=[_point("bear_valid"), _point("bull_defended")],
         )
-        assert "反方批評成立 1 點 × -3" in bd["debate_verdict_detail"]
+        assert "反方成立 1 點 × -3" in bd["debate_verdict_detail"]
         assert "正方擋下 1 點 × +1" in bd["debate_verdict_detail"]
 
     def test_discriminates_where_the_scalar_did_not(self):
@@ -761,3 +761,101 @@ class TestHardWallClockCapPerCall:
 
         c._client_with_timeout = lambda t: FastClient()
         assert c.converse("sys", "user") == "ok"
+
+
+# --- 11. 級距隨題型（JUDGE_TEST_REPORT.md §13.4／§15.3）---
+
+
+class TestVerdictScaleByQuestionType:
+    """不對稱級距預設「反方＝質疑者」，那個前提只有多源整合題成立。
+
+    比較題兩邊都是倡議者；假設驗證題的正方被指派去論證一個可能為假的命題。
+    在這兩種題型下沿用不對稱級距，分數會取決於「誰被指派站哪一邊」。
+    """
+
+    def _pts(self, **kw):
+        out = []
+        for verdict, n in kw.items():
+            out += [{"point": "x", "evidence_ids": [], "verdict": verdict}] * n
+        return out
+
+    def test_comparison_is_perfectly_mirrored(self):
+        """比較題把兩幣語序對調時，同一場辯論的分數必須鏡射。
+
+        用 Q3／T2 的真實 verdict：Q3 主幣 SOL 得到 bear_valid×2 + bull_defended×1
+        + bear_partial×2；主幣換成 XRP 時角色互換，各判定跟著鏡射。
+        """
+        sol_first = self._pts(bear_valid=2, bull_defended=1, bear_partial=2)
+        xrp_first = self._pts(bull_defended=2, bear_valid=1, bull_partial=2)
+        a, _ = tally_debate_verdicts(sol_first, "comparison")
+        b, _ = tally_debate_verdicts(xrp_first, "comparison")
+        assert a == -b, f"語序對調後分數未鏡射：{a} vs {b}"
+
+    def test_bull_partial_exists_in_symmetric_scales(self):
+        """粒度也必須對稱——只補幅度、不補等級的話，
+        「XRP 方部分成立」表達得出、「SOL 方部分成立」表達不出。"""
+        from agent.reasoning.confidence import scores_for_question_type
+
+        for qtype in ("comparison", "hypothesis_test"):
+            scores = scores_for_question_type(qtype)
+            assert scores["bull_partial"] == -scores["bear_partial"]
+            assert scores["bull_defended"] == -scores["bear_valid"]
+
+    def test_multi_source_keeps_the_asymmetry(self):
+        """多源整合的反方確實是質疑者，ADR-5 的防灌分理由在那裡仍然成立。"""
+        from agent.reasoning.confidence import scores_for_question_type
+
+        scores = scores_for_question_type("multi_source")
+        assert scores["bear_valid"] == -3
+        assert scores["bull_defended"] == 1
+        assert abs(scores["bear_valid"]) > scores["bull_defended"]
+
+    def test_false_hypothesis_is_penalised_less_than_before(self):
+        """T4 實測：假設在證據上站不住時，系統給出最明確的否定卻拿到最大扣分。
+
+        對稱級距把那個扣分收斂，但**不會歸零**——反方勝出仍然扣分。
+        這條鎖住「有改善」，不宣稱問題完全消失。
+        """
+        t4 = self._pts(bear_valid=3, bear_partial=2)
+        old, _ = tally_debate_verdicts(t4, "multi_source")
+        new, _ = tally_debate_verdicts(t4, "hypothesis_test")
+        assert new > old, f"對稱級距未減輕扣分：{old} → {new}"
+
+    def test_unknown_type_falls_back_to_asymmetric(self):
+        pts = self._pts(bear_valid=1)
+        assert tally_debate_verdicts(pts, None)[0] == tally_debate_verdicts(pts, "multi_source")[0]
+
+    def test_scale_is_selected_through_compute_confidence(self):
+        """題型必須真的傳達到計分，不能只是函式支援但沒接線。"""
+        pts = self._pts(bull_defended=3)
+        _, sym = compute_confidence([], {}, debate_summary=pts, question_type="comparison")
+        _, asym = compute_confidence([], {}, debate_summary=pts, question_type="multi_source")
+        assert sym["debate_adjustment"] == 6 and asym["debate_adjustment"] == 3
+
+
+class TestClampRangeFollowsTheScale:
+    """夾值範圍必須跟著級距走，否則會把剛拆掉的不對稱從夾值那條路徑放回來。
+
+    對稱題型下 5 點全給正方是 +10；若沿用全域的 +5 上限，「正方全勝」被砍成 +5、
+    「反方全勝」的 −10 完整保留——語序對調的鏡射在夾值後就破了。
+    """
+
+    def _adj(self, verdict, n, qtype):
+        pts = [{"point": "x", "evidence_ids": [], "verdict": verdict}] * n
+        _, bd = compute_confidence([], {}, debate_summary=pts, question_type=qtype)
+        return bd["debate_adjustment"]
+
+    @pytest.mark.parametrize("qtype", ["comparison", "hypothesis_test"])
+    def test_symmetric_extremes_mirror_after_clamping(self, qtype):
+        assert self._adj("bull_defended", 5, qtype) == -self._adj("bear_valid", 5, qtype)
+
+    def test_asymmetric_range_is_unchanged(self):
+        from agent.reasoning.confidence import (
+            DEBATE_ADJUSTMENT_MAX, DEBATE_ADJUSTMENT_MIN, adjustment_range_for,
+        )
+
+        assert adjustment_range_for("multi_source") == (
+            DEBATE_ADJUSTMENT_MIN, DEBATE_ADJUSTMENT_MAX,
+        )
+        assert self._adj("bear_valid", 5, "multi_source") == DEBATE_ADJUSTMENT_MIN
+        assert self._adj("bull_defended", 5, "multi_source") == DEBATE_ADJUSTMENT_MAX

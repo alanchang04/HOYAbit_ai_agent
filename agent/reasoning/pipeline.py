@@ -199,6 +199,7 @@ def _dry_run_reasoning(
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
         primary_horizon=primary_horizon,
         debate_summary=conclusion.get("debate_summary"),
+        question_type=question_type,
     )
     if logger:
         logger.log(
@@ -817,6 +818,7 @@ def _real_reasoning(
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
         primary_horizon=primary_horizon,
         debate_summary=conclusion.get("debate_summary"),
+        question_type=question_type,
     )
     if logger:
         logger.log(

@@ -48,26 +48,92 @@ WEIGHT_STRENGTH = 0.2
 DEBATE_ADJUSTMENT_MIN = -15
 DEBATE_ADJUSTMENT_MAX = 5
 
+# `debate_summary` 的點數上限（prompt 要求 3-5 點）。夾值範圍由它與級距推出。
+MAX_SUMMARY_POINTS = 5
+
 # 逐點判定 → 分數（2026-08-01 新增）。
 #
 # 背景：讓裁判直接吐一個 -15~+5 的整數，實測在真實區間內幾乎沒有鑑別力。同一份輸入
 # 重打 5 次全是 −3；換三種題型、四種幣種全是 −3；把「反方打中兩項」削成「打中一項」
 # 還是 −3。只有把反方整段換成無證據的空話才會翻成 +3。也就是說模型輸出的不是
-# 「這場辯論值多少分」，而是「要調一點點」這個念頭，方向對、幅度沒有解析度
-# （±3 是它的「中等調整」代號，兩個方向都停在 3）。
+# 「這場辯論值多少分」，而是「要調一點點」這個念頭，方向對、幅度沒有解析度。
 #
 # 改法：裁判本來就已經逐點判定攻防結果（debate_summary），改成每點附一個 verdict，
-# 由程式加總。分數來自可稽核的逐項判定，而不是模型對一個抽象數字的整體感覺；
-# 逐點判定也留在報告裡，讀者能自己驗算，符合 ADR-5 的可解釋訴求。
+# 由程式加總。分數來自可稽核的逐項判定，讀者能自己驗算。
 #
-# 級距設計：debate_summary 要求 3-5 點，5 × (-3) = -15 = 下限，5 × (+1) = +5 = 上限，
-# 兩端剛好對齊既有的不對稱範圍，不需另外定義夾值語意。
-VERDICT_SCORES: dict[str, int] = {
-    "bear_valid": -3,      # 反方批評成立且正方未有效回應
-    "bear_partial": -1,    # 反方批評部分成立／雙方各有道理
-    "draw": 0,             # 打平、或該點未分出勝負
-    "bull_defended": 1,    # 正方擋下批評、論點通過壓力測試
+# ── 為什麼要分題型（2026-08-01 第二次修正）─────────────────────────
+# 原本只有一套不對稱級距（bear_valid −3／bull_defended +1，且反方有兩個得分等級、
+# 正方只有一個）。那個不對稱繼承自 ADR-5 的防灌分設計，而它預設了
+# **「反方＝質疑者、正方＝被質疑的原判斷」**。這個前提只有多源整合題成立：
+#
+#   多源整合  正方「市場比表面更好」 vs 反方「更脆弱」  → 反方確實在挑毛病 ✅
+#   比較分析  正方「SOL 更值得關注」 vs 反方「XRP 更值得」→ 兩邊都是倡議者 ❌
+#   假設驗證  正方「題目陳述為真」   vs 反方「為假」      → 正方被指派論證一個
+#                                                        可能為假的命題 ❌
+#
+# 實測後果：
+# - 比較題：Q3 與 T2 是同一題、只把兩幣語序對調，兩次得到**相同的實質判斷**
+#   （都判 SOL 風險較高），但 XRP 站反方時扣 7 分、站正方時只扣 3 分。
+#   分數取決於主辦方先寫哪個幣。
+# - 假設驗證題：T4 的假設在證據上站不住，系統用最高權重證據給出九次跑裡
+#   **最明確的否定**，卻拿到**最大扣分 −11**。因為正方被指定去論證一個假命題，
+#   它必然出現推理瑕疵——那些瑕疵是「假設為假」的結果，不是報告品質的訊號。
+#   激勵方向是反的：假設越明顯為假，信心扣得越多。
+#
+# 解法：級距隨題型走。「質疑者 vs 被質疑者」的題型維持不對稱（防灌分的原始理由
+# 在那裡仍然成立）；「兩個對等立場」的題型改用對稱級距，並補上 `bull_partial`
+# ——粒度也必須對稱，否則「XRP 方部分成立」表達得出、「SOL 方部分成立」表達不出。
+
+# 對稱級距：正反方是對等立場時用。任一方勝出只反映「這一點誰的證據較強」，
+# 不代表報告本身可靠或不可靠，所以幅度小且兩側相同。
+_SYMMETRIC_VERDICT_SCORES: dict[str, int] = {
+    "bear_valid": -2,
+    "bear_partial": -1,
+    "draw": 0,
+    "bull_partial": 1,
+    "bull_defended": 2,
 }
+
+# 不對稱級距：反方是質疑者時用（多源整合）。反方打中＝揭露了實質漏洞，該重扣；
+# 正方守住＝原判斷通過壓力測試，小幅加分即可（ADR-5 的防灌分原意）。
+_ASYMMETRIC_VERDICT_SCORES: dict[str, int] = {
+    "bear_valid": -3,
+    "bear_partial": -1,
+    "draw": 0,
+    "bull_partial": 1,
+    "bull_defended": 1,
+}
+
+# 題型 → 級距。比較分析與假設驗證的正反方是對等立場（理由見上方長註解）。
+_SCORES_BY_QUESTION_TYPE: dict[str, dict[str, int]] = {
+    "multi_source": _ASYMMETRIC_VERDICT_SCORES,
+    "comparison": _SYMMETRIC_VERDICT_SCORES,
+    "hypothesis_test": _SYMMETRIC_VERDICT_SCORES,
+}
+
+# 相容別名：未指定題型時的預設級距（既有呼叫端與測試沿用）。
+VERDICT_SCORES: dict[str, int] = _ASYMMETRIC_VERDICT_SCORES
+
+
+def scores_for_question_type(question_type: str | None) -> dict[str, int]:
+    """取得該題型的 verdict 級距；未知題型退回不對稱版（既有行為）。"""
+    return _SCORES_BY_QUESTION_TYPE.get(question_type or "", _ASYMMETRIC_VERDICT_SCORES)
+
+
+def adjustment_range_for(question_type: str | None) -> tuple[int, int]:
+    """該題型的辯論調整夾值範圍。
+
+    **夾值範圍必須跟著級距走，否則會把剛拆掉的不對稱從夾值那條路徑放回來。**
+    對稱題型下 5 點全給正方是 5×(+2)=+10，若沿用全域的 +5 上限，
+    「正方全勝」會被砍成 +5、而「反方全勝」的 −10 完整保留——語序對調的鏡射
+    在夾值後就破了。上下限取級距的實際極值（3-5 點 × 最大等級）。
+    """
+    scores = scores_for_question_type(question_type)
+    if scores is _ASYMMETRIC_VERDICT_SCORES:
+        return DEBATE_ADJUSTMENT_MIN, DEBATE_ADJUSTMENT_MAX
+    span = max(abs(v) for v in scores.values()) * MAX_SUMMARY_POINTS
+    return -span, span
+
 
 # 模型不保證回 ASCII enum，中文同義詞一併認（寬鬆度與 `_coerce_adjustment()`、
 # `pipeline._coerce_bool()` 對齊，避免同一條推理鏈上兩套標準）。
@@ -75,29 +141,35 @@ _VERDICT_ALIASES: dict[str, str] = {
     "反方成立": "bear_valid", "反方勝": "bear_valid", "反方得點": "bear_valid",
     "反方部分成立": "bear_partial", "部分成立": "bear_partial",
     "打平": "draw", "平手": "draw", "未分勝負": "draw",
+    "正方部分成立": "bull_partial", "正方部分站得住": "bull_partial",
     "正方擋下": "bull_defended", "正方勝": "bull_defended",
     "正方得點": "bull_defended", "通過壓力測試": "bull_defended",
 }
 
+_ALL_VERDICTS = frozenset(_SYMMETRIC_VERDICT_SCORES) | frozenset(_ASYMMETRIC_VERDICT_SCORES)
+
 
 def coerce_verdict(raw) -> str | None:
-    """把裁判回報的逐點判定收斂成 VERDICT_SCORES 的鍵；無法判讀時回 None。"""
+    """把裁判回報的逐點判定收斂成合法的 verdict 鍵；無法判讀時回 None。"""
     if not isinstance(raw, str):
         return None
     token = raw.strip().strip("\"'").lower()
-    if token in VERDICT_SCORES:
+    if token in _ALL_VERDICTS:
         return token
     return _VERDICT_ALIASES.get(raw.strip())
 
 
-def tally_debate_verdicts(debate_summary) -> tuple[int | None, dict[str, int]]:
-    """把 debate_summary 的逐點判定加總成調整值。
+def tally_debate_verdicts(
+    debate_summary, question_type: str | None = None
+) -> tuple[int | None, dict[str, int]]:
+    """把 debate_summary 的逐點判定加總成調整值，級距依題型選取。
 
     回傳 `(未夾值的加總, 各判定計數)`。**一點有效判定都沒有時回 `(None, {})`**，
     讓上層退回舊的「裁判自報整數」路徑——而不是回 0。這個區別很重要：
     fallback 路徑（無辯論）的 debate_summary 本來就是空陣列，回 0 會讓報告寫成
     「裁判未提供有效的調整值」，讀起來像模型沒答，但實際上是這次根本沒有辯論。
     """
+    scores = scores_for_question_type(question_type)
     counts: dict[str, int] = {}
     if not isinstance(debate_summary, list):
         return None, counts
@@ -105,26 +177,33 @@ def tally_debate_verdicts(debate_summary) -> tuple[int | None, dict[str, int]]:
         if not isinstance(item, dict):
             continue
         verdict = coerce_verdict(item.get("verdict"))
-        if verdict is None:
-            # 判讀不出來時不丟棄整點，計為 draw（0 分，不影響分數）——
-            # 與本檔其他地方一致的降級優先（R6-1）。
+        if verdict is None or verdict not in scores:
+            # 判讀不出來、或該級距沒有這個等級時計為 draw（0 分，不影響分數），
+            # 不丟棄整點——與本檔其他地方一致的降級優先（R6-1）。
             verdict = "draw"
         counts[verdict] = counts.get(verdict, 0) + 1
     if not counts:
         return None, counts
-    return sum(VERDICT_SCORES[v] * n for v, n in counts.items()), counts
+    return sum(scores[v] * n for v, n in counts.items()), counts
 
 
-def format_verdict_tally(counts: dict[str, int]) -> str:
+_VERDICT_LABELS: dict[str, str] = {
+    "bear_valid": "反方成立",
+    "bear_partial": "反方部分成立",
+    "draw": "打平",
+    "bull_partial": "正方部分成立",
+    "bull_defended": "正方擋下",
+}
+_VERDICT_ORDER = ("bear_valid", "bear_partial", "draw", "bull_partial", "bull_defended")
+
+
+def format_verdict_tally(counts: dict[str, int], question_type: str | None = None) -> str:
     """把計數攤成一行可讀說明，放進報告的信心分項表格。"""
-    labels = {
-        "bear_valid": "反方批評成立", "bear_partial": "反方部分成立",
-        "draw": "打平", "bull_defended": "正方擋下",
-    }
+    scores = scores_for_question_type(question_type)
     parts = [
-        f"{labels[v]} {counts[v]} 點 × {VERDICT_SCORES[v]:+d}"
-        for v in ("bear_valid", "bear_partial", "draw", "bull_defended")
-        if counts.get(v)
+        f"{_VERDICT_LABELS[v]} {counts[v]} 點 × {scores[v]:+d}"
+        for v in _VERDICT_ORDER
+        if counts.get(v) and v in scores
     ]
     return "；".join(parts)
 
@@ -358,6 +437,7 @@ def compute_confidence(
     debate_adjustment_reason: str = "",
     primary_horizon: HorizonClass | None = None,
     debate_summary: list[dict] | None = None,
+    question_type: str | None = None,
 ) -> tuple[int, dict]:
     """計算 L5 信心分數，回傳 (score, breakdown)。
 
@@ -377,7 +457,7 @@ def compute_confidence(
 
     # 優先用裁判的逐點判定加總；一點有效判定都沒有（fallback 路徑／舊格式）才退回
     # 「裁判自報一個整數」的舊路徑。
-    tally, verdict_counts = tally_debate_verdicts(debate_summary)
+    tally, verdict_counts = tally_debate_verdicts(debate_summary, question_type)
     if tally is None:
         adjustment, raw_adjustment, clamp_note = _clamp_debate_adjustment(
             debate_adjustment, debate_adjustment_reason
@@ -385,11 +465,10 @@ def compute_confidence(
         adjustment_source = "llm_scalar"
     else:
         raw_adjustment = tally
-        adjustment = max(DEBATE_ADJUSTMENT_MIN, min(DEBATE_ADJUSTMENT_MAX, tally))
+        low, high = adjustment_range_for(question_type)
+        adjustment = max(low, min(high, tally))
         clamp_note = (
-            f"原始加總 {tally} 超出 [{DEBATE_ADJUSTMENT_MIN}, {DEBATE_ADJUSTMENT_MAX}]，已夾值"
-            if adjustment != tally
-            else ""
+            f"原始加總 {tally} 超出 [{low}, {high}]，已夾值" if adjustment != tally else ""
         )
         adjustment_source = "verdict_tally"
 
@@ -414,7 +493,7 @@ def compute_confidence(
         "debate_adjustment_note": clamp_note,
         "debate_adjustment_source": adjustment_source,
         "debate_verdict_counts": verdict_counts,
-        "debate_verdict_detail": format_verdict_tally(verdict_counts),
+        "debate_verdict_detail": format_verdict_tally(verdict_counts, question_type),
         "primary_horizon": (primary_horizon or DEFAULT_PRIMARY_HORIZON).value,
         "structural_context_count": len(cross_validation.get("structural_context", []) or []),
         "final": final,
