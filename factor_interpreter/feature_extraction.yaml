@@ -1,0 +1,45 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（示範：funding_rate）
+# 來源：11流程圖模板.md 的 Statistical Factor 範例，BTC，直接打 Binance
+# USDⓈ-M /fapi/v1/fundingRate?symbol=BTCUSDT&limit=90（跟
+# pipeline/fetch_funding_rate_percentile.py 同一個端點），取即時 90 筆
+# （每 8 小時一筆，約 30 天）自己算出以下數字，不是複製流程紀錄.md 既有的
+# 快照（那份只存最新值+百分位，沒存完整序列，算不出 slope/roc/rolling 這些）。
+#
+# ⚠️ 方法論標記：slope／slope_7d／roc_1d／roc_7d 的窗口定義是這次現算現填時
+# 自訂的（11流程圖模板.md 只給欄位名，沒定義公式），不是 Ken 校準過的版本：
+#   - slope = 最近 3 筆（約 1 天）簡單最小平方法斜率
+#   - slope_7d = 最近 21 筆（7 天）斜率，slope_30d =全部 90 筆（30 天）斜率
+#   - roc_1d = 現值 vs 3 筆前（1 天前）的變動率，roc_7d = 現值 vs 21 筆前
+#   - z_score = (現值 − 90 筆母體均值) / 90 筆母體標準差
+# 抓取時間：2026-08-01T08:00:00Z（最新一筆 funding time）
+
+feature:
+  factor: funding_rate  # BTC，即時抓取，非流程紀錄.md 舊快照
+
+  # Raw
+  current_value: 0.00316  # %，最新一筆資金費率
+  previous_value: 0.00412  # %，前一筆（8 小時前）
+  delta: -0.00096  # current - previous
+
+  # Relative
+  percentile: 15.6  # 90 筆（近 30 天）中 <= 現值 的比例，percentile_rank() 定義
+  z_score: -1.0226
+
+  # Trend
+  slope: -0.00125
+  slope_7d: 0.000153
+  slope_30d: -0.000025
+
+  # Momentum
+  roc_1d: -66.37  # %，注意分母是很小的費率數字，波動率本來就會很大，不是異常
+  roc_7d: -41.70
+
+  # Statistics
+  rolling_mean: 0.00606
+  rolling_std: 0.00283
+  rolling_max: 0.01
+  rolling_min: -0.00034
+
+  # Quality
+  missing_ratio: 0  # 這次即時抓取剛好回傳完整 90 筆，無缺漏
+  sample_size: 90  # limit=90，每 8 小時一筆，覆蓋近 30 天
