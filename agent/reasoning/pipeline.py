@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from agent.collectors.horizon import resolve_primary_horizon
 from agent.logging_utils import ExecutionLogger
-from agent.reasoning.confidence import compute_confidence
+from agent.reasoning.confidence import compute_confidence, coerce_verdict
 from agent.reasoning.llm_client import LLMClient
 from agent.reasoning.prompts import (
     SYSTEM_PROMPT,
@@ -33,6 +33,17 @@ from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, Question
 # 辯論輪數上限。多智能體辯論的增益在第 2 輪後大致飽和，再往上主要是燒 token 與延遲，
 # 因此預設 2 輪（= 7 次 LLM 呼叫）。反方自報無新論點時會更早收斂。
 MAX_DEBATE_ROUNDS = 2
+
+# 開下一輪辯論所需的時間餘裕，以「上一輪實測秒數」為單位。這個係數必須同時涵蓋
+# 「下一輪（正方＋反方 2 次呼叫）」與「裁判（1 次呼叫）」——gate 放行後就沒有第二個
+# 檢查點，Step D 之前不再檢查 deadline，剩下的路一定會走完。
+#
+# 2.2 來自 2026-08-01 三題真實 Bedrock 實測：(第2輪+裁判)÷第1輪 = 1.68 / 1.91 / 2.09。
+# 原本的 1.5 三題全部低估——主因是裁判的 prompt 是全場最長的（要吃完整逐字稿，
+# 比較分析題達 18k 字），耗時與辯論一輪相當，但 1.5 只留了 0.5 輪的餘裕。
+# 低估的後果不是「辯論被砍掉」而是「整跑超過 15 分鐘」，依命題文件執行限制第 1 條，
+# 超時主辦方可停止執行或不採計產出。
+DEBATE_ROUND_TIME_FACTOR = 2.2
 
 
 @dataclass
@@ -139,6 +150,7 @@ def _dry_run_reasoning(
         debate_adjustment=conclusion.get("debate_adjustment_raw"),
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
         primary_horizon=primary_horizon,
+        debate_summary=conclusion.get("debate_summary"),
     )
     if logger:
         logger.log(
@@ -288,8 +300,12 @@ def _sanitize_facts(facts: list, known_ids: set[str]) -> list[dict]:
 
 
 def _sanitize_debate_summary(raw, known_ids: set[str]) -> list[dict]:
-    """裁判整理的辯論重點摘要（{point, evidence_ids}）。格式錯誤的條目整條丟棄
+    """裁判整理的辯論重點摘要（{point, evidence_ids, verdict}）。格式錯誤的條目整條丟棄
     而非整段作廢——單一條目壞掉不該讓其他 3-4 點也一起消失（R6-1 降級優先）。
+
+    `verdict` 是逐點勝負判定，會被 `confidence.tally_debate_verdicts()` 加總成
+    辯論調整值。判讀不出來的 verdict 落回 `"draw"`（0 分，不影響分數），
+    而不是丟掉整點——同樣是降級優先。
     """
     sanitized: list[dict] = []
     if not isinstance(raw, list):
@@ -298,7 +314,11 @@ def _sanitize_debate_summary(raw, known_ids: set[str]) -> list[dict]:
         if not isinstance(item, dict) or not isinstance(item.get("point"), str) or not item["point"].strip():
             continue
         sanitized.append(
-            {"point": item["point"], "evidence_ids": _sanitize_ids(item.get("evidence_ids", []), known_ids)}
+            {
+                "point": item["point"],
+                "evidence_ids": _sanitize_ids(item.get("evidence_ids", []), known_ids),
+                "verdict": coerce_verdict(item.get("verdict")) or "draw",
+            }
         )
     return sanitized
 
@@ -547,6 +567,11 @@ def _real_reasoning(
     bull_argument = ""
     bull_evidence_ids: list[str] = []
 
+    # 第 1 輪的正方呼叫發生在迴圈外，但它一樣是「第 1 輪的成本」。計時起點必須拉到
+    # 這裡，否則 `last_round_seconds` 只涵蓋反方，把一輪的成本低估四成左右
+    # （2026-08-01 實測：round-1 量到 31.95s，實際 bull 20.7 + bear 31.9 = 52.6s），
+    # 而那個值正是下一輪 deadline gate 的分母。
+    first_round_started = time.monotonic()
     try:
         bull_argument, bull_evidence_ids = _run_bull(1, rounds)
         bull_opened = True
@@ -560,11 +585,12 @@ def _real_reasoning(
         last_round_seconds = 0.0
         for round_no in range(1, MAX_DEBATE_ROUNDS + 1):
             # 時間預算：一輪要花 2 次呼叫（正方＋反方），裁判還需要 1 次，所以要再開
-            # 一輪至少得剩下「上一輪實測時間 × 1.5」。不夠就收在當輪，把時間留給裁判——
-            # 沒有結論的辯論沒有價值。第一輪不檢查：沒有它就沒有任何辯論可言。
+            # 一輪至少得剩下「上一輪實測時間 × DEBATE_ROUND_TIME_FACTOR」。不夠就收在
+            # 當輪，把時間留給裁判——沒有結論的辯論沒有價值。
+            # 第一輪不檢查：沒有它就沒有任何辯論可言。
             if round_no > 1 and deadline is not None:
                 remaining = deadline - time.monotonic()
-                needed = last_round_seconds * 1.5
+                needed = last_round_seconds * DEBATE_ROUND_TIME_FACTOR
                 if remaining < needed:
                     stopped_reason = "deadline"
                     _log(
@@ -575,7 +601,7 @@ def _real_reasoning(
                     )
                     break
 
-            round_started = time.monotonic()
+            round_started = first_round_started if round_no == 1 else time.monotonic()
             if round_no > 1:
                 try:
                     bull_argument, bull_evidence_ids = _run_bull(round_no, rounds)
@@ -663,7 +689,8 @@ def _real_reasoning(
     step_d_raw = _call_json_step(
         llm_client,
         build_step_d_prompt(
-            coin, question, question_type, facts, cross_validation, inference, coin2=coin2, debate=debate
+            coin, question, question_type, facts, cross_validation, inference,
+            coin2=coin2, debate=debate, evidences=evidences,
         ),
         "step_d_conclusion",
     )
@@ -702,6 +729,7 @@ def _real_reasoning(
         debate_adjustment=conclusion.get("debate_adjustment_raw"),
         debate_adjustment_reason=conclusion.get("debate_adjustment_reason", ""),
         primary_horizon=primary_horizon,
+        debate_summary=conclusion.get("debate_summary"),
     )
     if logger:
         logger.log(

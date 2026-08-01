@@ -10,6 +10,7 @@ import json
 import logging
 from pathlib import Path
 
+from agent.reasoning.confidence import confidence_label
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import (
@@ -428,7 +429,10 @@ def _build_panel4(
         )
 
     summary = {
-        "confidence_label": conclusion.get("confidence", "未知"),
+        # 與 report.md 讀同一個來源：等級由決定性分數推得，不用 LLM 自報的
+        # conclusion["confidence"]。兩邊各讀各的等於把不一致從「報告內」搬到
+        # 「報告與面板之間」，問題沒有解決只是換了位置。
+        "confidence_label": confidence_label(reasoning_result.confidence_score),
         "bull_argument": debate.get("bull_argument", ""),
         "bull_evidence_ids": bull_ids,
         "bear_argument": debate.get("bear_argument", ""),

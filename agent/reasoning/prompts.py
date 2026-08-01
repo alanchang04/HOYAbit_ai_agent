@@ -275,6 +275,27 @@ DEBATE_ADVOCACY_RULE = (
     "要誠實的是「這筆證據寫了什麼」，不是「你的立場有多堅定」。"
 )
 
+# 被批評時的判定標準。**正反方共用同一份文字**，理由同 `DEBATE_ADVOCACY_RULE`：
+# 只對一方要求「別輕易認輸」會讓裁判讀到語氣不對等的兩段論證。
+#
+# 2026-08-01 實測動機：四次真實跑的正方第 2 輪，「承認／修正／不再主張」這類讓步詞
+# 出現 5–13 次，最近一次 7 個論點裡有 4 點以「承認…批評成立」開頭，然後換一組新證據
+# 重講。改版後的逐點判定會把這種模式記成 `bear_valid`（每點 −3），實測那次
+# `bull_defended` 掛零、辯論調整 −11。問題不在「承認」本身，而在**沒有先判定就承認**。
+#
+# 這條規則要的是「先檢驗再決定」，不是「一律不認」——批評若真的通過檢驗，
+# 承認並修正仍然是正確答案（否則就變成教模型拒絕有效批評，那比過度承認更糟）。
+DEBATE_REBUTTAL_STANDARD = (
+    "判斷自己是否真的被駁倒，用同一把尺檢驗對方的每一條批評："
+    "(a) 它針對的是你實際講過的主張，而不是它重述後放大的版本；"
+    "(b) 它有具體證據或推理支撐，而不只是把同一份資料換一種解讀就宣稱你錯了；"
+    "(c) 它若用低權重證據挑戰你的高權重證據，必須說明該高權重來源在此情境為何不適用。"
+    "三項只要有一項不成立，這條批評就沒有打中——你該具體指出它哪裡不成立並維持原主張，"
+    "而不是承認它。**承認只在批評通過上述檢驗時才給。**"
+    "而且承認之後要正面修正被打中的那個論點，不是把它丟掉、另外換一組新證據重講一次——"
+    "用新論點蓋過被批評的舊論點，等於默認舊論點被推翻。"
+)
+
 # 辯論輸出長度上限（待辦 11）。原本只加在正方第 2 輪——那是 Task 3.8 實測踩到
 # 「27 筆證據時輸出被 max_tokens 截斷、燒掉 360 秒且整輪作廢」才補的。
 # **第 1 輪面對同樣 27–51 筆證據卻沒有任何約束，承擔同一個截斷風險**，
@@ -572,8 +593,14 @@ def build_step_c1_bull_rebuttal_prompt(
 {format_debate_transcript(rounds)}
 
 你的任務是【回應反方對你的批評】並產出修正後的論證：
-1. 逐項回應反方的批評。批評成立的部分要誠實承認並修正你的論證，不要硬拗。
-2. 批評不成立的部分，要具體說明為什麼（引用事實或 evidence id），不可只說「反方誤解了」。
+1. 逐項處理反方的批評，**每一項都要先判定成不成立，再決定怎麼回應**，三選一：
+   - 不成立 → 具體指出它哪裡不成立（引用事實或 evidence id），並維持原主張。
+     不可只說「反方誤解了」。
+   - 部分成立 → 界定它成立的範圍，說明超出該範圍的部分為何不成立，據此**收窄**原主張，
+     而不是整條放棄。
+   - 確實成立 → 承認，並正面修正被打中的那個論點。
+2. **不要預設批評是對的。** 反方的任務就是攻擊你，它會盡量把每一點講得像是打中了；
+   語氣篤定不等於論據紮實。逐條檢驗過再決定要不要讓步。
 3. 輸出你這一輪修正後的**完整**論證，不要只寫增補的片段，也不要原文照抄上一輪。
 4. 逐項回應批評指的是「每點都要回到」，不是「每點都要長篇大論」。
 
@@ -581,10 +608,11 @@ def build_step_c1_bull_rebuttal_prompt(
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
 2. 必須引用 evidence id 支撐你的論點。
 3. {DEBATE_ADVOCACY_RULE}
-   （上面任務 1 的「批評成立就承認」講的是回應對手已經打中的點，
+   （任務 1 的「確實成立就承認」講的是回應對手已經打中的點，
    不是叫你另外自曝其短——沒被打中的弱點不必主動交出來。）
-4. {DEBATE_WEIGHT_RULE}
-5. {DEBATE_LENGTH_RULE}
+4. {DEBATE_REBUTTAL_STANDARD}
+5. {DEBATE_WEIGHT_RULE}
+6. {DEBATE_LENGTH_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -620,6 +648,10 @@ def build_step_c2_bear_prompt(
         if rounds
         else ""
     )
+    # 第 2 輪起，反方要面對「正方的修正是否已經回應了我的批評」這個判斷，
+    # 標準與正方共用（見 DEBATE_REBUTTAL_STANDARD 的註解：不對稱的讓步要求會讓
+    # 裁判讀到語氣不對等的兩段論證）。第 1 輪沒有前輪可判定，不掛。
+    rebuttal_standard_rule = f"\n6. {DEBATE_REBUTTAL_STANDARD}\n" if rounds else ""
     return f"""題目：{question}
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
 
@@ -640,6 +672,8 @@ def build_step_c2_bear_prompt(
    若你已經只是在重複先前輪次講過的說法、或正方的修正已經合理回應了你的疑慮，
    請填 false 讓辯論收斂；只有在你確實還有尚未被回應的實質疑慮時才填 true。
    為了讓辯論看起來熱鬧而硬填 true 是不誠實的。
+   **「合理回應」指的是正方真的針對你的批評給出具體反駁或修正**——若它只是承認一句、
+   然後換一組新證據把話題帶開，你的批評並沒有被回應，那不算合理回應。
 
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
@@ -649,7 +683,7 @@ def build_step_c2_bear_prompt(
    批評正方時同樣適用：指出正方「證據薄弱」前，先確認他引用的是高權重還是低權重證據。
 5. {DEBATE_LENGTH_RULE}
    critique 與 argument 分別計算，不是合計 600 字。
-
+{rebuttal_standard_rule}
 請只輸出以下 JSON 格式：
 {{
   "critique": "對正方論證的具體批評",
@@ -727,23 +761,67 @@ def _format_inference_section(inference: list[dict], debate: dict | None) -> str
     有辯論時 `inference` 是從最後一輪攤平出來的，論證全文與下方辯論紀錄逐字重複——
     同一段文字餵兩次除了浪費 token，還可能讓裁判過度加權最後一輪。但辯論紀錄不印
     evidence id，所以不能整段拿掉，只截去重複的全文、保留 id 對應。
+
+    **id 用最後一輪的、不用 `inference` 帶進來的聯集**：`inference` 的 id 來自
+    `_build_debate()` 的 `_union_ids()`（所有輪次聯集），但這裡的 hypothesis 文字是
+    最後一輪的。直接用聯集會讓「第 1 輪引用過、第 2 輪已放棄」的證據在裁判眼中仍掛在
+    最後一輪論證下，歸屬錯置。`report/builder.py` 的執行摘要早已修過同一個問題
+    （改用 `rounds[-1]` 的 id），這條路徑補上。
     """
     if not _has_debate_transcript(debate):
         return f"推論層：\n{json.dumps(inference, ensure_ascii=False, indent=2)}"
 
-    compact = [
-        {
-            "hypothesis": _truncate_hypothesis(item.get("hypothesis", "")),
-            "supporting_evidence_ids": item.get("supporting_evidence_ids", []),
-            "opposing_evidence_ids": item.get("opposing_evidence_ids", []),
-        }
-        for item in inference
-        if isinstance(item, dict)
-    ]
+    last_round_ids = _last_round_evidence_ids(debate)
+    compact = []
+    for item in inference:
+        if not isinstance(item, dict):
+            continue
+        hypothesis = item.get("hypothesis", "")
+        side = _debate_side_of(hypothesis)
+        if side and last_round_ids:
+            supporting = last_round_ids[side]
+            opposing = last_round_ids["[反方]" if side == "[正方]" else "[正方]"]
+        else:
+            # 舊的單輪扁平結構或非辯論產生的 hypothesis：維持原本的 id
+            supporting = item.get("supporting_evidence_ids", [])
+            opposing = item.get("opposing_evidence_ids", [])
+        compact.append(
+            {
+                "hypothesis": _truncate_hypothesis(hypothesis),
+                "supporting_evidence_ids": supporting,
+                "opposing_evidence_ids": opposing,
+            }
+        )
     return (
-        "推論層證據引用（論證全文見下方辯論紀錄，此處不重複）：\n"
+        "推論層證據引用（僅列最後一輪實際引用的 id；論證全文見下方辯論紀錄，此處不重複）：\n"
         + json.dumps(compact, ensure_ascii=False, indent=2)
     )
+
+
+def _last_round_evidence_ids(debate: dict | None) -> dict[str, list[str]]:
+    """最後一輪正反方各自實際引用的 evidence id；取不到逐輪 id 時回空 dict。
+
+    相容舊的單輪扁平結構：那種 round 沒有 `*_evidence_ids` 欄位，此時回空 dict 讓
+    呼叫端沿用 `inference` 帶進來的 id，而不是把 id 對應整個抹掉。
+    """
+    rounds = (debate or {}).get("rounds") or []
+    if not rounds:
+        return {}
+    last = rounds[-1]
+    if "bull_evidence_ids" not in last and "bear_evidence_ids" not in last:
+        return {}
+    return {
+        "[正方]": last.get("bull_evidence_ids", []) or [],
+        "[反方]": last.get("bear_evidence_ids", []) or [],
+    }
+
+
+def _debate_side_of(hypothesis: str) -> str | None:
+    """`pipeline` 把辯論攤平成 inference 時會加 `[正方]`／`[反方]` 前綴。"""
+    for side in ("[正方]", "[反方]"):
+        if hypothesis.startswith(side):
+            return side
+    return None
 
 
 def _truncate_hypothesis(text: str, limit: int = 40) -> str:
@@ -767,6 +845,15 @@ def _debate_summary_instruction(debate: dict | None) -> str:
 這是**你消化完整場辯論後的整理**，不是逐字稿的濃縮版——要點出「誰贏了這一點」，
 不是「雙方都提到了這件事」。
 
+每一點都必須附一個 verdict，四選一，這是這點的勝負判定：
+- "bear_valid"：反方的批評成立，且正方沒有有效回應。
+- "bear_partial"：反方的批評部分成立，或雙方各有道理、都缺決定性證據。
+- "draw"：這一點沒有分出勝負。
+- "bull_defended"：正方擋下了反方的批評，或該論點通過了壓力測試沒被推翻。
+**verdict 直接決定信心分數的調整幅度（由程式加總，不是由你估一個總分）**，
+所以請逐點誠實判定：反方打中就給 bear_valid，正方擋住就給 bull_defended，
+不要為了讓總評看起來平衡而調整個別判定。
+
 請先想清楚 debate_summary 再寫 market_judgment：市場判斷應該是這場辯論攻防的
 自然結果，不是另外重新分析一次。"""
 
@@ -783,7 +870,8 @@ def _debate_summary_schema(debate: dict | None) -> str:
     if not _has_debate_transcript(debate):
         return '  "debate_summary": [],'
     return """  "debate_summary": [
-    {"point": "反方對鏈上活躍度下滑的批評成立，正方未能有效反駁", "evidence_ids": ["ev-011"]},
+    {"point": "反方對鏈上活躍度下滑的批評成立，正方未能有效反駁", "evidence_ids": ["ev-011"], "verdict": "bear_valid"},
+    {"point": "正方以 ev-028 擋下反方對期限結構的批評，此點站得住腳", "evidence_ids": ["ev-028"], "verdict": "bull_defended"},
     ...
   ],"""
 
@@ -797,7 +885,15 @@ def build_step_d_prompt(
     inference: list[dict],
     coin2: str | None = None,
     debate: dict | None = None,
+    evidences: list[Evidence] | None = None,
 ) -> str:
+    """結論層（裁判）prompt。
+
+    `evidences` 是為了權重索引：下方明文要求裁判「考量雙方所引用證據的權重分佈」，
+    但在補上這個參數之前，Step D 是四步裡唯一拿不到權重表的——`_sanitize_facts()`
+    丟掉權重欄位，Step B 的 cross_validation 也不含權重（2026-08-01 實跑 dump 驗證）。
+    裁判等於只能吃辯士自己在論證文字裡寫的 `（weight=0.80）`，而那正是它要裁決的兩造。
+    """
     framing = _resolve_framing(question_type, coin, coin2)
     return f"""題目：{question}
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
@@ -808,7 +904,7 @@ def build_step_d_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-
+{_weight_index_section(evidences)}
 {_format_inference_section(inference, debate)}
 {_format_debate_section(debate)}
 請執行【結論層】分析：綜合以上所有層次，給出最終市場判斷。
@@ -826,6 +922,9 @@ invalidation_conditions 是「未來若觀察到什麼具體條件，這個結�
 後者講的是「什麼會讓我改變主意」。
 
 另外輸出 debate_adjustment：你對「這份分析報告本身」的信心調整，範圍 -15 到 +5 的整數。
+**注意：有辯論時，實際採用的調整值由上面 debate_summary 各點的 verdict 加總得出，
+這個欄位只在沒有辯論可判定時才會被採用。**請仍然誠實填寫，並確保它與你的逐點判定
+方向一致——兩者若矛盾，代表你的逐點判定沒有反映你真正的看法，請回頭修正 verdict。
 這不是對市場的看多看空，而是「經過這場辯論，我對自己這個結論的把握變高還是變低」。
 範圍不對稱是刻意的：辯論若揭露了實質漏洞，應大幅下修（可到 -15）；若只是確認了原有判斷，
 最多小幅上調（+5 為上限）。

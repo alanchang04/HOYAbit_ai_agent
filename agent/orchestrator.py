@@ -356,6 +356,18 @@ def run_pipeline(
             detail=f"backend={settings.llm_backend}",
             status=LogStatus.OK,
         )
+        # 把同一個硬性 deadline 也交給 LLM client：辯論輪之間的 gate 只擋得住第 2 輪，
+        # Step A/B 在它之前、Step D 在它之後，都可能因為單次呼叫卡住而把整跑拖過 15 分鐘
+        # （2026-08-01 實測 step_a_facts 卡了 1020s）。重試也要留下紀錄，否則下次一樣難查。
+        if hasattr(llm_client, "deadline"):
+            llm_client.deadline = start_time + settings.hard_deadline_seconds
+        if hasattr(llm_client, "on_retry"):
+            llm_client.on_retry = lambda detail: logger.log(
+                phase=LogPhase.REASON,
+                action="llm_retry",
+                detail=detail,
+                status=LogStatus.SKIPPED,
+            )
         try:
             reasoning_result = run_reasoning(
                 coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
