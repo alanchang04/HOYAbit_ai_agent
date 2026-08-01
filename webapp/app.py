@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -28,6 +30,78 @@ RUNS_DIR = Path("output") / "webapp_runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_DOWNLOAD_FILENAMES = {"report.md", "evidence.json", "execution_log.jsonl", "report_view.json"}
+
+# --- 公開部署的濫用防護（2026-08-01）------------------------------------
+# 這個服務架在**主辦方的 AWS 帳號**上、無認證對外開放，而每次真實執行約
+# 7 萬 tokens、4-6 分鐘。沒有防護的話，一支掃描機器人就能持續燒主辦方的錢，
+# 或用並發請求把 t3.small 打垮。以下三道限制只擋真實執行，dry-run 不受影響
+# （0.7 秒、不呼叫 Bedrock、零成本），評審要試玩隨時可以。
+
+# 題目長度上限。命題範例題型都在 50 字以內，300 字已經很寬鬆；
+# 沒有上限的話可以塞一大段文字進 prompt 灌爆 token 用量。
+MAX_QUESTION_CHARS = 300
+
+# 同時間只准一個真實執行。t3.small 跑一次就吃滿，並發只會讓大家一起逾時，
+# 不如讓後來者拿到明確的「稍後再試」而不是轉圈圈轉到斷線。
+#
+# **用「持有者開始時間」而不是 Semaphore**：2026-08-01 實測踩到——用 Semaphore 時，
+# 客戶端在執行途中斷線（會場網路很常見）會讓名額洩漏，之後**所有人**都拿到
+# 「已有分析在執行」而實際上沒有，只能重啟服務才能恢復。評審時發生等於 demo 直接死。
+# 改記下開始時間後，超過上限就視為前一位已經不在，自動接手——會自癒，不需人工介入。
+MAX_RUN_SECONDS = 900  # 命題硬性上限即 15 分鐘，超過必然已結束或已失敗
+_active_run_started_at: float | None = None
+_slot_lock = threading.Lock()
+
+
+def _acquire_run_slot() -> bool:
+    """取得真實執行名額。前一位超過 MAX_RUN_SECONDS 未釋放時視為已消失並接手。"""
+    global _active_run_started_at
+    now = time.monotonic()
+    with _slot_lock:
+        started = _active_run_started_at
+        if started is not None and (now - started) < MAX_RUN_SECONDS:
+            return False
+        _active_run_started_at = now
+        return True
+
+
+def _release_run_slot() -> None:
+    global _active_run_started_at
+    with _slot_lock:
+        _active_run_started_at = None
+
+# 同一 IP 兩次真實執行的間隔。評審看完一次結果再想下一題不只五分鐘，
+# 但足以擋掉自動化連打。
+REAL_RUN_COOLDOWN_SECONDS = 300
+_last_real_run_by_ip: dict[str, float] = {}
+_cooldown_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    """取請求來源 IP。目前直接對外沒有反向代理，client.host 就是真實來源。"""
+    return request.client.host if request.client else "unknown"
+
+
+def _check_real_run_allowed(ip: str) -> str | None:
+    """真實執行的冷卻檢查。可執行回 None，否則回要顯示給使用者的理由。"""
+    now = time.monotonic()
+    with _cooldown_lock:
+        last = _last_real_run_by_ip.get(ip)
+        if last is not None and (now - last) < REAL_RUN_COOLDOWN_SECONDS:
+            wait = int(REAL_RUN_COOLDOWN_SECONDS - (now - last))
+            return (
+                f"真實執行每 {REAL_RUN_COOLDOWN_SECONDS // 60} 分鐘限一次"
+                f"（本服務執行於主辦方 AWS 帳號，需節制用量），請於 {wait} 秒後再試。"
+                "想立即試用請改勾「快速模式」，它不呼叫 Bedrock、約 1 秒完成。"
+            )
+        _last_real_run_by_ip[ip] = now
+    return None
+
+
+def _clear_cooldown(ip: str) -> None:
+    """真實執行沒能真的開始時，把剛記下的冷卻時間戳收回，不佔用配額。"""
+    with _cooldown_lock:
+        _last_real_run_by_ip.pop(ip, None)
 
 app = FastAPI(title="HOYA BIT 加密市場分析 AI Agent")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -72,19 +146,55 @@ def analyze(
 
     result = None
     error = None
-    try:
-        result = run_pipeline(
-            coin=coin.upper(),
-            question=question,
-            dry_run=dry_run,
-            output_dir=str(out_dir),
-            coin2=coin2.upper() if coin2 else None,
-            with_baseline=with_baseline,
-        )
-    except Exception as exc:  # noqa: BLE001
-        # Web UI 是展示用途，任何未預期例外都應顯示錯誤頁面而非讓伺服器 500，
-        # 真正的失敗容錯（collector/LLM 步驟）已經在 orchestrator 內處理。
-        error = f"{type(exc).__name__}: {exc}"
+
+    # --- 入口守門：先擋掉不合法與濫用的請求，再談執行 ---
+    coin_uc = coin.strip().upper()
+    coin2_uc = coin2.strip().upper() if coin2.strip() else None
+    guard: str | None = None
+
+    if coin_uc not in SUPPORTED_COINS:
+        guard = f"幣種僅支援命題指定的 {'／'.join(sorted(SUPPORTED_COINS))}，收到的是「{coin[:20]}」。"
+    elif coin2_uc and coin2_uc not in SUPPORTED_COINS:
+        guard = f"比較對象幣種僅支援 {'／'.join(sorted(SUPPORTED_COINS))}。"
+    elif len(question.strip()) > MAX_QUESTION_CHARS:
+        guard = f"題目請控制在 {MAX_QUESTION_CHARS} 字以內（目前 {len(question.strip())} 字）。"
+    elif not question.strip():
+        guard = "請輸入題目。"
+
+    acquired = False
+    ip = _client_ip(request)
+    if guard is None and not dry_run:
+        guard = _check_real_run_allowed(ip)
+        if guard is None:
+            # 拿不到名額就直接回覆，不要排隊等——排隊只會讓瀏覽器等到斷線
+            acquired = _acquire_run_slot()
+            if not acquired:
+                _clear_cooldown(ip)  # 沒真的跑到，不該扣掉這次配額
+                guard = (
+                    "目前已有一個真實分析正在執行（每次約 4-6 分鐘），"
+                    "同時間僅允許一個以確保執行品質。請稍後再試，"
+                    "或改勾「快速模式」立即查看完整流程。"
+                )
+
+    if guard is not None:
+        error = guard
+    else:
+        try:
+            result = run_pipeline(
+                coin=coin_uc,
+                question=question,
+                dry_run=dry_run,
+                output_dir=str(out_dir),
+                coin2=coin2_uc,
+                with_baseline=with_baseline,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Web UI 是展示用途，任何未預期例外都應顯示錯誤頁面而非讓伺服器 500，
+            # 真正的失敗容錯（collector/LLM 步驟）已經在 orchestrator 內處理。
+            error = f"{type(exc).__name__}: {exc}"
+        finally:
+            if acquired:
+                _release_run_slot()
 
     # 報告分頁改為排版化 HTML 顯示（僅供 Web UI 呈現，report.md 交付檔本身不受影響）
     report_html: str = ""

@@ -9,6 +9,17 @@ from agent.logging_utils import ExecutionLogger
 from agent.schemas import EvidenceDraft, LogPhase, LogStatus
 
 
+def _exc_text(exc: BaseException) -> str:
+    """例外的可讀描述。**永遠帶型別名**，因為 `str(exc)` 常常是空的。
+
+    2026-08-01 賽場網路壅塞時實測：連線類例外（httpx.ConnectError、ReadTimeout
+    等）多半 `str()` 為空字串，於是 log 只留下 `error=`——看得到哪個子來源掛了，
+    卻完全看不出為什麼。網路不穩的當下這正是最需要資訊的時候。
+    """
+    detail = str(exc).strip()
+    return f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__
+
+
 class BaseCollector(ABC):
     """所有 collector 的基底類別。
 

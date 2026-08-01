@@ -4,75 +4,75 @@
   "items": [
     {
       "feed": "NEWS",
-      "title": "Across Protocol 攻击者退回331.8枚ETH被黑资金至以太坊多签",
-      "summary": "PANews 7月28日消息，据PeckShield 称，Across Protocol 此前在 Solana 上遭攻击，约360万美元加密资产被转出。最新链上数据显示，攻击者标记地址已向 Across Protocol Hub Pool Owner 多签地址退回331.8枚 ETH，价值约624万美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa80d-44ca-768b-b37d-ab6a79ad011d",
-      "published": "Tue, 28 Jul 2026 09:25:00 GMT"
+      "title": "以太坊现货ETF昨日净流入902.95万美元，贝莱德ETHB净流入1538.31万美元居首",
+      "summary": "PANews 8月1日消息，据 SoSoValue 数据，昨日（美东时间 7 月 31 日）以太坊现货 ETF 总净流入 902.95 万美元。 昨日单日净流入最多的以太坊现货 ETF 为贝莱德（Blackrock）Staked ETH ETF ETHB，单日净流入为 1538.31 万美元，目前 ETHB 历史总净流入达 5.44 亿美元。 昨日单日净流出最多的以太坊现货 ETF 为 Bitwise ETF ETHW，单日净流出为 253.71 万美元，目前 ETHW 历史总净流入达 3.82 亿美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fbb78-41b8-7648-b144-150b4d304abb",
+      "published": "Sat, 01 Aug 2026 03:57:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "江卓尔：BTC已跌破上升通道，做空目标从ETH切换至BTC",
-      "summary": "PANews 7月28日消息，莱比特矿池创始人江卓尔表示：“这一轮走完，我不空ETH了，改空BTC。”其解释称，此前策略为将ETH质押为WBETH作为保证金，在永续合约等量开空ETH，等效于卖出现货且无杠杆和强平风险，同时保留质押利息收益并收取多头资金费率，仅需存放少量ETH保证金以降低交易所风险。新策略改为以WBETH作为保证金，做空按汇率折算的等量BTC现货。",
-      "url": "https://www.panewslab.com/zh/articles/019fa797-90d7-7225-a3cb-2f5f7ee06f6d",
-      "published": "Tue, 28 Jul 2026 07:19:00 GMT"
+      "title": "富达转移价值约5亿美元的ETH",
+      "summary": "PANews 8月1日消息，据 Onchain Lens 监测，富达关联的钱包将 26 万枚 ETH（约 4.9955 亿美元）转移到三个钱包中，这三个钱包最初由富达注资于六个月前。资金分配如下： 9.5 万枚 ETH（约 1.8253 亿美元） 8.7 万枚 ETH（约 1.6723 亿美元） 7.8 万枚 ETH（约 1.4979 亿美元）",
+      "url": "https://www.panewslab.com/zh/articles/019fbaaf-0763-72e9-8e67-aec0be0c927e",
+      "published": "Sat, 01 Aug 2026 00:17:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "以太坊现货ETF昨日总净流入923万美元，贝莱德ETHA净流入1175万美元居首",
-      "summary": "PANews 7月28日消息，根据 SoSoValue 数据，昨日（美东时间 7 月 27 日）以太坊现货 ETF 总净流入 923 万美元。 昨日单日净流入最多的以太坊现货 ETF 为贝莱德（Blackrock） ETF ETHA，单日净流入为 1175 万美元，目前 ETHA 历史总净流入达 114.2 亿美元。 昨日单日净流出最多的以太坊现货 ETF 为Invesco ETF QETH，单日净流出为 252 万美元，目前 QETH 历史总净流入达 2210 万美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa6e2-cb4d-72e8-a8ae-dd77f7825201",
-      "published": "Tue, 28 Jul 2026 04:01:00 GMT"
+      "title": "疑属BitMine的钱包买入10.46万枚ETH，价值约1948万美元",
+      "summary": "PANews 8月1日消息，据 Onchain Lens 监测，一个疑似属于 BitMine 的钱包通过 FalconX 平台购入了 10.46 万枚以太坊（约合 1948 万美元）。BitMine 持有超过 4.8% 的以太坊供应量，是全球最大的公开交易以太坊金库。",
+      "url": "https://www.panewslab.com/zh/articles/019fbaac-e3fa-720c-be9d-e4a988d4508c",
+      "published": "Sat, 01 Aug 2026 00:15:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "币安将停止支持Sophon（SOPH）主网",
-      "summary": "PANews 7月28日消息，据官方公告，币安将停止支持Sophon（SOPH）主网，并开放Sophon（SOPH）通过以太坊（ERC20）网络进行充值和提现。注意：币安将于2026年08月04日16:00（东八区时间）暂停上述代币在Sophon主网的充值、提现业务。迁移完成后，上述代币将不再支持Sophon主网的充值和提现。迁移期间，现货交易、杠杆交易、合约交易、币安理财的服务将不受影响。币安将协助在其币安账户中持有上述代币的用户处理所涉及的任何技术问题。",
-      "url": "https://www.panewslab.com/zh/articles/019fa6c7-9392-76fa-abf6-29dfa6a7d560",
-      "published": "Tue, 28 Jul 2026 03:32:00 GMT"
+      "title": "Arthur Hayes卖出2364枚ETH，预计亏损24.1万美元",
+      "summary": "PANews 8月1日消息，据 Lookonchain 监测，Arthur Hayes过去两小时内，向 Cumberland 和 Galaxy Digital 存入了 2,364.38 枚 ETH，换取了 430 万 USDC。其卖出价格为 1,821 美元，亏损 24.1 万美元（-5.3%）。此前，Arthur Hayes 以约 1,923 美元的价格买入了 7,213 枚 ETH，价值 1387 万美元。",
+      "url": "https://www.panewslab.com/zh/articles/019fbaa3-ee69-70cb-b272-c48e434d33a6",
+      "published": "Sat, 01 Aug 2026 00:05:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "某新钱包从币安提取2101枚ETH，约合395万美元",
-      "summary": "PANews 7月28日消息，据Lookonchain监测，近期多名巨鲸持续积累ETH。另一个新建钱包0x49D9在4小时前从Binance提取2101枚ETH（395万美元）。",
-      "url": "https://www.panewslab.com/zh/articles/019fa64f-b7ae-737b-989b-ad76f8865181",
-      "published": "Tue, 28 Jul 2026 01:21:00 GMT"
+      "title": "Uniswap上线Earn功能，支持链上存入USDC、USDT、ETH赚取利息",
+      "summary": "PANews 7月31日消息，据 Uniswap 官方博客，Uniswap 在 Web App 和 Wallet 中上线 Earn 功能，用户可将 USDC、USDT 和 ETH 存入链上借贷市场赚取利息。Earn 通过一次签名完成存入，资金全程自托管，无锁仓和冷却期，随时可提取。底层由 Morpho 提供基础设施、Gauntlet 负责组合配置，当前运行在以太坊主网。用户可在 Earn 页面选择金额存入，若未持有对应资产可先在 Uniswap 内兑换或购入后再存，不额外收取 Uniswap 使用费，仅需支付网络手续费，收益和持仓可在 Portfolio 统一查看。",
+      "url": "https://www.panewslab.com/zh/articles/019fb8b6-2a07-72f9-917a-b7631ae14736",
+      "published": "Fri, 31 Jul 2026 15:04:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "Arthur Hayes再次花费632万枚USDC场外买入3298枚ETH",
-      "summary": "PANews 7月28日消息，据链上分析师余烬监测，Arthur Hayes在关掉BitMEX后交易频率提升，2小时前通过FalconX和Galaxy Digital花费632万枚USDC场外买入3298枚ETH。自7月15日以来，其已累计花费1382万枚USDC买入7212.6枚ETH，均价1916美元。",
-      "url": "https://www.panewslab.com/zh/articles/019fa61e-71af-729c-935b-f714d532042d",
-      "published": "Tue, 28 Jul 2026 00:27:00 GMT"
+      "title": "Sygnum Bank 托管与质押负责人：以“43天质押排队”判断 ETH 需求不准确，更多是机制原因",
+      "summary": "PANews 7月31日消息，据The Block报道，Sygnum Bank 托管与质押负责人 Thomas Brunner 表示，以太坊当前约 43 天的验证者质押排队并非单一的看多信号，其中相当部分来自 Pectra 升级后的机制变化，包括单个验证者上限提升至 2048 ETH、支持自动复利，导致大型机构对现有验证者频繁“补仓”，每笔少量补仓也需进入同一排队队列。",
+      "url": "https://www.panewslab.com/zh/articles/019fb89b-a685-70da-afc4-188a361adf47",
+      "published": "Fri, 31 Jul 2026 14:35:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "灰度：HYPE ETF资金流入加速，表现优于BTC、SOL和XRP同周期",
-      "summary": "PANews 7月28日消息，据灰度发布的研究数据，按资产市值占比计算，HYPE ETF的资金流入正在加速，相对表现超过BTC、ETH、SOL和XRP。灰度指出，比特币的流入最为持续稳定，以太坊曾出现剧烈峰值，Solana和XRP在早期呈现健康流入，而HYPE在同生命周期阶段的启动表现优于比特币、Solana和XRP。",
-      "url": "https://www.panewslab.com/zh/articles/019fa615-0446-75a8-90da-21330c06bd68",
-      "published": "Tue, 28 Jul 2026 00:17:00 GMT"
+      "title": "TD Cowen 下调 Sharplink 目标价至 13 美元，但维持“买入”评级",
+      "summary": "PANews 7月31日消息，据The Block报道，投行 TD Cowen 将 Sharplink Gaming（股票代码：SBET）目标价由 16 美元下调至 13 美元，但维持“买入”评级，主因下调 2026 年底以太坊（ETH）价格预期。该行将 2026 年底 ETH 预测从约 3,650 美元下调至 2,371 美元，并同步下调 2027–2029 年预估，理由是美国联邦层面对代币化金融资产的监管推进慢于预期，相关立法（包括 CLARITY Act）延迟。",
+      "url": "https://www.panewslab.com/zh/articles/019fb84b-f64f-7139-8c18-5b76318ee3e1",
+      "published": "Fri, 31 Jul 2026 13:09:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "Bitmine 4小时前从BitGo收到7500枚ETH，约合1461万美元",
-      "summary": "PANews 7月28日消息，据链上分析师余烬监测，Bitmine本周继续增持ETH，4小时前从BitGo收到7500枚ETH（1461万美元）。",
-      "url": "https://www.panewslab.com/zh/articles/019fa60c-547d-708f-9412-d21af07b4035",
-      "published": "Tue, 28 Jul 2026 00:07:00 GMT"
+      "title": "Kraken将在欧洲推出受监管的BTC和ETH期权",
+      "summary": "PANews 7月31日消息，据CoinDesk报道，Kraken将在欧洲推出加密期权产品，并利用其MiFID牌照向机构客户提供受监管的比特币（BTC）和以太坊（ETH）期权服务。",
+      "url": "https://www.panewslab.com/zh/articles/019fb804-0f96-77ba-8b69-37971d4ca8b3",
+      "published": "Fri, 31 Jul 2026 11:51:00 GMT"
     },
     {
       "feed": "NEWS",
-      "title": "分析：比特币未受AI抛售影响，但美联储关键会议或决定下一步方向",
-      "summary": "PANews 7月28日消息，据CoinDesk报道，比特币周一维持在65,000美元附近，过去几日上涨约4%，以太坊触及近两个月高点，而AI相关科技股承压下跌。分析师称本周美联储政策决议、通胀数据和科技巨头财报将决定比特币能否突破数月交易区间，还是回落至6月低点。 LMAX Group市场策略师表示，加密市场在传统市场波动期间的韧性令人鼓舞，支持数字资产开始与传统风险资产脱钩的观点。技术上，比特币需突破67,300美元才能走出自6月以来的盘整区间，以太坊面临2,000美元关键阻力。Bitmine董事长Tom Lee指出ETH/BTC比率升至三个月高点，是看涨信号。",
-      "url": "https://www.panewslab.com/zh/articles/019fa607-19f1-713d-8309-41ab288cc811",
-      "published": "Tue, 28 Jul 2026 00:03:00 GMT"
+      "title": "名义价值104.3亿美元的比特币和以太坊期权今日到期交割",
+      "summary": "PANews 7月31日消息，据Greeks.live报道，7月31日期权交割数据显示，14.9万张BTC期权到期，Put Call Ratio为0.28，最大痛点64000美元，名义价值96亿美元。43.5万张ETH期权到期，Put Call Ratio为0.63，最大痛点1850美元，名义价值8.3亿美元。 分析指出，比特币本周围绕6.4万美元震荡，美股波动未带动加密资金流入，反弹也未带动加密上涨，部分加密美股产品成交量超过加密资产本身，上涨缺乏条件。加密货币已历经8个月熊市，美股统治性交易热度使其他资产相形见绌，短期可更多关注美股交易。",
+      "url": "https://www.panewslab.com/zh/articles/019fb707-a0fa-7169-9618-71a1334dadd9",
+      "published": "Fri, 31 Jul 2026 07:15:00 GMT"
     },
     {
-      "feed": "NEWS",
-      "title": "Bitwise：以太坊、Solana和Avalanche网络更活跃更便宜，即使代币价格下跌",
-      "summary": "PANews 7月28日消息，据The Block报道，以太坊、Solana和Avalanche在过去一年中网络活动增加且使用成本降低，但ETH、SOL和AVAX价格均下跌约50%或更多。Bitwise链上研究主管Kam Benbrik表示，网络基本面与市场情绪出现明显背离——链上活动实际在增长，但协议设计使区块空间更便宜，收入因此大幅下降。 Bitwise首次季度质押报告显示，二季度末以太坊质押量达4,020万枚ETH（占总供应量三分之一），新增质押主要来自机构。",
-      "url": "https://www.panewslab.com/zh/articles/019fa606-c388-719a-bb72-5796cde5c5dc",
-      "published": "Tue, 28 Jul 2026 00:02:00 GMT"
+      "feed": "NORMAL",
+      "title": "从建设者交流到真实产品：EAG 墨西哥城活动回顾",
+      "summary": "7月8日至12日，从 Ethereum Builders Tour 到一场持续 36 小时的 Incubathon，墨西哥见证了以太坊建设者与真实企业共同构建的一次实践。",
+      "url": "https://www.panewslab.com/zh/articles/019fb7d7-fc43-771a-a21a-774f7a10cba0",
+      "published": "Fri, 31 Jul 2026 11:03:00 GMT"
     }
   ],
   "errors": [],
-  "fetched_at": "2026-07-28T09:44:52Z"
+  "fetched_at": "2026-08-01T06:15:28Z"
 }

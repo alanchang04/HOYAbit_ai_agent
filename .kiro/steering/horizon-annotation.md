@@ -78,10 +78,10 @@ fileMatchPattern: "agent/collectors/*"
 `price.py` 採**雙軌**：
 
 - 長歷史指標（MA120、波動率全歷史百分位）→ **只用官方 CSV**，不得改用 Binance
-- 近期指標（30 天序列、RSI、MA20）→ CSV ＋ Binance 公開日線補齊缺口
+- 近期指標（30 天序列、RSI、MA20）→ CSV ＋ Coinbase Exchange USD 公開日線補齊缺口；缺日才用 Binance Spot USDT 備援
 - 補齊失敗一律降級為純 CSV 並在證據文字標註「⚠ 未能補齊」，不得中斷
 
-同日資料重複時 **CSV 優先**，維護「共同基準」語意。
+同日資料重複時 **CSV 優先**，延伸區段同日則 **Coinbase 優先**，維護「共同基準」語意並保留來源一致性。
 Binance 回傳的最後一筆是當日未收盤 K 棒，**必須剔除**。
 
 ## 邊界

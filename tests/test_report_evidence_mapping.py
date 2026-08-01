@@ -245,9 +245,9 @@ def _result_with_breakdown(**overrides):
 
 
 def test_report_confidence_section_shows_three_dimension_breakdown():
-    """R3-12：第 4 節要攤開三維分數、權重、基底、辯論調整、最終分，可逐項對帳。"""
+    """R3-12：第 2 節要攤開三維分數、權重、基底、辯論調整、最終分，可逐項對帳。"""
     md = build_report_markdown("BTC", "題目", _result_with_breakdown(), [make_evidence("ev-001")])
-    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    section = md.split("## 2. 信心說明")[1].split("## 3.")[0]
 
     assert "資料品質" in section and "83.3" in section
     assert "訊號一致性" in section and "85.0" in section
@@ -261,7 +261,7 @@ def test_report_confidence_section_shows_three_dimension_breakdown():
 def test_report_confidence_section_shows_why_lines():
     """R3-13：不能只有分數，要有「這個分數怎麼來的」。"""
     md = build_report_markdown("BTC", "題目", _result_with_breakdown(), [make_evidence("ev-001")])
-    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    section = md.split("## 2. 信心說明")[1].split("## 3.")[0]
     assert "這個分數怎麼來的" in section
     assert "price 資料完整" in section
 
@@ -283,7 +283,7 @@ def test_report_discloses_consensus_degradation():
         ),
         [make_evidence("ev-001")],
     )
-    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    section = md.split("## 2. 信心說明")[1].split("## 3.")[0]
     assert "訊號共識以中性 50 計算" in section
 
 
@@ -296,7 +296,7 @@ def test_report_without_breakdown_says_so_honestly():
         confidence_score=40,
     )
     md = build_report_markdown("BTC", "題目", result, [make_evidence("ev-001")])
-    section = md.split("## 4. 信心說明")[1].split("## 5.")[0]
+    section = md.split("## 2. 信心說明")[1].split("## 3.")[0]
     assert "未產出分項計算明細" in section
     assert "| 資料品質 |" not in section
 
@@ -447,3 +447,145 @@ def test_debate_summary_renders_correctly_as_markdown():
     assert "<details>" in html
     assert "<summary>" in html
     assert "正方立論" in html
+
+
+def test_executive_summary_references_debate_summary_instead_of_full_text():
+    """2026-07-30：有 debate_summary 可看時，執行摘要不再重複貼雙方最後一輪的完整
+    論證原文——實測曾讓執行摘要（3492 字）比市場判斷本身還長，且讀者會先看到
+    「【回應反方批評】」這種辯駁語氣，卻還沒看過批評內容是什麼。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2)]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={
+            "market_judgment": "市場判斷內容",
+            "confidence": "中",
+            "evidence_ids": ["ev-001"],
+            "debate_summary": [{"point": "重點一", "evidence_ids": ["ev-002"]}],
+        },
+        debate={
+            "bull_argument": "【回應反方批評】這段完整論證原文不該再出現在執行摘要",
+            "bull_evidence_ids": ["ev-001"],
+            "bear_argument": "反方完整論證原文",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=64,
+    )
+    md = build_report_markdown("BTC", "題目", result, evidences)
+    exec_section = md.split("## 執行摘要")[1].split("## 辯論重點摘要")[0]
+
+    assert "這段完整論證原文不該再出現在執行摘要" not in exec_section
+    assert "反方完整論證原文" not in exec_section
+    assert "辯論重點摘要" in exec_section
+
+
+def test_executive_summary_still_shows_full_text_without_debate_summary():
+    """裁判沒產出摘要時，完整論證原文是唯一可用內容，仍要保留（不能整段消失）。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2)]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={
+            "market_judgment": "市場判斷內容",
+            "confidence": "中",
+            "evidence_ids": ["ev-001"],
+        },
+        debate={
+            "bull_argument": "正方完整論證原文",
+            "bull_evidence_ids": ["ev-001"],
+            "bear_argument": "反方完整論證原文",
+            "bear_evidence_ids": ["ev-002"],
+        },
+        confidence_score=64,
+    )
+    md = build_report_markdown("BTC", "題目", result, evidences)
+    exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
+    assert "正方完整論證原文" in exec_section
+    assert "反方完整論證原文" in exec_section
+
+
+def test_report_section_order_confidence_before_debate_after_conclusion():
+    """2026-07-30 排版調整：結論之後接信心說明（可不可信）、再接正反方分析（攻防
+    細節），原始證據列表（關鍵依據）挪到最後——查證用，不強迫先讀完。"""
+    evidences = [make_evidence(f"ev-{i:03d}") for i in (1, 2)]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        confidence_score=60,
+    )
+    md = build_report_markdown("BTC", "題目", result, evidences)
+
+    assert "## 2. 信心說明" in md
+    assert "## 3. 正反方分析與矛盾訊號處理" in md
+    assert "## 4. 後續觀察重點" in md
+    assert "## 5. 關鍵依據" in md
+    assert (
+        md.index("## 1. 結論")
+        < md.index("## 2. 信心說明")
+        < md.index("## 3. 正反方分析")
+        < md.index("## 4. 後續觀察重點")
+        < md.index("## 5. 關鍵依據")
+        < md.index("## 附錄")
+    )
+
+
+def test_executive_summary_points_to_correct_section_number_for_confidence():
+    """執行摘要提到「分項計算方式見」時，指向的章節號要跟改版後的排序一致，
+    不能還寫舊的「4. 信心說明」。"""
+    evidences = [make_evidence("ev-001")]
+    result = ReasoningResult(
+        question_type="multi_source",
+        facts=[{"summary": "摘要", "evidence_ids": ["ev-001"]}],
+        conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        confidence_score=60,
+    )
+    md = build_report_markdown("BTC", "題目", result, evidences)
+    exec_section = md.split("## 執行摘要")[1].split("## 1.")[0]
+    assert "見「2. 信心說明」" in exec_section
+    assert "見「4. 信心說明」" not in exec_section
+
+
+# --- 來源超連結（2026-07-31）------------------------------------------
+# 可回溯性是本系統的核心賣點，但 source_url 一直只存在 evidence.json 裡，
+# 報告與面板都沒渲染——讀者要查證得自己翻 JSON，等於沒有。
+
+
+class TestSourceLinksInReport:
+    def _report_with(self, source: str, source_url: str | None) -> str:
+        ev = Evidence(
+            id="ev-001",
+            coin="BTC",
+            source=source,
+            source_url=source_url,
+            fetched_at="2026-07-25T00:00:00Z",
+            content_reference="BTC 現價 65,400",
+            related_claim="BTC 當前報價",
+            source_type="price",
+            source_weight=0.9,
+        )
+        result = ReasoningResult(
+            question_type="multi_source",
+            facts=[{"summary": "BTC 現價 65,400", "evidence_ids": ["ev-001"]}],
+            conclusion={"market_judgment": "判斷", "confidence": "中", "evidence_ids": ["ev-001"]},
+        )
+        return build_report_markdown("BTC", "分析 BTC", result, [ev])
+
+    def test_source_with_url_becomes_markdown_link(self):
+        md = self._report_with("CoinGecko", "https://api.coingecko.com/api/v3/simple/price")
+        assert "[CoinGecko](https://api.coingecko.com/api/v3/simple/price)" in md
+
+    def test_source_without_url_stays_plain_text(self):
+        """本地計算的證據沒有外部原文，硬編連結等於造假。"""
+        md = self._report_with("本地區間統計（依 BTC 日線 最近一日，非外部資料）", None)
+        assert "本地區間統計（依 BTC 日線 最近一日，非外部資料）" in md
+        assert "](" not in md.split("## 5. 關鍵依據")[1]
+
+    def test_brackets_in_source_name_do_not_break_markdown(self):
+        """來源名稱含 [ ] 會破壞 markdown 連結語法，需先轉義。"""
+        md = self._report_with("Binance [futures]", "https://fapi.binance.com/x")
+        assert "[Binance （futures）](https://fapi.binance.com/x)" in md
+
+    def test_key_evidence_section_explains_missing_links(self):
+        md = self._report_with("CoinGecko", "https://example.com")
+        assert "未附連結者為本地計算" in md

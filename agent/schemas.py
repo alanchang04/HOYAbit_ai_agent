@@ -95,6 +95,30 @@ def is_current_signal(horizon: HorizonClass, primary: HorizonClass | None = None
     return HORIZON_ORDER.index(horizon) <= HORIZON_ORDER.index(target)
 
 
+class Persistence(str, Enum):
+    """訊號還有效多久（R8-1，design.md §3.9.1）。
+
+    與 `horizon_class` 回答的是不同問題，不可混為一談：
+    `horizon_class` 是「這筆觀察涵蓋多長的窗」，`persistence` 是「這個訊號
+    還能信多久」。funding 費率百分位觀察窗是 30 天（horizon=medium），但訊號
+    本身 1-3 天後就衰減——現行系統若不分這兩者，會把它跟 30 天新聞覆蓋
+    當成同等份量的證據。
+    """
+
+    SHORT = "short"    # 有效期 ≤7 天（情緒、資金費率極值等易衰減訊號）
+    MEDIUM = "medium"  # 8–30 天
+    LONG = "long"      # >30 天（估值指標、結構性供給等慢變數）
+
+
+class DecayPattern(str, Enum):
+    """訊號失效的方式（R8-1）。與 persistence 是互補資訊：persistence 回答
+    「還能信多久」，decay 回答「失效時是瞬間過期還是逐漸鈍化」。
+    """
+
+    FAST = "fast"  # 事件過後迅速失效（情緒、資金費率極值）
+    SLOW = "slow"  # 逐步衰減（估值指標、結構性供給）
+
+
 class PipelineLayer(str, Enum):
     """信任提煉管線各層標記。"""
 
@@ -141,9 +165,17 @@ class EvidenceDraft(BaseModel):
 
     coin: str
     source: str
+    # 實際呼叫的位址（出處，供稽核）。可能是只回 JSON 的 API 端點。
     source_url: str | None = None
+    # 同一份資料「人看的頁面」（供讀者自行查證）。多數由 orchestrator 依
+    # `reference_pages` 對照表自動推導，對不上時維持 None、渲染層退回 source_url。
+    reference_url: str | None = None
     fetched_at: str
     content_reference: str
+    # ⚠ 名字叫 claim，內容是**主題標籤**（「BTC 鏈上活躍度」「BTC 官方發布新聞事件」），
+    # **不是方向性主張**——這裡永遠不該出現「看多／看空／利多／利空」。命名確實誤導，
+    # Ken 的 v3 提案就因此判斷我們有一層會造成錨定的 Claim（見 10_v3提案評估回覆.md §三）。
+    # 賽前不改名：散在 8 個 collector ＋ 18 個測試檔共 80 處引用，純改名不划算。賽後改為 `topic`。
     related_claim: str
     source_type: SourceType
 
@@ -174,6 +206,12 @@ class EvidenceDraft(BaseModel):
     window_start: str | None = None
     window_end: str | None = None
     horizon_class: HorizonClass = HorizonClass.SPOT
+
+    # R8-1：訊號有效期與失效方式，由 collector 決定性標註（比照 horizon_class）。
+    # 預設值 medium/slow 是「不確定就保守」——寧可低估某訊號的衰減速度，
+    # 也不要無根據地把它判成 short/fast 而錯誤壓低其份量。
+    persistence: Persistence = Persistence.MEDIUM
+    decay: DecayPattern = DecayPattern.SLOW
 
     @field_validator("fetched_at")
     @classmethod

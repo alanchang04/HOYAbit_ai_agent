@@ -127,6 +127,9 @@ def _build_panel1(
                 "fingerprint": fingerprint_map.get(ev.id, ""),
                 "evidence_id": ev.id,
                 "source": ev.source,
+                # 讓讀者能直接點到原文查證。優先給人看的頁面，沒有才給實際呼叫的
+                # 端點（本地計算的證據兩者皆無，維持 None、前端不渲染連結）。
+                "source_url": ev.reference_url or ev.source_url,
                 "source_type": ev.source_type.value,
                 "source_weight": ev.source_weight,
                 "weight_reason": ev.weight_reason,
@@ -427,6 +430,22 @@ def _build_panel4(
     else:
         watchpoint, watchpoint_label = "", ""
 
+    # 裁判整理的辯論重點（`3929328` 新增）。原本只接進 report/builder.py，
+    # 導致同一次執行的兩個交付面說法不一致：report.md 把它當主要入口放在結論前，
+    # 面板④卻整段沒有。兩邊都是「分析報告」的呈現，資料來源必須一致。
+    debate_summary: list[dict] = []
+    for item in conclusion.get("debate_summary", []):
+        eids = item.get("evidence_ids", [])
+        debate_summary.append(
+            {
+                "point": item.get("point", ""),
+                "evidence_ids": eids,
+                # 面板一律以 fingerprint 對外呈現證據，這裡比照 core_facts／
+                # bullish_evidence 的慣例補上；查不到的 id 略過不顯示。
+                "fingerprints": [fingerprint_map[e] for e in eids if fingerprint_map.get(e)],
+            }
+        )
+
     summary = {
         # 與 report.md 讀同一個來源：等級由決定性分數推得，不用 LLM 自報的
         # conclusion["confidence"]。兩邊各讀各的等於把不一致從「報告內」搬到
@@ -437,6 +456,9 @@ def _build_panel4(
         "bear_argument": debate.get("bear_argument", ""),
         "bear_evidence_ids": bear_ids,
         "has_debate": bool(debate),
+        # 有摘要時，摘要卡片改指向重點整理，不再整段倒貼正反方全文——
+        # 與 report/builder.py 的執行摘要同一套取捨（篇幅與可讀性）。
+        "has_debate_summary": bool(debate_summary),
         "watchpoint": watchpoint,
         "watchpoint_label": watchpoint_label,
     }
@@ -447,6 +469,7 @@ def _build_panel4(
         "confidence": reasoning_result.confidence_score,
         "market_judgment": conclusion.get("market_judgment", ""),
         "summary": summary,
+        "debate_summary": debate_summary,
         "core_facts": core_facts,
         "bullish_evidence": bullish_evidence,
         "risk_evidence": risk_evidence,

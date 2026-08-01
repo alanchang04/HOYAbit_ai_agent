@@ -63,6 +63,56 @@ def test_system_prompt_has_horizon_and_weight_rules():
     assert "低權重證據不足以單獨推翻高權重證據" in SYSTEM_PROMPT
 
 
+class TestEvidenceListPrioritySorting:
+    """R8-4：priority = source_weight × base_importance × horizon_match，高分排前面。"""
+
+    def _ids_in_order(self, out: str) -> list[str]:
+        # 清單被 EVIDENCE_BLOCK_START/END 包住（注入防護的界線標記），
+        # 只取真正的證據列。
+        return [
+            line.split("id=")[1].split(" ")[0]
+            for line in out.splitlines()
+            if line.startswith("- id=")
+        ]
+
+    def test_higher_base_importance_source_type_sorts_first(self):
+        # 同權重、同 horizon，只有 source_type 不同：price(1.0) 該排在 social(0.5) 前面。
+        price_ev = _ev(id="ev-101", source_type="price", source_weight=0.8, horizon_class="short")
+        social_ev = _ev(id="ev-102", source_type="social", source_weight=0.8, horizon_class="short")
+        out = _format_evidence_list([social_ev, price_ev])
+        assert self._ids_in_order(out) == ["ev-101", "ev-102"]
+
+    def test_structural_context_still_present_but_ordered_later(self):
+        # 同 source_type/weight，只有 horizon 落在結構脈絡帶（>主視野）者該排後面，但不能消失。
+        current_ev = _ev(id="ev-201", source_type="price", source_weight=0.8, horizon_class="short")
+        structural_ev = _ev(id="ev-202", source_type="price", source_weight=0.8, horizon_class="structural")
+        out = _format_evidence_list([structural_ev, current_ev], primary_horizon="short")
+        ids = self._ids_in_order(out)
+        assert ids == ["ev-201", "ev-202"]
+
+    def test_no_evidence_dropped(self):
+        evs = [
+            _ev(id=f"ev-{300 + i}", source_type=t, horizon_class=h)
+            for i, (t, h) in enumerate(
+                [("price", "spot"), ("social", "structural"), ("news", "medium"), ("macro", "long")]
+            )
+        ]
+        out = _format_evidence_list(evs)
+        assert out.count("- id=") == 4
+
+    def test_comparison_question_type_demotes_social_below_price(self):
+        # signal_importance.json 的 comparison 覆寫層把 social 壓到 0.3，price 仍是 1.0，
+        # 差距應比未覆寫時更大，但排序方向（price 先）不變。
+        price_ev = _ev(id="ev-401", source_type="price", source_weight=0.6, horizon_class="short")
+        social_ev = _ev(id="ev-402", source_type="social", source_weight=0.6, horizon_class="short")
+        out = _format_evidence_list([social_ev, price_ev], question_type="comparison")
+        assert self._ids_in_order(out) == ["ev-401", "ev-402"]
+
+    def test_empty_list_unaffected(self):
+        # 界線標記照樣輸出——「本次無證據」也是要交代給模型的事實。
+        assert "（本次無可用證據）" in _format_evidence_list([])
+
+
 def test_step_a_prompt_has_legend():
     prompt = build_step_a_prompt("BTC", "分析 BTC 過去兩週", [_ev()])
     assert "【時間尺度說明】" in prompt
@@ -81,6 +131,14 @@ def test_step_b_prompt_has_three_sections_and_direction_matrix():
     # 長窗的反向訊號就是真矛盾。這裡斷言的仍是同一條規則，只是限定範圍。
     assert "比主視野更長的尺度落差不是矛盾" in prompt
     assert "1（看多）" in prompt and "-1（看空）" in prompt
+
+
+def test_step_b_structural_context_has_length_cap():
+    """2026-07-30：實測 structural_context 曾產出 6318 字（單題 5-6 點），
+    比它要輔助的矛盾訊號節（417 字）長 15 倍。每點應是一句話，不是重新論證一次。"""
+    prompt = build_step_b_prompt("BTC", "分析 BTC 最近兩週的整體市場狀態", [_ev()], facts=[])
+    assert "100 字以內" in prompt
+    assert "不需要重新論證為什麼" in prompt
 
 
 def test_step_d_omits_duplicate_argument_text_when_debate_present():

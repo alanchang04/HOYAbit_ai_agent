@@ -44,6 +44,11 @@
 
 ### ADR-1：雙軌資料（保留官方 CSV 為基準，Binance 補缺口）
 
+> **2026-08-01 資料源修訂**：延伸日線改為 Coinbase Exchange USD 優先，只有
+> Coinbase 不可用或缺少完整 UTC 日線時才以 Binance Spot USDT 補日；下文保留的
+> 「Binance 補缺口」是本 ADR 最初版本的歷史描述。官方 CSV 不可變、當日未收盤
+> K 棒剔除、CSV 同日優先等核心決策不變。
+
 **決策**：官方 CSV 作為長歷史基準（`long`/`structural` 指標的唯一來源），
 Binance 公開日線僅補「CSV 末日 → 執行日」的缺口，供 `medium` 帶指標使用。
 
@@ -758,6 +763,31 @@ class DecayPattern(str, Enum):
 修法：新增一道「有效期覆蓋」檢查，某類的 `persistence` 明顯短於主視野時
 不得判為「完整」，最高只能到「部分」檔。
 
+**實作時發現的邊界（2026-07-30，已解決）**：字面上「明顯短於主視野」若實作成
+「只要 persistence 短於主視野就扣分」，會製造一次新的回歸——social（persistence
+恆為 short）與多數 derivatives 子來源，在**預設**主視野 medium 下，跟 medium 的
+差距只有 1 帶（short→medium）。這正是三題型真實 Bedrock 驗證過的最常見情境
+（問「最近兩週」），若照字面實作會讓這個已驗證情境的 social／derivatives
+系統性卡在 60 分。
+
+**解法**：借用 `HorizonClass` 五帶的順序做比較，門檻設在**差距 ≥2 帶**才觸發
+（`_SEVERE_PERSISTENCE_MISMATCH_GAP = 2`），只抓本節真正要修的案例：
+
+```python
+_PERSISTENCE_EQUIVALENT_HORIZON = {
+    Persistence.SHORT: HorizonClass.SHORT,
+    Persistence.MEDIUM: HorizonClass.MEDIUM,
+    Persistence.LONG: HorizonClass.STRUCTURAL,   # long 視為覆蓋到最長帶
+}
+# 差距 = HORIZON_ORDER.index(primary) - HORIZON_ORDER.index(該類最長 persistence 對應帶)
+# 差距 >= 2 才判「嚴重覆蓋不到」
+```
+
+驗算：
+- primary=medium（預設），social persistence=short → 差距 1 → **不觸發**，維持 100 分
+- primary=structural（問「過去一年」），全部 persistence=short → 差距 3 → **觸發**，降到 60 分（原案例的自相矛盾修復）
+- persistence=long 一律視為覆蓋到 structural，不論主視野多長都不觸發
+
 ### 3.9.3 靜態重要性係數（R8-3）
 
 `static/signal_importance.json`，人工訂定，**不做歷史回測**：
@@ -789,6 +819,39 @@ priority = source_weight × base_importance × horizon_match
 
 LLM 讀清單本來就有位置效應，高優先排前面即可達到 Ken 要的效果，
 而且**排序不會丟掉任何證據**——結構脈絡仍在清單裡，只是排後面。
+
+### 3.9.5 主視野傳進蒐集層（R8-5）
+
+`orchestrator.collect_all()` 解出主視野後傳給每個 `collector.run()`，
+`BaseCollector.run()` 以 `**kwargs` 透傳到 `fetch()`。因為既有簽名本來就是
+`fetch(self, coin, **kwargs)`，**七個 collector 一個都不必改簽名**——
+不調整的直接忽略這個參數。這是 ADR-8「只加參數不換層」最乾淨的一例。
+
+**實際會調整的只有兩個 collector**，其餘五個維持既有行為（R8-5 明訂
+「無法調整就維持既有行為，不得因此失敗」，不是每個來源都得動）：
+
+| collector | 主視野 long／structural 時 | 為什麼 |
+|---|---|---|
+| social | `t=week` → `t=year`（窗口 7→365 天） | Reddit 搜尋本來就吃 `t` 參數，改一個字即可 |
+| news | 「非近期」判斷線 14→180 天 | 官方 RSS／HTML **沒有**查詢窗參數，抓取行為不變 |
+| price | 不變 | R7-4 已做五檔粒度，本來就涵蓋各尺度 |
+| onchain／derivatives／macro／relative | 不變 | 端點回傳固定窗口，無可調參數 |
+
+三個實作上的判斷：
+
+1. **只在 long／structural 才切換，中間不設層級。** spot/short/medium 是命題
+   最常見的尺度，既有 `t=week` 行為已驗證過；多插一個中間檔位等於多一組沒被
+   驗證的行為，不划算。
+
+2. **`horizon_class` 跟著實際查詢窗重新推導，不能沿用寫死值。** social 改抓
+   365 天後仍標 `SHORT`，等於對計分層謊報窗口——ADR-2 說 horizon 由「自己實際
+   傳出去的查詢參數」決定，這條在窗口可變之後更必須守。改用
+   `horizon_for_days(window_days)` 推導。
+
+3. **`persistence` 不跟著改，仍固定 short/fast。** 這是本節唯一違反直覺的地方：
+   窗口拉長到一年，抓回來的並不是「一個有效期一年的情緒訊號」，而是
+   「這一年內陸續發生的情緒快照集合」，每一則仍然短命。若因為窗口變長就把
+   persistence 調成 long，等於宣稱去年的推文今天還算數，恰好是 R8-1 要防的錯誤。
 
 ## 4. 相容性與降級矩陣（R6-1）
 

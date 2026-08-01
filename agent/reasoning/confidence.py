@@ -20,8 +20,10 @@ from datetime import date
 
 from agent.schemas import (
     DEFAULT_PRIMARY_HORIZON,
+    HORIZON_ORDER,
     Evidence,
     HorizonClass,
+    Persistence,
     SourceType,
     is_current_signal,
 )
@@ -252,6 +254,32 @@ TIER_COMPLETE = 1.0
 TIER_PARTIAL = 0.6
 TIER_MISSING = 0.0
 
+# R8-2：有效期覆蓋檢查。Persistence 只有三檔，借用 HorizonClass 五帶的順序來比較
+# 「這個訊號能撐多遠」跟「主視野要多遠」──long 視為能覆蓋到最長帶（structural）。
+_PERSISTENCE_EQUIVALENT_HORIZON: dict[Persistence, HorizonClass] = {
+    Persistence.SHORT: HorizonClass.SHORT,
+    Persistence.MEDIUM: HorizonClass.MEDIUM,
+    Persistence.LONG: HorizonClass.STRUCTURAL,
+}
+
+# 差距門檻：**刻意不是「只要短於主視野就扣分」**。social／多數 derivatives 子來源
+# persistence=short，在預設主視野 medium 下差距只有 1 帶（short→medium）——那正是
+# 今天已通過三題型真實 Bedrock 驗證的最常見情境，若字面照抄 design.md「明顯短於」
+# 就扣分，會讓這個已驗證情境系統性卡在 60 分，是不該有的回歸。
+# 差距 ≥2 帶才觸發，只抓 design.md §3.9.2 真正要修的案例：問「過去一年」
+# （primary=structural, idx4）但證據全是 short-persistence（idx1，差距3）。
+_SEVERE_PERSISTENCE_MISMATCH_GAP = 2
+
+
+def _persistence_severely_short(items: list[Evidence], primary: HorizonClass) -> bool:
+    """該類證據裡，有效期最長的一筆是否仍嚴重覆蓋不到主視野。"""
+    if not items:
+        return False
+    best_idx = max(
+        HORIZON_ORDER.index(_PERSISTENCE_EQUIVALENT_HORIZON[e.persistence]) for e in items
+    )
+    return HORIZON_ORDER.index(primary) - best_idx >= _SEVERE_PERSISTENCE_MISMATCH_GAP
+
 
 def _window_span_days(ev: Evidence) -> int:
     """單筆證據的觀察窗天數（含端點）；無窗口資訊回 0。"""
@@ -265,12 +293,20 @@ def _window_span_days(ev: Evidence) -> int:
     return (end - start).days + 1
 
 
-def compute_data_confidence(evidences: list[Evidence]) -> tuple[float, dict]:
+def compute_data_confidence(
+    evidences: list[Evidence], primary_horizon: HorizonClass | None = None
+) -> tuple[float, dict]:
     """資料品質（R3-1/R3-2）：六類各佔 100/6，依三檔評分。純統計，不呼叫 LLM。
 
     「部分」給 60% 而不是滿分，是為了讓「只有 2 篇新聞」這種情境誠實反映出來——
     價格資料再漂亮，來源涵蓋不足就不該說 High Confidence。
+
+    R8-2：另外檢查「有效期是否嚴重覆蓋不到主視野」。修的是實測發現的自相矛盾——
+    問「過去一年」時，19 筆全 17 天窗的證據仍判六類「完整」拿 100 分，但報告
+    開頭同時寫著「⚠ 主視野無可用證據」。原函式完全不讀 horizon_class／persistence，
+    看不出這種錯配。
     """
+    primary = primary_horizon or DEFAULT_PRIMARY_HORIZON
     per_type_score = 100.0 / len(SOURCE_TYPE_CATEGORIES)
     detail: dict[str, dict] = {}
     total = 0.0
@@ -279,10 +315,11 @@ def compute_data_confidence(evidences: list[Evidence]) -> tuple[float, dict]:
         items = [e for e in evidences if e.source_type == source_type]
         min_count, min_window = DATA_COMPLETENESS_THRESHOLD[source_type]
         max_span = max((_window_span_days(e) for e in items), default=0)
+        severely_short = _persistence_severely_short(items, primary)
 
         if not items:
             tier, reason = TIER_MISSING, "本次無可用證據"
-        elif len(items) >= min_count and max_span >= min_window:
+        elif len(items) >= min_count and max_span >= min_window and not severely_short:
             tier, reason = TIER_COMPLETE, f"{len(items)} 筆，最長窗長 {max_span} 天"
         else:
             tier = TIER_PARTIAL
@@ -291,6 +328,8 @@ def compute_data_confidence(evidences: list[Evidence]) -> tuple[float, dict]:
                 gaps.append(f"僅 {len(items)} 筆（需 {min_count} 筆）")
             if max_span < min_window:
                 gaps.append(f"最長窗長 {max_span} 天（需 {min_window} 天）")
+            if severely_short:
+                gaps.append(f"訊號有效期覆蓋不到主視野（{primary.value}）")
             reason = "；".join(gaps)
 
         score = per_type_score * tier
@@ -302,6 +341,7 @@ def compute_data_confidence(evidences: list[Evidence]) -> tuple[float, dict]:
             "max_window_days": max_span,
             "required_count": min_count,
             "required_window_days": min_window,
+            "persistence_covers_primary": not severely_short,
             "reason": reason,
         }
 
@@ -447,7 +487,7 @@ def compute_confidence(
     `structural_context` **不進入任何扣分路徑**（R2-8）——跨尺度差異是位置關係
     不是矛盾，那正是本規格要修的核心問題。
     """
-    data_conf, data_detail = compute_data_confidence(evidences)
+    data_conf, data_detail = compute_data_confidence(evidences, primary_horizon)
     consensus, consensus_detail = compute_signal_consensus(
         cross_validation.get("direction_matrix", []) or [], evidences, primary_horizon
     )

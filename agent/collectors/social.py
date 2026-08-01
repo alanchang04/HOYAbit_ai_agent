@@ -21,16 +21,30 @@ from xml.etree import ElementTree
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.coin_map import get_coin_info
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import (
+    DecayPattern,
+    EvidenceDraft,
+    HorizonClass,
+    LogStatus,
+    Persistence,
+    horizon_for_days,
+    now_iso,
+)
 
 HTTP_TIMEOUT = 20.0
 MAX_POSTS_PER_SUBREDDIT = 5
 REDDIT_USER_AGENT = "hoyabit-crypto-agent/1.0 (hackathon research bot)"
 # 搜尋帶 t=week，Reddit 只回近 7 天貼文 → horizon 由這個查詢參數決定性推導（ADR-2）
 REDDIT_WINDOW_DAYS = 7
+
+# R8-5：主視野落在 long／structural 時改抓 t=year，避免「過去一年」這類題目
+# 只拿得到近 7 天情緒、被迫全部塞進結構脈絡帶。中間的 spot/short/medium
+# 沿用既有 t=week——這三帶本來就是命題最常見的尺度，不需要新增中間層級。
+REDDIT_LONG_RANGE_WINDOW_DAYS = 365
+_LONG_RANGE_HORIZONS = frozenset({HorizonClass.LONG, HorizonClass.STRUCTURAL})
 
 # 429 時最多等這麼久再重試一次。collector 預設 timeout 75 秒，兩個 subreddit
 # 各等一次仍在預算內；等太久會排擠其他 collector，寧可少一則也不要拖垮整體。
@@ -44,13 +58,13 @@ OAUTH_TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 OAUTH_SEARCH_URL = "https://oauth.reddit.com/r/{subreddit}/search"
 
 
-def _search_params(query: str) -> dict:
+def _search_params(query: str, t: str = "week") -> dict:
     return {
         "q": query,
         "restrict_sr": "1",
         "sort": "new",
         "limit": MAX_POSTS_PER_SUBREDDIT,
-        "t": "week",
+        "t": t,
     }
 
 
@@ -99,7 +113,16 @@ class SocialCollector(BaseCollector):
     async def fetch(self, coin: str, **kwargs) -> list[EvidenceDraft]:
         info = get_coin_info(coin)
         evidences: list[EvidenceDraft] = []
-        window_start, window_end = window_back(REDDIT_WINDOW_DAYS)
+
+        # R8-5：盡力依主視野調整查詢窗；沒傳／傳 None 時維持既有 t=week（R6-1）。
+        primary_horizon = kwargs.get("primary_horizon")
+        if primary_horizon in _LONG_RANGE_HORIZONS:
+            window_days, reddit_t = REDDIT_LONG_RANGE_WINDOW_DAYS, "year"
+        else:
+            window_days, reddit_t = REDDIT_WINDOW_DAYS, "week"
+        window_start, window_end = window_back(window_days)
+        # horizon_class 必須跟著實際查詢窗重新決定性推導（ADR-2），不能沿用寫死的 SHORT。
+        horizon_class = horizon_for_days(window_days)
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT, headers={"User-Agent": REDDIT_USER_AGENT}, follow_redirects=True
@@ -109,15 +132,15 @@ class SocialCollector(BaseCollector):
             for index, subreddit in enumerate(info.subreddits):
                 try:
                     if token:
-                        items = await self._fetch_via_oauth(client, token, subreddit, info.name)
+                        items = await self._fetch_via_oauth(client, token, subreddit, info.name, reddit_t)
                     else:
                         # RSS 每個窗口只准一次請求，第二個 subreddit 起先讓一手，
                         # 否則必定吃 429（實測連打會全滅）。
                         if index and RSS_INTER_REQUEST_DELAY > 0:
                             await asyncio.sleep(RSS_INTER_REQUEST_DELAY)
-                        items = await self._fetch_via_rss(client, coin, subreddit, info.name)
+                        items = await self._fetch_via_rss(client, coin, subreddit, info.name, reddit_t)
                 except Exception as exc:  # noqa: BLE001
-                    self.log_subsource(f"reddit_{subreddit}", coin, LogStatus.ERROR, f"error={exc}")
+                    self.log_subsource(f"reddit_{subreddit}", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
                     continue
 
                 if not items:
@@ -139,7 +162,13 @@ class SocialCollector(BaseCollector):
                             source_type="social",
                             window_start=window_start,
                             window_end=window_end,
-                            horizon_class=HorizonClass.SHORT,
+                            horizon_class=horizon_class,
+                            # design.md §3.9.1 明列案例：social 情緒 persistence=short/fast，
+                            # 社群情緒最短命，即使本次拉長查詢窗（t=year）以覆蓋主視野，
+                            # 抓回來的仍是「這一年內陸續發生的當下情緒快照集合」而非單一
+                            # 持久訊號，過期情緒依然不能當現況——固定不隨 horizon 改變。
+                            persistence=Persistence.SHORT,
+                            decay=DecayPattern.FAST,
                         )
                     )
 
@@ -170,11 +199,11 @@ class SocialCollector(BaseCollector):
             return None
 
     async def _fetch_via_oauth(
-        self, client: httpx.AsyncClient, token: str, subreddit: str, query: str
+        self, client: httpx.AsyncClient, token: str, subreddit: str, query: str, t: str = "week"
     ) -> list[dict]:
         resp = await client.get(
             OAUTH_SEARCH_URL.format(subreddit=subreddit),
-            params=_search_params(query),
+            params=_search_params(query, t),
             headers={"Authorization": f"Bearer {token}"},
         )
         resp.raise_for_status()
@@ -193,11 +222,11 @@ class SocialCollector(BaseCollector):
         return out
 
     async def _fetch_via_rss(
-        self, client: httpx.AsyncClient, coin: str, subreddit: str, query: str
+        self, client: httpx.AsyncClient, coin: str, subreddit: str, query: str, t: str = "week"
     ) -> list[dict]:
         """免 key 路徑。429 時依 `x-ratelimit-reset` 等待後重試一次。"""
         url = f"https://www.reddit.com/r/{subreddit}/search.rss"
-        resp = await client.get(url, params=_search_params(query))
+        resp = await client.get(url, params=_search_params(query, t))
 
         if resp.status_code == 429:
             wait = _retry_after_seconds(resp)
@@ -205,7 +234,7 @@ class SocialCollector(BaseCollector):
                 f"reddit_{subreddit}", coin, LogStatus.SKIPPED, f"429 限流，等待 {wait:.0f}s 後重試"
             )
             await asyncio.sleep(wait)
-            resp = await client.get(url, params=_search_params(query))
+            resp = await client.get(url, params=_search_params(query, t))
 
         resp.raise_for_status()
         return [

@@ -60,7 +60,13 @@
             <span class="fingerprint-badge">{{ item.fingerprint }}</span>
             <span class="source-type-badge">{{ item.source_type }}</span>
             <span class="weight-badge">{{ "%.2f"|format(item.source_weight) }}</span>
-            <div class="evidence-source">{{ item.source }}</div>
+            <div class="evidence-source">
+              {% if item.source_url %}
+                <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">{{ item.source }} ↗</a>
+              {% else %}
+                {{ item.source }}
+              {% endif %}
+            </div>
             <div class="evidence-content">{{ item.content_reference[:120] }}{% if item.content_reference|length > 120 %}…{% endif %}</div>
             {% if item.filter_decisions %}
               <div class="filter-decisions">
@@ -349,10 +355,14 @@
             <p><span class="data-missing">資料缺失</span></p>
           {% endif %}
           {% if summary.has_debate %}
-            <strong>利多依據：</strong>
-            {{ long_text(summary.bull_argument) }}
-            <strong>風險依據：</strong>
-            {{ long_text(summary.bear_argument) }}
+            {% if summary.has_debate_summary %}
+              <p><strong>辯論攻防：</strong> 誰的哪個論點站得住腳、哪個被推翻，見下方「辯論重點摘要」；雙方逐輪完整原文見報告全文。</p>
+            {% else %}
+              <strong>利多依據：</strong>
+              {{ long_text(summary.bull_argument) }}
+              <strong>風險依據：</strong>
+              {{ long_text(summary.bear_argument) }}
+            {% endif %}
           {% else %}
             <p class="note">本次未觸發正反辯論（fallback 模式），完整推論假設見左側面板③。</p>
           {% endif %}
@@ -360,6 +370,20 @@
             <p><strong>{{ summary.watchpoint_label }}：</strong> {{ summary.watchpoint }}</p>
           {% endif %}
         </div>
+
+        {% if view.panel4_report.debate_summary %}
+        <div class="report-section">
+          <strong>辯論重點摘要：</strong>
+          <ul class="fact-list">
+            {% for item in view.panel4_report.debate_summary %}
+            <li>
+              {% for fp in item.fingerprints %}<span class="fingerprint-badge">{{ fp }}</span>{% endfor %}
+              {{ item.point }}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
 
         {% if view.panel4_report.core_facts %}
         <div class="report-section">

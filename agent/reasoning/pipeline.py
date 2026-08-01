@@ -508,7 +508,9 @@ def _real_reasoning(
     # Step A：事實層
     step_a_raw = _call_json_step(
         llm_client,
-        build_step_a_prompt(coin, question, evidences, coin2=coin2, primary_horizon=primary_horizon),
+        build_step_a_prompt(
+            coin, question, evidences, coin2=coin2, primary_horizon=primary_horizon, question_type=question_type
+        ),
         "step_a_facts",
         deadline=deadline,
     )
@@ -522,7 +524,13 @@ def _real_reasoning(
     step_b_raw = _call_json_step(
         llm_client,
         build_step_b_prompt(
-            coin, question, evidences, facts, coin2=coin2, primary_horizon=primary_horizon
+            coin,
+            question,
+            evidences,
+            facts,
+            coin2=coin2,
+            primary_horizon=primary_horizon,
+            question_type=question_type,
         ),
         "step_b_cross_validation",
         deadline=deadline,

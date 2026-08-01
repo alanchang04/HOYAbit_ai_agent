@@ -1,6 +1,6 @@
 # 資料來源設計筆記（Ken，資料負責人）
 
-> 最後更新：2026-07-09
+> 最後更新：2026-08-01
 > 這份是資料蒐集方向的設計筆記，對應 `agent/collectors/` 現有五類 + 延伸構想。
 > 目的：把「要抓什麼、去哪抓」和「抓來的東西在報告裡怎麼被使用」分開講清楚，
 > 尤其是比較分析題型（雙幣種）的資料設計，也是簡報「數據資料應用」那頁的底稿。
@@ -15,13 +15,16 @@
 
 | 需要什麼 | 去哪抓 | 備援 |
 |---|---|---|
-| 近兩週 OHLCV（漲跌%、最高最低、成交量） | 主辦方 CSV `data/{幣種}_daily_ohlcv.csv`（本地，零網路風險） | — |
-| 技術指標（SMA7/14、RSI14、波動率、量能趨勢） | 同一份 CSV 本地純 Python 計算 | — |
+| 近兩週 OHLCV（漲跌%、最高最低、成交量） | 主辦方 CSV `data/{幣種}_daily_ohlcv.csv` 作不可變基準；`pipeline/update_price_history.py` 優先接 Coinbase Exchange USD 完整日 K 至 `raw_data/price/` | Binance Spot USDT 逐日缺口備援 |
+| 技術指標（SMA7/14、RSI14、波動率、量能趨勢） | 官方基準＋公開交易所延伸快取，本地純 Python 計算；來源分段見 `raw_data/price/update_manifest.json` | — |
 | 即時報價（現價、24h 漲跌、24h 量） | CoinGecko `/simple/price` | CryptoCompare `/pricemultifull` |
 
 **這個方向的內容怎麼用：**
 - 共同尺度（可跨幣比較）：24h 成交量、量能趨勢、波動率、RSI——同樣公式算出來，天然可比
 - 幣種特有：SMA 站上/跌破的意義要搭配該幣種自己的價格區間解讀，不可直接互比數值
+- `--as-of` 是 UTC 排他截止日；例如 `--as-of 2026-08-01` 只納入已收盤的 2026-07-31 日 K，不把 8/1 盤中 K 棒混入指標。
+- 正式 `PriceCollector` 會先驗證並讀取這份延伸快取；只有快取末日仍落後時才再打 Coinbase／Binance，網路失敗不會退回 5/31 舊資料。
+- 手動更新：`python pipeline/update_price_history.py --as-of 2026-08-01`。Kiro 的 `SessionStart` hook 會在工作階段開始時以當日 UTC 自動刷新；Kiro Hooks 本身沒有 cron trigger，若要固定鐘點執行，請讓 OS 排程器呼叫同一指令。
 
 ### 2. Onchain 鏈上（依鏈路由到不同端點）
 

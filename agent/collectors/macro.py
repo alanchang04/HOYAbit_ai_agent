@@ -9,9 +9,9 @@ from datetime import date
 
 import httpx
 
-from agent.collectors.base import BaseCollector
+from agent.collectors.base import BaseCollector, _exc_text
 from agent.collectors.horizon import window_back
-from agent.schemas import EvidenceDraft, HorizonClass, LogStatus, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, LogStatus, Persistence, now_iso
 
 HTTP_TIMEOUT = 20.0
 FNG_WINDOW = 30
@@ -232,10 +232,13 @@ class MacroCollector(BaseCollector):
                         window_start=fng_start,
                         window_end=fng_end,
                         horizon_class=HorizonClass.MEDIUM,
+                        # 30 天百分位是平滑過的情緒量表，逐日漸變，不是會突然過期的訊號。
+                        persistence=Persistence.MEDIUM,
+                        decay=DecayPattern.SLOW,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("fear_greed", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("fear_greed", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             try:
                 # stooq 已加上瀏覽器 JS 驗證機制，無法穩定免 key 存取；改用 Frankfurter（歐洲央行公開匯率
@@ -256,10 +259,12 @@ class MacroCollector(BaseCollector):
                         related_claim="美元相對強弱走勢（總經背景，加密市場常呈負相關）",
                         source_type="macro",
                         horizon_class=HorizonClass.SPOT,  # /latest 只給最新一日匯率，非序列
+                        persistence=Persistence.SHORT,
+                        decay=DecayPattern.FAST,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                self.log_subsource("frankfurter_fx", coin, LogStatus.ERROR, f"error={exc}")
+                self.log_subsource("frankfurter_fx", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
             if self.settings and getattr(self.settings, "fred_api_key", None):
                 try:
@@ -285,10 +290,12 @@ class MacroCollector(BaseCollector):
                             related_claim="美債殖利率走勢（總經背景）",
                             source_type="macro",
                             horizon_class=HorizonClass.SPOT,  # limit=1，只取最新一筆觀測
+                            persistence=Persistence.SHORT,
+                            decay=DecayPattern.FAST,
                         )
                     )
                 except Exception as exc:  # noqa: BLE001
-                    self.log_subsource("fred", coin, LogStatus.SKIPPED, f"error={exc}")
+                    self.log_subsource("fred", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}")
 
         # 併自 pipeline/fetch_supply_calendar.py + fetch_event_calendar.py：純本地
         # 靜態資料＋日期運算，零連線風險，不需要 httpx client。
@@ -309,6 +316,9 @@ class MacroCollector(BaseCollector):
                         # 「上次 2024-04-20／下次 2028-04-17」跨度逾 4 年），屬 structural。
                         # 事件日曆不是連續觀察窗（同時往回看與往前看），故 window 留 None。
                         horizon_class=HorizonClass.STRUCTURAL,
+                        # design.md §3.9.1 明列案例：供給節奏日曆 persistence=long/slow。
+                        persistence=Persistence.LONG,
+                        decay=DecayPattern.SLOW,
                     )
                 )
             else:
@@ -316,7 +326,7 @@ class MacroCollector(BaseCollector):
                     "supply_calendar", coin, LogStatus.SKIPPED, "無對應供給事件（發行持續性，無固定日期事件）"
                 )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("supply_calendar", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("supply_calendar", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         try:
             evidences.append(
@@ -333,9 +343,11 @@ class MacroCollector(BaseCollector):
                     # （「下次 FOMC 在 1 天後」是當前訊號不是結構脈絡），故標 medium。
                     # 同上，日曆非連續觀察窗，window 留 None。
                     horizon_class=HorizonClass.MEDIUM,
+                    persistence=Persistence.MEDIUM,
+                    decay=DecayPattern.SLOW,
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            self.log_subsource("event_calendar", coin, LogStatus.ERROR, f"error={exc}")
+            self.log_subsource("event_calendar", coin, LogStatus.ERROR, f"error={_exc_text(exc)}")
 
         return evidences

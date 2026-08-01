@@ -1,0 +1,1592 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "coin": "BTC",
+    "coin2": "ETH",
+    "question": "比較 BTC 與 ETH 最近兩週的市場表現",
+    "question_type": "comparison",
+    "generated_at": "2026-08-01T02:10:29Z",
+    "metrics": {
+      "confidence": 79,
+      "noise_removal_rate": 0.0,
+      "total_tokens": 101886,
+      "integrity_status": "INTACT",
+      "raw_evidence_count": 55,
+      "kept_fact_count": 55,
+      "degraded_reasons": []
+    }
+  },
+  "panel1_raw_feed": {
+    "count": 55,
+    "items": [
+      {
+        "fingerprint": "F1",
+        "evidence_id": "ev-001",
+        "source": "HOYA BIT 共同基準資料集 (data/BTC_daily_ohlcv.csv)",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "期間 2026-07-18 ~ 2026-07-31（共 14 日）：收盤價 64834.22 → 62887.88 USDT（-3.00%），期間最高 66956.15／最低 62466.00，總成交量約 205812.38｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F2",
+        "evidence_id": "ev-002",
+        "source": "本地區間統計（依 BTC 日線 最近一日，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "最近一日｜2026-07-31（單日）：開盤 64780.03 → 收盤 62887.88 USDT（-2.92%），最高 65409.56／最低 62466.00，成交量 20475.61｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F3",
+        "evidence_id": "ev-003",
+        "source": "本地區間統計（依 BTC 日線 近 10 日，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近 10 日｜期間 2026-07-22 ~ 2026-07-31（共 10 日）：收盤價 66114.49 → 62887.88 USDT（-4.88%），期間最高 66739.89／最低 62466.00，總成交量約 149459.52｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F4",
+        "evidence_id": "ev-004",
+        "source": "本地區間統計（依 BTC 日線 近一季，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近一季｜期間 2026-05-03 ~ 2026-07-31（共 90 日）：收盤價 78568.57 → 62887.88 USDT（-19.96%），期間最高 82850.00／最低 57800.19，總成交量約 1531054.43｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F5",
+        "evidence_id": "ev-005",
+        "source": "本地區間統計（依 BTC 日線 近一年，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近一年｜期間 2025-08-01 ~ 2026-07-31（共 365 日）：收盤價 113297.93 → 62887.88 USDT（-44.49%），期間最高 126199.63／最低 57800.19，總成交量約 6905214.77｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F6",
+        "evidence_id": "ev-006",
+        "source": "本地技術指標計算（依 BTC 日線最近 30 日逐日重算，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "SMA7=64156.86, SMA14=64701.42（現價跌破 SMA7）, RSI14=45.3（中性區間）, 近14日日報酬波動率=1.48%, 近7日量能較前7日變化=-5.74%, MA20=64474.83（跌破）｜其中 2026-06-01 起 61 日採 Binance 公開日線補齊，官方基準資料集止於 2026-05-31\nRSI14：30天前 44.76 → 現在 45.29（+0.53），橫盤；期間高 73.64（2026-07-14）／低 44.15（2026-07-28）；現值位於近 30 天分佈第 10 百分位\nMA20：30天前 62,431.42 → 現在 64,474.83（+2,043.41），震盪走高；期間高 64,521.38（2026-07-30）／低 61,872.14（2026-07-13）；現值位於近 30 天分佈第 93 百分位\n14日報酬波動率(%)：30天前 1.75 → 現在 1.48（-0.27），震盪走低；期間高 1.79（2026-07-03）／低 1.26（2026-07-30）；現值位於近 30 天分佈第 17 百分位\n7日均量：30天前 18,888.07 → 現在 14,266.45（-4,621.62），震盪走低；期間高 18,888.07（2026-07-02）／低 13,396.78（2026-07-29）；現值位於近 30 天分佈第 17 百分位",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F7",
+        "evidence_id": "ev-007",
+        "source": "本地長期結構指標計算（依 data/BTC_daily_ohlcv.csv 全歷史 1826 日計算，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "MA60=76044.92（現價跌破），MA120=72613.46（現價跌破）（位置以 2026-07-31 收盤 62887.88 判定），近14日日報酬波動率相對全歷史位置（全歷史1813筆樣本百分位=5.1，偏悶（相對全歷史低波動）），近20日日報酬波動率=1.28%，90天滾動百分位=7.8（偏悶（盤整彈藥））｜均線值與全歷史百分位一律以官方基準資料集（止於 2026-05-31）計算",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F8",
+        "evidence_id": "ev-008",
+        "source": "CoinGecko /simple/price",
+        "source_url": "https://www.coingecko.com/en/coins/bitcoin",
+        "source_type": "price",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所聚合行情 API)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: ids=bitcoin&vs_currencies=usd | 現價 62930 USD，24h 漲跌 -2.37%，24h 成交量 28484222223 USD",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F9",
+        "evidence_id": "ev-009",
+        "source": "HOYA BIT 共同基準資料集 (data/ETH_daily_ohlcv.csv)",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "期間 2026-05-18 ~ 2026-05-31（共 14 日）：收盤價 2130.08 → 2007.01 USDT（-5.78%），期間最高 2157.50／最低 1967.00，總成交量約 3386517.83｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F10",
+        "evidence_id": "ev-010",
+        "source": "本地區間統計（依 ETH 日線 最近一日，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "最近一日｜2026-05-31（單日）：開盤 2022.44 → 收盤 2007.01 USDT（-0.76%），最高 2038.00／最低 1993.75，成交量 163735.50｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F11",
+        "evidence_id": "ev-011",
+        "source": "本地區間統計（依 ETH 日線 近 10 日，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近 10 日｜期間 2026-05-22 ~ 2026-05-31（共 10 日）：收盤價 2065.85 → 2007.01 USDT（-2.85%），期間最高 2149.95／最低 1967.00，總成交量約 2395716.96｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F12",
+        "evidence_id": "ev-012",
+        "source": "本地區間統計（依 ETH 日線 近一季，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近一季｜期間 2026-03-03 ~ 2026-05-31（共 90 日）：收盤價 1982.80 → 2007.01 USDT（+1.22%），期間最高 2464.91／最低 1916.14，總成交量約 28241857.62｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F13",
+        "evidence_id": "ev-013",
+        "source": "本地區間統計（依 ETH 日線 近一年，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "近一年｜期間 2025-06-01 ~ 2026-05-31（共 365 日）：收盤價 2539.21 → 2007.01 USDT（-20.96%），期間最高 4956.78／最低 1747.80，總成交量約 175412542.38｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F14",
+        "evidence_id": "ev-014",
+        "source": "本地技術指標計算（依 ETH 日線最近 30 日逐日重算，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "SMA7=2037.93, SMA14=2075.29（現價跌破 SMA7）, RSI14=30.8（中性區間）, 近14日日報酬波動率=1.39%, 近7日量能較前7日變化=-7.68%, MA20=2120.37（跌破）｜⚠ 未能補齊，資料止於 2026-05-31，距執行日 62 天\nRSI14：30天前 46.61 → 現在 30.79（-15.82），震盪走低；期間高 57.23（2026-05-03）／低 19.42（2026-05-28）；現值位於近 30 天分佈第 47 百分位\nMA20：30天前 2,324.90 → 現在 2,120.37（-204.53），震盪走低；期間高 2,324.90（2026-05-02）／低 2,120.37（2026-05-31）；現值位於近 30 天分佈第 3 百分位\n14日報酬波動率(%)：30天前 1.81 → 現在 1.39（-0.42），震盪走低；期間高 1.81（2026-05-02）／低 1.23（2026-05-11）；現值位於近 30 天分佈第 13 百分位\n7日均量：30天前 205,975.87 → 現在 232,234.10（+26,258.23），橫盤；期間高 382,776.57（2026-05-10）／低 205,473.42（2026-05-03）；現值位於近 30 天分佈第 20 百分位",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F15",
+        "evidence_id": "ev-015",
+        "source": "本地長期結構指標計算（依 data/ETH_daily_ohlcv.csv 全歷史 1826 日計算，非外部資料）",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "四因子 w=0.95｜新鮮度1.00×來源等級0.95(A+:官方基準資料／決定性本地運算)×覆蓋度1.00×dedup1.00",
+        "content_reference": "MA60=2227.64（現價跌破），MA120=2141.35（現價跌破）（位置以 2026-05-31 收盤 2007.01 判定），近14日日報酬波動率相對全歷史位置（全歷史1813筆樣本百分位=3.5，偏悶（相對全歷史低波動）），近20日日報酬波動率=1.47%，90天滾動百分位=7.8（偏悶（盤整彈藥））｜均線值與全歷史百分位一律以官方基準資料集（止於 2026-05-31）計算",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F16",
+        "evidence_id": "ev-016",
+        "source": "CoinGecko /simple/price",
+        "source_url": "https://www.coingecko.com/en/coins/ethereum",
+        "source_type": "price",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所聚合行情 API)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: ids=ethereum&vs_currencies=usd | 現價 1865.48 USD，24h 漲跌 -2.13%，24h 成交量 8399770970 USD",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F17",
+        "evidence_id": "ev-017",
+        "source": "Blockchair /bitcoin/stats",
+        "source_url": "https://blockchair.com/bitcoin",
+        "source_type": "onchain",
+        "source_weight": 0.85,
+        "weight_reason": "四因子 w=0.85｜新鮮度1.00×來源等級0.85(A:鏈上公開 RPC，數據不可竄改)×覆蓋度1.00×dedup1.00",
+        "content_reference": "blocks=960496, mempool_tx_count=9082, 24h_tx_count=632600, hashrate_24h=1022943763798517257413",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F18",
+        "evidence_id": "ev-018",
+        "source": "blockchain.info Charts API（近5年歷史序列，取近30天趨勢）",
+        "source_url": "https://www.blockchain.com/explorer/charts/hash-rate",
+        "source_type": "onchain",
+        "source_weight": 0.85,
+        "weight_reason": "四因子 w=0.85｜新鮮度1.00×來源等級0.85(A:鏈上公開 RPC，數據不可竄改)×覆蓋度1.00×dedup1.00",
+        "content_reference": "算力=985175354.00TH/s（近30天+3.53%）；24h交易筆數=610890.00筆（近30天-0.40%）；Mempool待確認筆數=37727.50筆（近30天+2907.37%）；Mempool大小=34534508.50bytes（近30天+12362.81%）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F19",
+        "evidence_id": "ev-019",
+        "source": "公開 EVM RPC (https://ethereum-rpc.publicnode.com)",
+        "source_url": "https://etherscan.io/",
+        "source_type": "onchain",
+        "source_weight": 0.85,
+        "weight_reason": "四因子 w=0.85｜新鮮度1.00×來源等級0.85(A:鏈上公開 RPC，數據不可竄改)×覆蓋度1.00×dedup1.00",
+        "content_reference": "method=eth_blockNumber,eth_gasPrice | 最新區塊 25656911，Gas Price 0.05 Gwei",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F20",
+        "evidence_id": "ev-020",
+        "source": "Etherscan Gas Price 歷史 CSV（etherscan.io/chart/gasprice）",
+        "source_url": "https://etherscan.io/chart/gasprice",
+        "source_type": "onchain",
+        "source_weight": 0.85,
+        "weight_reason": "四因子 w=0.85｜新鮮度1.00×來源等級0.85(A:鏈上公開 RPC，數據不可竄改)×覆蓋度1.00×dedup1.00",
+        "content_reference": "Gas Price=1.09 Gwei（近30天+29.85%，樣本回溯至2015-07-30）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F21",
+        "evidence_id": "ev-021",
+        "source": "Bitcoin Optech Newsletter（官方源）",
+        "source_url": "https://bitcoinops.org/en/newsletters/2026/07/31/",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Optech Newsletter #416｜發布時間：2026-07-31T00:00:00+00:00｜特有題材：企業／國家儲備",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F22",
+        "evidence_id": "ev-022",
+        "source": "Bitcoin Optech Newsletter（官方源）",
+        "source_url": "https://bitcoinops.org/en/podcast/2026/07/28/",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Optech Newsletter #415 Recap Podcast｜發布時間：2026-07-28T00:00:00+00:00",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F23",
+        "evidence_id": "ev-023",
+        "source": "Bitcoin Optech Newsletter（官方源）",
+        "source_url": "https://bitcoinops.org/en/newsletters/2026/07/24/",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Optech Newsletter #415｜發布時間：2026-07-24T00:00:00+00:00",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F24",
+        "evidence_id": "ev-024",
+        "source": "Bitcoin Optech Newsletter（官方源）",
+        "source_url": "https://bitcoinops.org/en/podcast/2026/07/21/",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Optech Newsletter #414 Recap Podcast｜發布時間：2026-07-21T00:00:00+00:00",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F25",
+        "evidence_id": "ev-025",
+        "source": "Bitcoin Optech Newsletter（官方源）",
+        "source_url": "https://bitcoinops.org/en/newsletters/2026/07/17/",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Optech Newsletter #414｜發布時間：2026-07-17T00:00:00+00:00｜⚠️非近期（發布已 15 天，超過 14 天窗口）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F26",
+        "evidence_id": "ev-026",
+        "source": "Ethereum Foundation Blog（官方源）",
+        "source_url": "https://blog.ethereum.org/en/2026/07/29/ef-board-update",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Ethereum Foundation Board Update｜發布時間：Wed, 29 Jul 2026 00:00:00 GMT",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F27",
+        "evidence_id": "ev-027",
+        "source": "Ethereum Foundation Blog（官方源）",
+        "source_url": "https://blog.ethereum.org/en/2026/07/14/devcon8-tickets",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Devcon 8 Tickets Are Live: Find Your Path to Mumbai｜發布時間：Tue, 14 Jul 2026 00:00:00 GMT｜⚠️非近期（發布已 18 天，超過 14 天窗口）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F28",
+        "evidence_id": "ev-028",
+        "source": "Ethereum Foundation Blog（官方源）",
+        "source_url": "https://blog.ethereum.org/en/2026/07/09/triage-is-the-product",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：The triage is the product: running AI agents against Ethereum's protocol code｜發布時間：Thu, 09 Jul 2026 00:00:00 GMT｜⚠️非近期（發布已 23 天，超過 14 天窗口）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F29",
+        "evidence_id": "ev-029",
+        "source": "Ethereum Foundation Blog（官方源）",
+        "source_url": "https://blog.ethereum.org/en/2026/07/01/ethereum-for-institutions",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Ethereum for Governments and Institutions: Why neutral infrastructure matters now｜發布時間：Wed, 01 Jul 2026 00:00:00 GMT｜⚠️非近期（發布已 31 天，超過 14 天窗口）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F30",
+        "evidence_id": "ev-030",
+        "source": "Ethereum Foundation Blog（官方源）",
+        "source_url": "https://blog.ethereum.org/en/2026/06/23/ef-structure",
+        "source_type": "news",
+        "source_weight": 0.42,
+        "weight_reason": "四因子 w=0.42｜新鮮度1.00×來源等級0.60(C:主流媒體，未逐篇查證)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：The EF’s new structure｜發布時間：Tue, 23 Jun 2026 00:00:00 GMT｜⚠️非近期（發布已 39 天，超過 14 天窗口）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F31",
+        "evidence_id": "ev-031",
+        "source": "Reddit r/CryptoCurrency（RSS，未含 score／留言數）",
+        "source_url": "https://www.reddit.com/r/CryptoCurrency/comments/1vc1p27/reddit_recommended_coldcard_for_years_nobody/",
+        "source_type": "social",
+        "source_weight": 0.21,
+        "weight_reason": "四因子 w=0.21｜新鮮度1.00×來源等級0.30(E:未經查證社群內容)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Reddit recommended Coldcard for years. Nobody asked these questions. Now $38 million is gone.｜作者=/u/No-Wrap3568｜發文時間=2026-07-31T20:04:30+00:00（RSS 端點不提供 score／留言數，熱度僅以貼文則數與時間分布判讀）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F32",
+        "evidence_id": "ev-032",
+        "source": "Reddit r/CryptoCurrency（RSS，未含 score／留言數）",
+        "source_url": "https://www.reddit.com/r/CryptoCurrency/comments/1vbwuhv/since_june_1st_microstrategy_has_lost/",
+        "source_type": "social",
+        "source_weight": 0.21,
+        "weight_reason": "四因子 w=0.21｜新鮮度1.00×來源等級0.30(E:未經查證社群內容)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Since June 1st, Microstrategy has lost approximately $18M effectively trading bitcoin. With multiple buy high sell low transactions weeks apart.｜作者=/u/GabeSter｜發文時間=2026-07-31T17:05:51+00:00（RSS 端點不提供 score／留言數，熱度僅以貼文則數與時間分布判讀）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F33",
+        "evidence_id": "ev-033",
+        "source": "Reddit r/CryptoCurrency（RSS，未含 score／留言數）",
+        "source_url": "https://www.reddit.com/r/CryptoCurrency/comments/1vbsycu/bitcoin_price_tumbles_to_2week_low_as_fed_and_boj/",
+        "source_type": "social",
+        "source_weight": 0.21,
+        "weight_reason": "四因子 w=0.21｜新鮮度1.00×來源等級0.30(E:未經查證社群內容)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Bitcoin Price Tumbles to 2-Week Low as Fed and BoJ Keep Rates Unchanged: Weekly Crypto Recap｜作者=/u/kirtash93｜發文時間=2026-07-31T14:44:31+00:00（RSS 端點不提供 score／留言數，熱度僅以貼文則數與時間分布判讀）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F34",
+        "evidence_id": "ev-034",
+        "source": "Reddit r/CryptoCurrency（RSS，未含 score／留言數）",
+        "source_url": "https://www.reddit.com/r/CryptoCurrency/comments/1vbr81q/few_understand/",
+        "source_type": "social",
+        "source_weight": 0.21,
+        "weight_reason": "四因子 w=0.21｜新鮮度1.00×來源等級0.30(E:未經查證社群內容)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Few understand.｜作者=/u/InsightKnite｜發文時間=2026-07-31T13:38:36+00:00（RSS 端點不提供 score／留言數，熱度僅以貼文則數與時間分布判讀）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F35",
+        "evidence_id": "ev-035",
+        "source": "Reddit r/CryptoCurrency（RSS，未含 score／留言數）",
+        "source_url": "https://www.reddit.com/r/CryptoCurrency/comments/1vbpfn8/well_boys_looks_like_it_is_time_to_sell/",
+        "source_type": "social",
+        "source_weight": 0.21,
+        "weight_reason": "四因子 w=0.21｜新鮮度1.00×來源等級0.30(E:未經查證社群內容)×覆蓋度0.70×dedup1.00",
+        "content_reference": "標題：Well, Boys, Looks Like It Is Time To Sell｜作者=/u/Present_Let2487｜發文時間=2026-07-31T12:22:45+00:00（RSS 端點不提供 score／留言數，熱度僅以貼文則數與時間分布判讀）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F36",
+        "evidence_id": "ev-036",
+        "source": "Fear & Greed Index (alternative.me)",
+        "source_url": "https://alternative.me/crypto/fear-and-greed-index/",
+        "source_type": "macro",
+        "source_weight": 0.65,
+        "weight_reason": "四因子 w=0.65｜新鮮度1.00×來源等級0.65(B:公開指數/央行匯率)×覆蓋度1.00×dedup1.00",
+        "content_reference": "value=27, classification=Fear, timestamp=1785542400, 近30天百分位=66.7%, 近30天範圍=20-33",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F37",
+        "evidence_id": "ev-037",
+        "source": "Frankfurter 美元匯率（歐洲央行公開資料，美元強弱代理指標）",
+        "source_url": "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html",
+        "source_type": "macro",
+        "source_weight": 0.65,
+        "weight_reason": "四因子 w=0.65｜新鮮度1.00×來源等級0.65(B:公開指數/央行匯率)×覆蓋度1.00×dedup1.00",
+        "content_reference": "date=2026-07-31, USD/EUR=0.8707, USD/JPY=160.24, USD/GBP=0.74508",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F38",
+        "evidence_id": "ev-038",
+        "source": "幣種供給節奏日曆（賽前人工研究 2026-07-21，非即時 API）",
+        "source_url": null,
+        "source_type": "macro",
+        "source_weight": 0.65,
+        "weight_reason": "四因子 w=0.65｜新鮮度1.00×來源等級0.65(B:公開指數/央行匯率)×覆蓋度1.00×dedup1.00",
+        "content_reference": "類型=halving（每 210,000 區塊（約 4 年）一次，區塊獎勵腰斬）｜上次2024-04-20：第 4 次減半，區塊高度 840,000（reward_before_btc=6.25，reward_after_btc=3.125）｜下次預估2028-04-17（距今約625天）：第 5 次減半（預估日期隨平均出塊時間微調，會逐漸收斂）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F39",
+        "evidence_id": "ev-039",
+        "source": "FOMC／CPI 事件日曆（賽前人工查證 2026-07-21 2026全年時程，非即時 API）",
+        "source_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        "source_type": "macro",
+        "source_weight": 0.65,
+        "weight_reason": "四因子 w=0.65｜新鮮度1.00×來源等級0.65(B:公開指數/央行匯率)×覆蓋度1.00×dedup1.00",
+        "content_reference": "下次FOMC決議2026-09-16（46天後）｜上次FOMC決議2026-07-29（3天前）｜下次CPI公布2026-08-12（11天後，2026-07資料）｜上次CPI公布2026-07-14（18天前）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F40",
+        "evidence_id": "ev-040",
+        "source": "Binance Futures /fapi/v1/fundingRate",
+        "source_url": "https://www.binance.com/en/futures/funding-history/perpetual/real-time-funding-rate",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=BTCUSDT&limit=90 | 最新資金費率 +0.00412%，近 90 筆（約 30 天）百分位 22.2（中性區間）。正費率本身是常態（多頭付空頭），只有極端百分位（>90 或 <10）才是擁擠度訊號",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F41",
+        "evidence_id": "ev-041",
+        "source": "Binance Futures /fapi/v1/openInterest + /futures/data/openInterestHist + /fapi/v1/klines",
+        "source_url": "https://www.binance.com/en/futures/BTCUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=BTCUSDT&period=1h&limit=30 | 最新 OI 109387.98（down）、價格 62964.1000（up）→ 空頭回補（可能追高風險）（對齊 30 個共同時間桶）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F42",
+        "evidence_id": "ev-042",
+        "source": "Binance Futures /futures/data/globalLongShortAccountRatio + topLongShortPositionRatio",
+        "source_url": "https://www.binance.com/en/futures/BTCUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=BTCUSDT&period=1h&limit=30 | 散戶比值 2.2175（偏多） vs 大戶比值 1.5684（偏多） → 同向",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F43",
+        "evidence_id": "ev-043",
+        "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key，五幣統一來源）",
+        "source_url": "https://www.binance.com/en/delivery/BTCUSD_PERP",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: pair=BTCUSD | 曲線形狀：contango → perp mark=62901.8244（基差-0.0365%） → 當季 mark=63317.5703（年化基差+4.12%，55天後到期） → 次季 mark=63967.8070（年化基差+4.14%，146天後到期）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F44",
+        "evidence_id": "ev-044",
+        "source": "CFTC TFF Futures Only（BITCOIN - CHICAGO MERCANTILE EXCHANGE）",
+        "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "最新報告日 2026-07-28（週頻，落後至當週二）：Asset Manager（機構配置型）淨倉位 +2,299（本週變化 -428），Leveraged Funds（避險/動能型）淨倉位 -6,873",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F45",
+        "evidence_id": "ev-045",
+        "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推）",
+        "source_url": "https://www.binance.com/en/eoptions/BTCUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "目標到期日 260828（27.2天後）：ATM IV=33.58%，Call 25Δ IV=31.65%，Put 25Δ IV=36.98%，25Δ Skew=+5.33%（正值＝put IV較高＝下跌避險溢價，偏空訊號）；Put/Call OI比=0.9913",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F46",
+        "evidence_id": "ev-046",
+        "source": "Coinbase Exchange /products/{coin}-USD/ticker vs Binance Spot /api/v3/ticker/price",
+        "source_url": "https://www.coinbase.com/advanced-trade/spot/BTC-USD",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "Coinbase 62924.16 vs Binance 62995.3（USDT 視為約當 USD，未校正匯率）→ 溢價 -0.1129%（價差在正常雜訊範圍內，無明顯溢價訊號）",
+        "coin": "BTC",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F47",
+        "evidence_id": "ev-047",
+        "source": "Binance Futures /fapi/v1/fundingRate",
+        "source_url": "https://www.binance.com/en/futures/funding-history/perpetual/real-time-funding-rate",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=ETHUSDT&limit=90 | 最新資金費率 +0.00674%，近 90 筆（約 30 天）百分位 81.1（中性區間）。正費率本身是常態（多頭付空頭），只有極端百分位（>90 或 <10）才是擁擠度訊號",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F48",
+        "evidence_id": "ev-048",
+        "source": "Binance Futures /fapi/v1/openInterest + /futures/data/openInterestHist + /fapi/v1/klines",
+        "source_url": "https://www.binance.com/en/futures/ETHUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=ETHUSDT&period=1h&limit=30 | 最新 OI 2314794.91（up）、價格 1866.6600（up）→ 多頭增倉（順勢，新多頭進場）（對齊 30 個共同時間桶）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F49",
+        "evidence_id": "ev-049",
+        "source": "Binance Futures /futures/data/globalLongShortAccountRatio + topLongShortPositionRatio",
+        "source_url": "https://www.binance.com/en/futures/ETHUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: symbol=ETHUSDT&period=1h&limit=30 | 散戶比值 2.6697（偏多） vs 大戶比值 1.3747（偏多） → 同向",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F50",
+        "evidence_id": "ev-050",
+        "source": "Binance COIN-M dapi.binance.com /dapi/v1/premiumIndex（免 key，五幣統一來源）",
+        "source_url": "https://www.binance.com/en/delivery/ETHUSD_PERP",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "query: pair=ETHUSD | 曲線形狀：contango → perp mark=1864.9900（基差-0.0318%） → 當季 mark=1871.6811（年化基差+2.16%，55天後到期） → 次季 mark=1882.7659（年化基差+2.30%，146天後到期）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F51",
+        "evidence_id": "ev-051",
+        "source": "CFTC TFF Futures Only（ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE）",
+        "source_url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "最新報告日 2026-07-28（週頻，落後至當週二）：Asset Manager（機構配置型）淨倉位 -3,472（本週變化 -1,052），Leveraged Funds（避險/動能型）淨倉位 -5,396",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F52",
+        "evidence_id": "ev-052",
+        "source": "Binance Options /eapi/v1/mark（免 key，五幣統一來源；25Δ skew 用 API 直接回傳的 delta/markIV，非本地反推）",
+        "source_url": "https://www.binance.com/en/eoptions/ETHUSDT",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "目標到期日 260828（27.2天後）：ATM IV=47.25%，Call 25Δ IV=46.56%，Put 25Δ IV=48.42%，25Δ Skew=+1.86%（正值＝put IV較高＝下跌避險溢價，偏空訊號）；Put/Call OI比=0.7144",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F53",
+        "evidence_id": "ev-053",
+        "source": "Binance /fapi/v1/premiumIndex（CEX）vs Hyperliquid metaAndAssetCtxs（DEX）",
+        "source_url": "https://app.hyperliquid.xyz/trade/ETH",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "CEX 年化費率 +5.68%（8h期）vs DEX 年化費率 +10.43%（1h期，已依結算週期換算年化後比較）→ 差 -4.74%（兩邊費率接近，無明顯場地背離）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F54",
+        "evidence_id": "ev-054",
+        "source": "Coinbase Exchange /products/{coin}-USD/ticker vs Binance Spot /api/v3/ticker/price",
+        "source_url": "https://www.coinbase.com/advanced-trade/spot/ETH-USD",
+        "source_type": "derivatives",
+        "source_weight": 0.8,
+        "weight_reason": "四因子 w=0.80｜新鮮度1.00×來源等級0.80(B+:交易所/CFTC 公開衍生品數據（費率、OI、倉位），非個人言論；比照 onchain 定性，略低是因為單一交易所報價可能有做市偏差)×覆蓋度1.00×dedup1.00",
+        "content_reference": "Coinbase 1865.64 vs Binance 1867.6（USDT 視為約當 USD，未校正匯率）→ 溢價 -0.1049%（價差在正常雜訊範圍內，無明顯溢價訊號）",
+        "coin": "ETH",
+        "filter_decisions": []
+      },
+      {
+        "fingerprint": "F55",
+        "evidence_id": "ev-055",
+        "source": "本地雙幣相對指標計算",
+        "source_url": null,
+        "source_type": "price",
+        "source_weight": 0.95,
+        "weight_reason": "決定性本地運算",
+        "content_reference": "雙幣相對指標（BTC vs ETH，近 90 日）：\n• 日報酬相關係數: 0.9293\n• Beta（BTC 對 ETH）: 0.7024\n• BTC 最大回撤: 11.85%\n• ETH 最大回撤: 17.03%\n• 相對強弱比值百分位: 98.9%（BTC 相對 ETH 在期間分布中的位置）",
+        "coin": "BTC/ETH",
+        "filter_decisions": []
+      }
+    ]
+  },
+  "panel2_naive_baseline": {
+    "enabled": true,
+    "steps": [
+      {
+        "step": 1,
+        "label": "收集",
+        "desc": "全量未過濾證據直接輸入"
+      },
+      {
+        "step": 2,
+        "label": "無信源加權",
+        "desc": "未依來源可靠度調整權重"
+      },
+      {
+        "step": 3,
+        "label": "無雜訊過濾",
+        "desc": "未做 PR 話術/模板相似度過濾"
+      },
+      {
+        "step": 4,
+        "label": "直接結論",
+        "desc": "一次 LLM 呼叫產出分析結論"
+      }
+    ],
+    "naive_output": {
+      "analysis": "# BTC vs ETH 最近兩週市場表現比較分析\n\n## 一、資料完整性說明\n\n⚠️ **重要前提**：ETH 本地日線資料止於 2026-05-31，距分析日（2026-07-31）已有 62 天落差。ETH 的即時價格僅能依賴 CoinGecko API 現價（1,865.48 USD）進行推估。BTC 日線資料則完整覆蓋至 2026-07-31。以下分析在 ETH 部分將結合有限的歷史資料與即時報價進行對比。\n\n---\n\n## 二、價格表現對比\n\n| 指標 | BTC | ETH |\n|------|-----|-----|\n| 兩週起始價（約 7/18） | 64,834 USDT | ~2,007 USDT（5/31 收盤，推估 7 月中旬約在此區間附近）|\n| 當前價格 | 62,888～62,930 USD | 1,865.48 USD |\n| 兩週跌幅 | **-3.00%** | 推估約 **-7%～-8%**（以 5/31 收盤 2,007 至現價 1,865 計算為 -7.07%，但中間可能有反彈再回落）|\n| 24h 跌幅 | -2.37% | -2.13% |\n| 近一年跌幅 | -44.49% | -20.96%（至 5/31 止） |\n\n**觀察**：BTC 兩週跌幅約 3%，而 ETH 從可追溯的最近基準到現價跌幅明顯更大。結合相對強弱比值百分位高達 **98.9%**，顯示 BTC 在近 90 天內相對 ETH 的表現處於極端強勢位置。\n\n---\n\n## 三、技術結構對比\n\n| 技術指標 | BTC（7/31） | ETH（5/31，較舊） |\n|----------|-------------|-------------------|\n| RSI14 | 45.3（中性） | 30.8（接近超賣） |\n| 現價 vs SMA7 | 跌破 | 跌破 |\n| 現價 vs MA20 | 跌破（64,475） | 跌破（2,120） |\n| 現價 vs MA60 | 跌破（76,045） | 跌破（2,228） |\n| 現價 vs MA120 | 跌破（72,613） | 跌破（2,141） |\n| 14日波動率 | 1.48%（歷史低位，5.1 百分位） | 1.39%（歷史低位，3.5 百分位） |\n\n**觀察**：兩者均處於中長期均線之下的空頭排列格局，且波動率都處於歷史極低水位（「盤整彈藥」狀態）。但 ETH 的 RSI 更接近超賣區域，顯示短期賣壓相對更重。\n\n---\n\n## 四、衍生品市場結構對比\n\n| 衍生品指標 | BTC | ETH |\n|-----------|-----|-----|\n| 資金費率 | +0.00412%（百分位 22.2，偏低） | +0.00674%（百分位 81.1，偏高） |\n| 期貨曲線 | Contango，當季年化 +4.12% | Contango，當季年化 +2.16% |\n| OI 動態 | OI 下降 + 價格上升 → 空頭回補 | OI 上升 + 價格上升 → 多頭增倉 |\n| 25Δ Skew | +5.33%（明顯偏空） | +1.86%（輕微偏空） |\n| Put/Call OI 比 | 0.99（接近平衡） | 0.71（Call 偏多） |\n| 散戶多空比 | 2.22（偏多） | 2.67（更偏多） |\n| 大戶多空比 | 1.57（偏多） | 1.37（偏多） |\n\n**觀察**：\n- BTC 的選擇權市場顯示更強的下跌避險需求（skew +5.33%），而 ETH 的 skew 相對溫和。\n- ETH 資金費率百分位（81.1）顯著高於 BTC（22.2），意味著 ETH 永續合約多頭擁擠度較高，潛在的多頭清算風險相對較大。\n- BTC 期貨基差（年化 4.12%）幾乎是 ETH（2.16%）的兩倍，反映市場對 BTC 的持有意願/carry 需求更高。\n\n---\n\n## 五、機構持倉（CFTC）對比\n\n| CFTC 持倉（7/28） | BTC | ETH |\n|-------------------|-----|-----|\n| Asset Manager 淨倉位 | **+2,299**（本週 -428） | **-3,472**（本週 -1,052） |\n| Leveraged Funds 淨倉位 | -6,873 | -5,396 |\n\n**觀察**：機構配置型資金對 BTC 仍維持淨多頭（雖有減倉），但對 ETH 則為淨空頭且持續加碼做空。這是兩者最顯著的結構性分歧——機構資金明確偏好 BTC 而非 ETH。\n\n---\n\n## 六、鏈上與基本面對比\n\n| 鏈上指標 | BTC | ETH |\n|----------|-----|-----|\n| 算力趨勢 | 近 30 天 +3.53%（持續創高） | N/A |\n| 24h 交易筆數 | 63 萬筆（近 30 天持平） | N/A |\n| Mempool | 暴增 2907%（短期壅塞） | Gas Price 極低（0.05-1.09 Gwei） |\n| 網路活躍度訊號 | 高（mempool 壅塞反映使用需求） | 低（Gas 極低反映鏈上活動冷清） |\n\n**觀察**：BTC 鏈上活動明顯活躍（mempool 暴增），而 ETH 的 Gas Price 處於歷史低位，暗示鏈上需求疲弱。\n\n---\n\n## 七、宏觀與情緒環境\n\n- **Fear & Greed Index**：27（恐懼），近 30 天範圍 20-33，市場整體處於恐懼狀態。\n- **Fed/BoJ**：7/29 FOMC 維持利率不變，市場以下跌回應（Reddit 標題佐證）。\n- **敘事面**：BTC 有「企業/國家儲備」題材（Optech #416），ETH 方面則是基金會治理更新（Board Update），缺乏直接價格催化劑。\n\n---\n\n## 八、綜合結論\n\n1. **相對強弱**：BTC 在近兩週及近 90 天均明顯跑贏 ETH，相對強弱百分位達 98.9%，為極端值。\n\n2. **跌幅差異**：BTC 兩週跌約 3%，ETH 推估跌幅約 7%，ETH 的下行幅度約為 BTC 的 2 倍以上。\n\n3. **結構性分歧**：\n   - 機構（CFTC）對 BTC 淨多、對 ETH 淨空\n   - BTC 期貨基差更高，顯示更強的持有需求\n   - ETH 資金費率偏高但價格更弱，存在多頭擁擠與價格背離\n\n4. **共同特徵**：兩者均處於中長期空頭排列、波動率歷史低位、市場情緒恐懼。整體加密市場承壓，但 ETH 承受的壓力更為集中。\n\n5. **風險特徵**：ETH 的 Beta 為 0.70（相對 BTC），最大回撤 17.03% vs BTC 的 11.85%，顯示 ETH 在下行環境中的風險暴露更大。",
+      "caveat": "此為未過濾對照組輸出：未做信源加權/雜訊過濾/證據回溯"
+    }
+  },
+  "panel3_refinement": {
+    "noise_removal_rate": 0.0,
+    "layers": [
+      {
+        "layer": "L1_source",
+        "summary": {
+          "total": 55,
+          "authoritative": 36,
+          "normal": 14,
+          "low": 5
+        },
+        "note": "共 55 筆證據，36 筆權威源（≥0.7），5 筆低信度（<0.35）"
+      },
+      {
+        "layer": "L2_content",
+        "checks": [
+          {
+            "code": "PR",
+            "hits": []
+          },
+          {
+            "code": "DEDUP",
+            "removed": [],
+            "stats": [
+              {
+                "coin": "BTC",
+                "source_type": "news",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              },
+              {
+                "coin": "ETH",
+                "source_type": "news",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              },
+              {
+                "coin": "BTC",
+                "source_type": "social",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              }
+            ]
+          },
+          {
+            "code": "F10",
+            "pairs": []
+          },
+          {
+            "code": "F9",
+            "enabled": true,
+            "method": "lexicon",
+            "sample": 15,
+            "positive": 0,
+            "negative": 0,
+            "neutral": 15,
+            "one_sided_ratio": 0.0,
+            "herding_flag": false,
+            "note": "敘事類樣本 15 筆：正面 0／負面 0／中性 15"
+          }
+        ]
+      },
+      {
+        "layer": "L3_fact",
+        "input": 55,
+        "kept": 55,
+        "removed": 0,
+        "removal_rate": 0.0,
+        "removed_items": []
+      },
+      {
+        "layer": "L4_cross",
+        "consistent": [
+          "BTC 價格面多源一致偏空：14日跌-3.00%（ev-001）、10日跌-4.88%（ev-003）、最新日跌-2.92%（ev-002）、CoinGecko即時24h跌-2.37%（ev-008），四個獨立時間窗口均顯示下行趨勢。",
+          "BTC 技術面全面跌破均線：現價低於SMA7、SMA14、MA20（ev-006），且量能萎縮（7日均量較前7日-5.74%，位於近30天第17百分位），價跌量縮格局一致指向弱勢。",
+          "ETH 即時報價1865.48（ev-016）較5月底收盤2007.01（ev-009）再跌約7%，與BTC同期下行方向一致，且ETH跌幅更大，與雙幣相對強弱百分位98.9%（BTC跑贏ETH）的結論吻合（ev-055）。",
+          "兩幣波動率均處全歷史極低百分位（BTC 5.1%、ETH 3.5%）（ev-007、ev-015），且近30天內波動率持續走低（ev-006、ev-014），多源一致顯示市場處於極度壓縮狀態。",
+          "BTC 選擇權25Δ Skew +5.33%顯示put避險溢價明顯（ev-045），與Fear & Greed Index=27（Fear）（ev-036）、Reddit社群悲觀情緒（ev-031/032/033/035）方向一致，均指向市場偏恐懼。",
+          "CFTC機構持倉：BTC Asset Manager淨多但本週減倉-428（ev-044），ETH Asset Manager淨空且加碼空頭-1052（ev-051），兩者均顯示機構對加密資產配置意願下降，ETH更為負面。",
+          "ETH衍生品OI上升+價格上升→多頭增倉（ev-048），資金費率百分位81.1偏高（ev-047），散戶多空比2.67（ev-049），三者一致顯示短期ETH槓桿多頭積極進場，但這與價格仍在下跌形成潛在脆弱性。",
+          "BTC鏈上Mempool待確認筆數近30天暴增+2907%（ev-018），而ETH Gas Price即時僅0.05 Gwei（ev-019）但30天均值上升+29.85%（ev-020），兩鏈活躍度訊號分化：BTC鏈上擁堵急升，ETH整體仍低迷。"
+        ],
+        "contradictions": [
+          "BTC衍生品OI下降+價格上升被判讀為空頭回補（ev-041），但同期現貨價格實際大跌-2.92%（ev-002）且CoinGecko報-2.37%（ev-008）。OI判讀的'價格上升'可能僅反映小時級別反彈，與日線級別的明確下跌存在時間粒度矛盾。",
+          "ETH衍生品顯示多頭增倉（OI↑價格↑，ev-048）、資金費率偏高（ev-047）、散戶偏多（ev-049），但CoinGecko即時報價24h仍跌-2.13%（ev-016），且CFTC機構持續加碼空頭（ev-051，同為medium/long帶），槓桿散戶做多與機構做空形成方向衝突。",
+          "ETH選擇權Put/Call OI比僅0.71（call持倉多於put，偏樂觀，ev-052）與25Δ Skew +1.86%（put IV較高，偏空，ev-052）在同一數據源內方向輕微矛盾，顯示選擇權市場對ETH方向尚無共識。"
+        ]
+      },
+      {
+        "layer": "L5_conclusion",
+        "debate": {
+          "bull": "**回應反方批評後的修正論證：BTC 相對於 ETH 更值得優先關注。**\n\n**對批評的回應：**\n\n1. 反方指出 ev-055 時效性問題及即時跌幅比較，部分成立。我承認「持續擴大」的措辭過強，且跨62天與14天的直接比較確有窗口不對等。但修正後核心論點仍成立：ev-055（weight=0.95）顯示的結構性 BTC 跑贏格局，加上 CFTC 機構配置方向分化（ev-044 vs ev-051，均為 07-28 最新數據），兩者共同指向 BTC 在機構眼中的相對優勢並未逆轉。單日跌幅差異（-2.37% vs -2.13%）僅 0.24 個百分點，不足以推翻長期結構。\n\n2. Mempool 解讀批評成立。我承認交易筆數持平（-0.40%，ev-018）與 Mempool 暴增並存，確實不能直接等同於「健康需求增長」。我撤回此點作為核心論據。\n\n3. OI 判讀時間粒度矛盾，批評成立。我承認 ev-041 的「價格上升」與日線跌幅存在矛盾，不再以此作為「槓桿壓力已釋放」的強論據。\n\n4. 敘事催化劑批評成立。ev-021 僅 weight=0.42，不足以支撐強結論，我降低此點權重。\n\n**修正後核心論證：**\n\n**一、機構配置方向是最具決定性的分化訊號。**CFTC 最新數據（07-28）：BTC Asset Manager 淨多 +2299（ev-044），ETH Asset Manager 淨空 -3472 且本週再加碼 -1052（ev-051）。兩者均為 weight=0.80、horizon=long 的高質量證據，直接反映機構對兩幣的風險偏好判斷。機構「做多 BTC、做空 ETH」的配置格局，是最強的相對優先關注理由。\n\n**二、ETH 槓桿結構脆弱性構成額外下行風險。**ETH 資金費率百分位 81.1（ev-047）、散戶多空比 2.67（ev-049），大量散戶槓桿多頭堆積，同時機構加碼做空（ev-051）。這種「散戶多 vs 機構空」的對立結構，歷史上常以多頭清算收場。BTC 資金費率百分位僅 22.2（ev-040），槓桿水位低，即使下跌，連環清算風險遠小於 ETH。\n\n**三、BTC 恐慌指標反而是相對優勢。**反方將 BTC Skew +5.33%（ev-045）解讀為「風險更高」，但高 put 溢價代表下行已被充分對沖定價。ETH Skew 僅 +1.86%（ev-052）看似溫和，實則代表市場尚未為 ETH 的下行風險充分定價——結合機構淨空加碼（ev-051），ETH 的「低恐慌」恰恰是風險未被反映的危險訊號。\n\n**四、相對強弱結構未逆轉。**ev-055（weight=0.95）確立的 BTC 跑贏格局，加上 BTC 近一年跌幅雖大（-44.49%，ev-005）但起點更高（113297），而 ETH 從較低起點仍持續走弱至 1865（ev-016），顯示 ETH 缺乏獨立支撐力。",
+          "bear_critique": "正方修正後的論證仍有以下具體漏洞：\n\n1. **「高put溢價=下行已被充分對沖定價」的邏輯跳躍。**正方將BTC Skew +5.33%（ev-045）重新包裝為優勢，聲稱「下行已被充分對沖定價」。但高put溢價反映的是市場參與者願意付出更高成本購買下跌保護，這是對未來下行風險的預期定價，而非「風險已消除」。如果下行風險真的已被充分消化，價格不應在最新一日仍暴跌-2.92%（ev-002）。正方將恐慌指標重新解讀為利好，屬於事後合理化而非邏輯推導。\n\n2. **機構配置論據的時間尺度錯配。**CFTC數據（ev-044、ev-051）為horizon=long的長期配置訊號，但本題是「最近兩週的市場表現」比較。正方將長期配置偏好直接等同於短期表現優勢，忽略了BTC機構淨多但本週仍在減倉-428（ev-044），方向是在撤退而非加碼。ETH機構淨空是結構性持倉，不代表短期內會觸發額外賣壓。\n\n3. **「散戶多vs機構空=多頭清算」是未經驗證的歷史類比。**正方聲稱這種結構「歷史上常以多頭清算收場」，但未提供任何證據支持此歷史規律。ETH Put/Call OI比0.71（ev-052）顯示選擇權市場call持倉顯著多於put，這是weight=0.80的證據，與「即將清算」的敘事矛盾。\n\n4. **正方承認撤回Mempool和OI兩個核心論據後，實質上只剩CFTC配置和相對強弱兩個支撐點，論證基礎已大幅收窄。**",
+          "bear": "**ETH相對於BTC更值得優先關注，修正後論證：**\n\n**一、BTC短期動能惡化程度明顯超過ETH。**BTC最近一日暴跌-2.92%（ev-002，weight=0.95），10日跌幅-4.88%（ev-003，weight=0.95），加速下行態勢明確。ETH即時24h跌幅-2.13%（ev-016，weight=0.80）小於BTC的-2.37%（ev-008，weight=0.80）。在「最近兩週表現」的主視野內，BTC的下行動能更強，ETH正在相對企穩。\n\n**二、ETH技術面反彈條件遠優於BTC。**ETH RSI14=30.8接近超賣閾值（ev-014，weight=0.95），而BTC RSI14=45.3僅處中性（ev-006，weight=0.95）。超賣區域是技術性反彈的必要條件，ETH已具備而BTC尚未觸及。ETH波動率處全歷史第3.5百分位（ev-015，weight=0.95），比BTC的5.1百分位（ev-007，weight=0.95）壓縮更極端，方向性突破的彈性更大。\n\n**三、ETH選擇權市場實際偏向上行。**Put/Call OI比僅0.71（ev-052，weight=0.80），call持倉顯著多於put，市場用真金白銀押注ETH上行。25Δ Skew僅+1.86%（ev-052），遠低於BTC的+5.33%（ev-045），顯示ETH的下跌恐慌程度極低。正方將此解讀為「風險未被定價」，但同等邏輯下，BTC的高恐慌也可解讀為「市場預期BTC還會繼續跌」。\n\n**四、ETH鏈上活動趨勢正在轉折。**Gas Price 30天均值上升+29.85%（ev-020，weight=0.85），雖絕對值低，但趨勢拐點比絕對水平更具前瞻意義。BTC交易筆數近30天持平-0.40%（ev-018），實際鏈上使用量並無增長。\n\n**五、BTC結構性壓力更大。**BTC近一季跌-19.96%（ev-004）、近一年跌-44.49%（ev-005），處於加速下行通道。現價62887遠低於MA60=76044（ev-007），距離長期均線差距達21%，回歸壓力巨大但方向是繼續承壓。ETH近一季僅微跌（ev-012），下行斜率已趨平緩。",
+          "rounds": [
+            {
+              "round": 1,
+              "bull_argument": "BTC 相對於 ETH 更值得優先關注，理由如下：\n\n**一、相對強弱結構性優勢已確立。**截至可比較期間，BTC/ETH 相對強弱比值位於 98.9 百分位（ev-055，weight=0.95），這是最高權重的直接比較證據，明確顯示 BTC 在長期尺度大幅跑贏 ETH。即時數據進一步印證：BTC 從 5 月底至今約跌 3%（64834→62887，ev-001），而 ETH 從 2007 跌至 1865（ev-009、ev-016），跌幅約 7%，ETH 弱勢持續擴大。\n\n**二、機構資金配置明確偏好 BTC。**CFTC 數據（weight=0.80）顯示 BTC Asset Manager 仍持淨多 +2299（ev-044），而 ETH Asset Manager 持淨空 -3472 且本週再加碼空頭 -1052（ev-051）。機構對兩幣的態度形成鮮明對比：BTC 是「減倉但仍看多」，ETH 是「加碼做空」。這代表在專業配置層面，BTC 的風險報酬被認為優於 ETH。\n\n**三、ETH 槓桿結構脆弱，BTC 相對健康。**ETH 資金費率百分位 81.1（ev-047）、散戶多空比 2.67（ev-049）、OI 增加（ev-048），顯示大量槓桿多頭堆積，但價格仍在下跌（ev-016，24h -2.13%），且機構同步做空（ev-051）。這種「散戶槓桿多 vs 機構空」的結構極為脆弱。反觀 BTC 資金費率百分位僅 22.2（ev-040），OI 下降顯示空頭已回補（ev-041），槓桿壓力已釋放，下行風險相對可控。\n\n**四、鏈上活躍度 BTC 明顯優於 ETH。**BTC Mempool 待確認筆數 30 天暴增 +2907%（ev-018），顯示鏈上需求急劇上升；而 ETH Gas Price 僅 0.05 Gwei（ev-019），鏈上活動處於低迷狀態。鏈上擁堵是真實使用需求的體現，BTC 網路正在被積極使用，ETH 則缺乏類似訊號。\n\n**五、BTC 波動率壓縮至歷史第 5.1 百分位（ev-007），極低波動常為方向性突破前兆。**結合「企業／國家儲備」敘事正在發酵（ev-021），BTC 具備催化劑觸發重新定價的條件，而 ETH 缺乏同等級別的敘事驅動。\n\n綜上，從相對強弱、機構配置、槓桿健康度、鏈上活躍度到敘事催化劑，BTC 在每個維度均優於 ETH，更值得優先關注。",
+              "bull_evidence_ids": [
+                "ev-001",
+                "ev-007",
+                "ev-009",
+                "ev-016",
+                "ev-018",
+                "ev-019",
+                "ev-021",
+                "ev-040",
+                "ev-041",
+                "ev-044",
+                "ev-047",
+                "ev-048",
+                "ev-049",
+                "ev-051",
+                "ev-055"
+              ],
+              "bear_critique": "正方論證存在以下具體漏洞：\n\n1. **相對強弱百分位的時效性問題。**正方核心論據 ev-055（相對強弱百分位98.9%）截至2026-05-31，距今已62天。正方自己也承認ETH即時跌幅（24h -2.13%，ev-016）小於BTC（24h -2.37%，ev-008），這恰恰說明近期ETH相對BTC的弱勢正在收斂，而非「持續擴大」。正方聲稱「BTC從5月底至今約跌3%」但實際上BTC 14日跌幅-3.00%（ev-001）是7/18-7/31的數據，而ETH的「7%跌幅」是跨越62天的估算，時間窗口不對等，屬於樣本選擇偏誤。\n\n2. **BTC Mempool暴增被過度正面解讀。**正方將Mempool +2907%（ev-018）解讀為「真實使用需求」，但鏈上擁堵同樣可能是垃圾交易、銘文刷量或攻擊行為。更關鍵的是，24h交易筆數近30天幾乎持平（-0.40%，ev-018），如果是真實需求爆發，交易筆數應同步上升。Mempool暴增而交易筆數不增，更可能是網路效率下降或短期異常，而非健康的需求增長。\n\n3. **BTC OI判讀存在時間粒度矛盾。**正方引用ev-041稱「OI下降+價格上升→空頭回補」，但交叉驗證層已明確指出，同期BTC日線級別明確下跌-2.92%（ev-002），「價格上升」可能僅反映小時級別反彈。正方忽略了這個已被標記的矛盾，卻將其作為「槓桿壓力已釋放」的論據。\n\n4. **「企業/國家儲備」敘事催化劑僅來自weight=0.42的低權重來源（ev-021）。**正方將其作為第五點核心論據，但這是C級可信度的新聞摘要標題，不足以支撐「BTC具備催化劑觸發重新定價」的強結論。",
+              "bear_argument": "ETH 相對於 BTC 更值得優先關注，理由如下：\n\n**一、ETH估值壓縮程度遠超BTC，均值回歸空間更大。**ETH近一年跌-20.96%（ev-013），BTC近一年跌-44.49%（ev-005）。但關鍵差異在於：ETH近一季（截至05-31）僅微跌，近90天最大回撤17.03%（ev-055），而BTC近一季暴跌-19.96%（ev-004）。BTC正處於加速下行階段，ETH的下行動能相對已趨緩。\n\n**二、ETH衍生品結構顯示市場正在積極佈局反彈。**ETH OI上升且價格上升→多頭增倉（ev-048，weight=0.80），資金費率百分位81.1（ev-047），Put/Call OI比僅0.71（ev-052），call持倉顯著多於put，選擇權市場對ETH上行押注明確。25Δ Skew僅+1.86%（ev-052），遠低於BTC的+5.33%（ev-045），顯示ETH的下跌恐慌程度遠低於BTC。\n\n**三、BTC恐慌指標全面亮燈，短期風險更高。**BTC選擇權Skew +5.33%（ev-045）顯示put避險溢價明顯，Fear & Greed=27（ev-036），Reddit社群瀰漫悲觀情緒（ev-031-035），CFTC機構本週減倉-428（ev-044）。BTC正面臨恐慌性拋售壓力，而ETH的恐慌程度相對溫和。\n\n**四、ETH波動率壓縮更極端（全歷史第3.5百分位，ev-015），突破潛力更大。**正方自己承認極低波動是方向性突破前兆，ETH波動率比BTC（5.1百分位）更低，意味著ETH的壓縮彈簧更緊，一旦方向選擇完成，ETH的波動幅度可能更大。結合ETH RSI14=30.8接近超賣（ev-014），技術面反彈條件比BTC（RSI=45.3，ev-006）更成熟。\n\n**五、ETH Gas Price 30天均值上升+29.85%（ev-020，weight=0.85），鏈上活動正在回暖。**雖然絕對值仍低，但趨勢轉折比絕對水平更重要。這是ETH生態使用量觸底回升的早期訊號。",
+              "bear_evidence_ids": [
+                "ev-005",
+                "ev-004",
+                "ev-013",
+                "ev-055",
+                "ev-047",
+                "ev-048",
+                "ev-049",
+                "ev-052",
+                "ev-045",
+                "ev-036",
+                "ev-044",
+                "ev-015",
+                "ev-007",
+                "ev-014",
+                "ev-006",
+                "ev-020",
+                "ev-018",
+                "ev-002",
+                "ev-008",
+                "ev-016",
+                "ev-041"
+              ],
+              "bear_has_new_points": true
+            },
+            {
+              "round": 2,
+              "bull_argument": "**回應反方批評後的修正論證：BTC 相對於 ETH 更值得優先關注。**\n\n**對批評的回應：**\n\n1. 反方指出 ev-055 時效性問題及即時跌幅比較，部分成立。我承認「持續擴大」的措辭過強，且跨62天與14天的直接比較確有窗口不對等。但修正後核心論點仍成立：ev-055（weight=0.95）顯示的結構性 BTC 跑贏格局，加上 CFTC 機構配置方向分化（ev-044 vs ev-051，均為 07-28 最新數據），兩者共同指向 BTC 在機構眼中的相對優勢並未逆轉。單日跌幅差異（-2.37% vs -2.13%）僅 0.24 個百分點，不足以推翻長期結構。\n\n2. Mempool 解讀批評成立。我承認交易筆數持平（-0.40%，ev-018）與 Mempool 暴增並存，確實不能直接等同於「健康需求增長」。我撤回此點作為核心論據。\n\n3. OI 判讀時間粒度矛盾，批評成立。我承認 ev-041 的「價格上升」與日線跌幅存在矛盾，不再以此作為「槓桿壓力已釋放」的強論據。\n\n4. 敘事催化劑批評成立。ev-021 僅 weight=0.42，不足以支撐強結論，我降低此點權重。\n\n**修正後核心論證：**\n\n**一、機構配置方向是最具決定性的分化訊號。**CFTC 最新數據（07-28）：BTC Asset Manager 淨多 +2299（ev-044），ETH Asset Manager 淨空 -3472 且本週再加碼 -1052（ev-051）。兩者均為 weight=0.80、horizon=long 的高質量證據，直接反映機構對兩幣的風險偏好判斷。機構「做多 BTC、做空 ETH」的配置格局，是最強的相對優先關注理由。\n\n**二、ETH 槓桿結構脆弱性構成額外下行風險。**ETH 資金費率百分位 81.1（ev-047）、散戶多空比 2.67（ev-049），大量散戶槓桿多頭堆積，同時機構加碼做空（ev-051）。這種「散戶多 vs 機構空」的對立結構，歷史上常以多頭清算收場。BTC 資金費率百分位僅 22.2（ev-040），槓桿水位低，即使下跌，連環清算風險遠小於 ETH。\n\n**三、BTC 恐慌指標反而是相對優勢。**反方將 BTC Skew +5.33%（ev-045）解讀為「風險更高」，但高 put 溢價代表下行已被充分對沖定價。ETH Skew 僅 +1.86%（ev-052）看似溫和，實則代表市場尚未為 ETH 的下行風險充分定價——結合機構淨空加碼（ev-051），ETH 的「低恐慌」恰恰是風險未被反映的危險訊號。\n\n**四、相對強弱結構未逆轉。**ev-055（weight=0.95）確立的 BTC 跑贏格局，加上 BTC 近一年跌幅雖大（-44.49%，ev-005）但起點更高（113297），而 ETH 從較低起點仍持續走弱至 1865（ev-016），顯示 ETH 缺乏獨立支撐力。",
+              "bull_evidence_ids": [
+                "ev-044",
+                "ev-051",
+                "ev-047",
+                "ev-049",
+                "ev-040",
+                "ev-045",
+                "ev-052",
+                "ev-055",
+                "ev-005",
+                "ev-016",
+                "ev-018",
+                "ev-041",
+                "ev-001",
+                "ev-008"
+              ],
+              "bear_critique": "正方修正後的論證仍有以下具體漏洞：\n\n1. **「高put溢價=下行已被充分對沖定價」的邏輯跳躍。**正方將BTC Skew +5.33%（ev-045）重新包裝為優勢，聲稱「下行已被充分對沖定價」。但高put溢價反映的是市場參與者願意付出更高成本購買下跌保護，這是對未來下行風險的預期定價，而非「風險已消除」。如果下行風險真的已被充分消化，價格不應在最新一日仍暴跌-2.92%（ev-002）。正方將恐慌指標重新解讀為利好，屬於事後合理化而非邏輯推導。\n\n2. **機構配置論據的時間尺度錯配。**CFTC數據（ev-044、ev-051）為horizon=long的長期配置訊號，但本題是「最近兩週的市場表現」比較。正方將長期配置偏好直接等同於短期表現優勢，忽略了BTC機構淨多但本週仍在減倉-428（ev-044），方向是在撤退而非加碼。ETH機構淨空是結構性持倉，不代表短期內會觸發額外賣壓。\n\n3. **「散戶多vs機構空=多頭清算」是未經驗證的歷史類比。**正方聲稱這種結構「歷史上常以多頭清算收場」，但未提供任何證據支持此歷史規律。ETH Put/Call OI比0.71（ev-052）顯示選擇權市場call持倉顯著多於put，這是weight=0.80的證據，與「即將清算」的敘事矛盾。\n\n4. **正方承認撤回Mempool和OI兩個核心論據後，實質上只剩CFTC配置和相對強弱兩個支撐點，論證基礎已大幅收窄。**",
+              "bear_argument": "**ETH相對於BTC更值得優先關注，修正後論證：**\n\n**一、BTC短期動能惡化程度明顯超過ETH。**BTC最近一日暴跌-2.92%（ev-002，weight=0.95），10日跌幅-4.88%（ev-003，weight=0.95），加速下行態勢明確。ETH即時24h跌幅-2.13%（ev-016，weight=0.80）小於BTC的-2.37%（ev-008，weight=0.80）。在「最近兩週表現」的主視野內，BTC的下行動能更強，ETH正在相對企穩。\n\n**二、ETH技術面反彈條件遠優於BTC。**ETH RSI14=30.8接近超賣閾值（ev-014，weight=0.95），而BTC RSI14=45.3僅處中性（ev-006，weight=0.95）。超賣區域是技術性反彈的必要條件，ETH已具備而BTC尚未觸及。ETH波動率處全歷史第3.5百分位（ev-015，weight=0.95），比BTC的5.1百分位（ev-007，weight=0.95）壓縮更極端，方向性突破的彈性更大。\n\n**三、ETH選擇權市場實際偏向上行。**Put/Call OI比僅0.71（ev-052，weight=0.80），call持倉顯著多於put，市場用真金白銀押注ETH上行。25Δ Skew僅+1.86%（ev-052），遠低於BTC的+5.33%（ev-045），顯示ETH的下跌恐慌程度極低。正方將此解讀為「風險未被定價」，但同等邏輯下，BTC的高恐慌也可解讀為「市場預期BTC還會繼續跌」。\n\n**四、ETH鏈上活動趨勢正在轉折。**Gas Price 30天均值上升+29.85%（ev-020，weight=0.85），雖絕對值低，但趨勢拐點比絕對水平更具前瞻意義。BTC交易筆數近30天持平-0.40%（ev-018），實際鏈上使用量並無增長。\n\n**五、BTC結構性壓力更大。**BTC近一季跌-19.96%（ev-004）、近一年跌-44.49%（ev-005），處於加速下行通道。現價62887遠低於MA60=76044（ev-007），距離長期均線差距達21%，回歸壓力巨大但方向是繼續承壓。ETH近一季僅微跌（ev-012），下行斜率已趨平緩。",
+              "bear_evidence_ids": [
+                "ev-002",
+                "ev-003",
+                "ev-006",
+                "ev-007",
+                "ev-008",
+                "ev-014",
+                "ev-015",
+                "ev-016",
+                "ev-018",
+                "ev-020",
+                "ev-045",
+                "ev-052",
+                "ev-004",
+                "ev-005",
+                "ev-012"
+              ],
+              "bear_has_new_points": false
+            }
+          ],
+          "round_count": 2,
+          "stopped_reason": "converged",
+          "stopped_reason_label": "反方自認已無新的實質論點，辯論提前收斂"
+        },
+        "confidence_breakdown": {
+          "data_confidence": 100.0,
+          "signal_consensus": 73.33,
+          "evidence_strength": 64.37,
+          "weights": {
+            "data_confidence": 0.4,
+            "signal_consensus": 0.4,
+            "evidence_strength": 0.2
+          },
+          "base": 82.21,
+          "debate_adjustment": -3,
+          "debate_adjustment_reason": "反方成功推翻正方Mempool、OI兩點並擊破Skew重新解讀，但正方CFTC配置與相對強弱核心論據未被推翻，整體互有勝負偏向正方略失分。",
+          "final": 79,
+          "why": [
+            "✅ derivatives 資料完整（15 筆，最長窗長 78 天）",
+            "✅ macro 資料完整（4 筆，最長窗長 30 天）",
+            "✅ news 資料完整（10 筆，最長窗長 14 天）",
+            "✅ onchain 資料完整（4 筆，最長窗長 30 天）",
+            "✅ price 資料完整（17 筆，最長窗長 1826 天）",
+            "✅ social 資料完整（5 筆，最長窗長 7 天）",
+            "⚠ 辯論後下修 3 分：反方成功推翻正方Mempool、OI兩點並擊破Skew重新解讀，但正方CFTC配置與相對強弱核心論據未被推翻，整體互有勝負偏向正方略失分。",
+            "ℹ️ 另有 6 項結構脈絡（跨時間尺度的位置關係，不計入矛盾也不扣分），詳見報告第 3 節"
+          ],
+          "consensus_degraded": false,
+          "consensus_degraded_reason": "",
+          "primary_horizon": "medium"
+        }
+      }
+    ],
+    "skipped_layers": [],
+    "log_events_by_layer": {
+      "L2_content": [
+        {
+          "ts": "2026-08-01T02:05:20Z",
+          "phase": "collect",
+          "action": "l2_dedup_summary",
+          "detail": "groups=3, removed=0, min_sample=5",
+          "status": "ok",
+          "layer": "L2_content",
+          "metrics": {
+            "groups": [
+              {
+                "coin": "BTC",
+                "source_type": "news",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              },
+              {
+                "coin": "ETH",
+                "source_type": "news",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              },
+              {
+                "coin": "BTC",
+                "source_type": "social",
+                "raw_count": 5,
+                "deduped_count": 5,
+                "dedup_rate": 0.0,
+                "distinct_sources": 1,
+                "small_sample": false
+              }
+            ],
+            "removed_total": 0,
+            "min_sample": 5
+          }
+        },
+        {
+          "ts": "2026-08-01T02:05:20Z",
+          "phase": "collect",
+          "action": "l2_f9_sentiment",
+          "detail": "敘事類樣本 15 筆：正面 0／負面 0／中性 15",
+          "status": "ok",
+          "layer": "L2_content",
+          "metrics": {
+            "enabled": true,
+            "method": "lexicon",
+            "sample": 15,
+            "positive": 0,
+            "negative": 0,
+            "neutral": 15,
+            "one_sided_ratio": 0.0,
+            "herding_flag": false,
+            "note": "敘事類樣本 15 筆：正面 0／負面 0／中性 15"
+          }
+        },
+        {
+          "ts": "2026-08-01T02:05:20Z",
+          "phase": "collect",
+          "action": "l2_content_summary",
+          "detail": "PR_hits=0, mode=four_factor, F9_sample=15",
+          "status": "ok",
+          "layer": "L2_content",
+          "metrics": {
+            "pr_hits": 0,
+            "downweighted_total": 0,
+            "mode": "four_factor",
+            "f9": {
+              "enabled": true,
+              "sample": 15,
+              "herding_flag": false
+            },
+            "total_evidences": 54
+          }
+        }
+      ],
+      "L1_source": [
+        {
+          "ts": "2026-08-01T02:05:20Z",
+          "phase": "collect",
+          "action": "l1_source_weights",
+          "detail": "total=54, avg_weight=0.706, formula=four_factor",
+          "status": "ok",
+          "layer": "L1_source",
+          "metrics": {
+            "total": 54,
+            "avg_weight": 0.7065,
+            "distribution": {
+              "0.95": 14,
+              "0.80": 17,
+              "0.85": 4,
+              "0.42": 10,
+              "0.21": 5,
+              "0.65": 4
+            },
+            "formula": "four_factor"
+          }
+        }
+      ],
+      "L3_fact": [
+        {
+          "ts": "2026-08-01T02:06:23Z",
+          "phase": "reason",
+          "action": "l3_fact_extraction",
+          "detail": "input=55, kept=55, removed=0, rate=0.000",
+          "status": "ok",
+          "layer": "L3_fact",
+          "metrics": {
+            "input": 55,
+            "kept": 55,
+            "removed": 0,
+            "removal_rate": 0.0
+          }
+        }
+      ],
+      "L4_cross": [
+        {
+          "ts": "2026-08-01T02:07:07Z",
+          "phase": "reason",
+          "action": "l4_cross_validation",
+          "detail": "consistent=8, contradictions=3, structural_context=6, direction_matrix=6",
+          "status": "ok",
+          "layer": "L4_cross",
+          "metrics": {
+            "consistent": 8,
+            "contradictions": 3,
+            "structural_context": 6,
+            "direction_matrix": 6
+          }
+        }
+      ],
+      "L5_conclusion": [
+        {
+          "ts": "2026-08-01T02:08:53Z",
+          "phase": "reason",
+          "action": "l5_debate_rounds",
+          "detail": "rounds=2, stopped_reason=converged",
+          "status": "ok",
+          "layer": "L5_conclusion",
+          "metrics": {
+            "rounds": 2,
+            "stopped_reason": "converged"
+          }
+        },
+        {
+          "ts": "2026-08-01T02:09:42Z",
+          "phase": "reason",
+          "action": "l5_confidence_score",
+          "detail": "score=79, base=82.21, data=100.0, consensus=73.33, strength=64.37, debate_adjustment=-3",
+          "status": "ok",
+          "layer": "L5_conclusion",
+          "metrics": {
+            "data_confidence": 100.0,
+            "data_confidence_detail": {
+              "derivatives": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 15,
+                "max_window_days": 78,
+                "required_count": 4,
+                "required_window_days": 7,
+                "persistence_covers_primary": true,
+                "reason": "15 筆，最長窗長 78 天"
+              },
+              "macro": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 4,
+                "max_window_days": 30,
+                "required_count": 2,
+                "required_window_days": 14,
+                "persistence_covers_primary": true,
+                "reason": "4 筆，最長窗長 30 天"
+              },
+              "news": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 10,
+                "max_window_days": 14,
+                "required_count": 5,
+                "required_window_days": 7,
+                "persistence_covers_primary": true,
+                "reason": "10 筆，最長窗長 14 天"
+              },
+              "onchain": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 4,
+                "max_window_days": 30,
+                "required_count": 2,
+                "required_window_days": 0,
+                "persistence_covers_primary": true,
+                "reason": "4 筆，最長窗長 30 天"
+              },
+              "price": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 17,
+                "max_window_days": 1826,
+                "required_count": 3,
+                "required_window_days": 14,
+                "persistence_covers_primary": true,
+                "reason": "17 筆，最長窗長 1826 天"
+              },
+              "social": {
+                "tier": 1.0,
+                "score": 16.67,
+                "count": 5,
+                "max_window_days": 7,
+                "required_count": 3,
+                "required_window_days": 3,
+                "persistence_covers_primary": true,
+                "reason": "5 筆，最長窗長 7 天"
+              }
+            },
+            "signal_consensus": 73.33,
+            "signal_consensus_detail": {
+              "sample_size": 6,
+              "directions": [
+                {
+                  "source_type": "price",
+                  "direction": -1,
+                  "basis": [
+                    "ev-001",
+                    "ev-002",
+                    "ev-003",
+                    "ev-006",
+                    "ev-008"
+                  ]
+                },
+                {
+                  "source_type": "onchain",
+                  "direction": 0,
+                  "basis": [
+                    "ev-017",
+                    "ev-018"
+                  ]
+                },
+                {
+                  "source_type": "derivatives",
+                  "direction": -1,
+                  "basis": [
+                    "ev-040",
+                    "ev-041",
+                    "ev-042",
+                    "ev-043",
+                    "ev-045",
+                    "ev-046"
+                  ]
+                },
+                {
+                  "source_type": "macro",
+                  "direction": -1,
+                  "basis": [
+                    "ev-036",
+                    "ev-037",
+                    "ev-039"
+                  ]
+                },
+                {
+                  "source_type": "news",
+                  "direction": 0,
+                  "basis": [
+                    "ev-021",
+                    "ev-022",
+                    "ev-023",
+                    "ev-024"
+                  ]
+                },
+                {
+                  "source_type": "social",
+                  "direction": -1,
+                  "basis": [
+                    "ev-031",
+                    "ev-032",
+                    "ev-033",
+                    "ev-034",
+                    "ev-035"
+                  ]
+                }
+              ],
+              "mean_pairwise_diff": 0.5333,
+              "degraded": false
+            },
+            "evidence_strength": 64.37,
+            "evidence_strength_detail": {
+              "per_type_avg_weight": {
+                "social": 0.21,
+                "news": 0.42,
+                "derivatives": 0.8,
+                "onchain": 0.85,
+                "macro": 0.65,
+                "price": 0.9324
+              },
+              "coverage": 1.0,
+              "avg_weight": 0.6437
+            },
+            "weights": {
+              "data_confidence": 0.4,
+              "signal_consensus": 0.4,
+              "evidence_strength": 0.2
+            },
+            "base": 82.21,
+            "debate_adjustment": -3,
+            "debate_adjustment_raw": -3,
+            "debate_adjustment_reason": "反方成功推翻正方Mempool、OI兩點並擊破Skew重新解讀，但正方CFTC配置與相對強弱核心論據未被推翻，整體互有勝負偏向正方略失分。",
+            "debate_adjustment_note": "",
+            "primary_horizon": "medium",
+            "structural_context_count": 6,
+            "final": 79,
+            "why": [
+              "✅ derivatives 資料完整（15 筆，最長窗長 78 天）",
+              "✅ macro 資料完整（4 筆，最長窗長 30 天）",
+              "✅ news 資料完整（10 筆，最長窗長 14 天）",
+              "✅ onchain 資料完整（4 筆，最長窗長 30 天）",
+              "✅ price 資料完整（17 筆，最長窗長 1826 天）",
+              "✅ social 資料完整（5 筆，最長窗長 7 天）",
+              "⚠ 辯論後下修 3 分：反方成功推翻正方Mempool、OI兩點並擊破Skew重新解讀，但正方CFTC配置與相對強弱核心論據未被推翻，整體互有勝負偏向正方略失分。",
+              "ℹ️ 另有 6 項結構脈絡（跨時間尺度的位置關係，不計入矛盾也不扣分），詳見報告第 3 節"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "panel4_report": {
+    "integrity_status": "INTACT",
+    "degraded_reasons": [],
+    "confidence": 79,
+    "market_judgment": "BTC與ETH近兩週均處於下行趨勢，但兩者在流動性、市場關注度與風險敞口上存在顯著差異：\n\n【流動性】BTC衍生品槓桿水位較低（資金費率百分位22.2，ev-040），槓桿清算風險相對可控；ETH資金費率百分位81.1（ev-047）、散戶多空比2.67（ev-049）顯示槓桿多頭堆積，流動性風險更高。BTC鏈上交易筆數穩定（ev-018），ETH鏈上活動絕對值仍低（ev-019）但趨勢回暖（ev-020）。\n\n【市場關注度】機構配置明確分化：BTC仍獲Asset Manager淨多配置（ev-044），ETH遭機構淨空且加碼（ev-051）。選擇權市場對BTC下行已充分定價（Skew +5.33%，ev-045），對ETH則偏向上行押注（Put/Call OI 0.71，ev-052），但這也意味ETH下行保護不足。\n\n【風險敞口】BTC短期動能惡化更快（10日-4.88%，ev-003；最新日-2.92%，ev-002），但長期結構壓力（MA60差距21%，ev-007）已被市場認知。ETH面臨「散戶槓桿多vs機構空」的結構性脆弱（ev-047、ev-049、ev-051），一旦觸發清算可能產生超額下行。\n\n【綜合判斷】在當前環境下，BTC因機構配置偏好、較低槓桿水位、下行風險已被較充分對沖，作為防禦性持倉更值得優先關注。ETH則在以下條件下更值得關注：若波動率突破壓縮區間向上、機構空頭開始回補、或鏈上活動持續回暖形成趨勢，ETH因估值壓縮更深（RSI更低、波動率百分位更低）可能提供更大的方向性彈性。但目前ETH的槓桿脆弱性與機構做空壓力構成額外風險，尚不具備優先配置條件。",
+    "summary": {
+      "confidence_label": "中",
+      "bull_argument": "**回應反方批評後的修正論證：BTC 相對於 ETH 更值得優先關注。**\n\n**對批評的回應：**\n\n1. 反方指出 ev-055 時效性問題及即時跌幅比較，部分成立。我承認「持續擴大」的措辭過強，且跨62天與14天的直接比較確有窗口不對等。但修正後核心論點仍成立：ev-055（weight=0.95）顯示的結構性 BTC 跑贏格局，加上 CFTC 機構配置方向分化（ev-044 vs ev-051，均為 07-28 最新數據），兩者共同指向 BTC 在機構眼中的相對優勢並未逆轉。單日跌幅差異（-2.37% vs -2.13%）僅 0.24 個百分點，不足以推翻長期結構。\n\n2. Mempool 解讀批評成立。我承認交易筆數持平（-0.40%，ev-018）與 Mempool 暴增並存，確實不能直接等同於「健康需求增長」。我撤回此點作為核心論據。\n\n3. OI 判讀時間粒度矛盾，批評成立。我承認 ev-041 的「價格上升」與日線跌幅存在矛盾，不再以此作為「槓桿壓力已釋放」的強論據。\n\n4. 敘事催化劑批評成立。ev-021 僅 weight=0.42，不足以支撐強結論，我降低此點權重。\n\n**修正後核心論證：**\n\n**一、機構配置方向是最具決定性的分化訊號。**CFTC 最新數據（07-28）：BTC Asset Manager 淨多 +2299（ev-044），ETH Asset Manager 淨空 -3472 且本週再加碼 -1052（ev-051）。兩者均為 weight=0.80、horizon=long 的高質量證據，直接反映機構對兩幣的風險偏好判斷。機構「做多 BTC、做空 ETH」的配置格局，是最強的相對優先關注理由。\n\n**二、ETH 槓桿結構脆弱性構成額外下行風險。**ETH 資金費率百分位 81.1（ev-047）、散戶多空比 2.67（ev-049），大量散戶槓桿多頭堆積，同時機構加碼做空（ev-051）。這種「散戶多 vs 機構空」的對立結構，歷史上常以多頭清算收場。BTC 資金費率百分位僅 22.2（ev-040），槓桿水位低，即使下跌，連環清算風險遠小於 ETH。\n\n**三、BTC 恐慌指標反而是相對優勢。**反方將 BTC Skew +5.33%（ev-045）解讀為「風險更高」，但高 put 溢價代表下行已被充分對沖定價。ETH Skew 僅 +1.86%（ev-052）看似溫和，實則代表市場尚未為 ETH 的下行風險充分定價——結合機構淨空加碼（ev-051），ETH 的「低恐慌」恰恰是風險未被反映的危險訊號。\n\n**四、相對強弱結構未逆轉。**ev-055（weight=0.95）確立的 BTC 跑贏格局，加上 BTC 近一年跌幅雖大（-44.49%，ev-005）但起點更高（113297），而 ETH 從較低起點仍持續走弱至 1865（ev-016），顯示 ETH 缺乏獨立支撐力。",
+      "bull_evidence_ids": [
+        "ev-044",
+        "ev-051",
+        "ev-047",
+        "ev-049",
+        "ev-040",
+        "ev-045",
+        "ev-052",
+        "ev-055",
+        "ev-005",
+        "ev-016",
+        "ev-018",
+        "ev-041",
+        "ev-001",
+        "ev-008"
+      ],
+      "bear_argument": "**ETH相對於BTC更值得優先關注，修正後論證：**\n\n**一、BTC短期動能惡化程度明顯超過ETH。**BTC最近一日暴跌-2.92%（ev-002，weight=0.95），10日跌幅-4.88%（ev-003，weight=0.95），加速下行態勢明確。ETH即時24h跌幅-2.13%（ev-016，weight=0.80）小於BTC的-2.37%（ev-008，weight=0.80）。在「最近兩週表現」的主視野內，BTC的下行動能更強，ETH正在相對企穩。\n\n**二、ETH技術面反彈條件遠優於BTC。**ETH RSI14=30.8接近超賣閾值（ev-014，weight=0.95），而BTC RSI14=45.3僅處中性（ev-006，weight=0.95）。超賣區域是技術性反彈的必要條件，ETH已具備而BTC尚未觸及。ETH波動率處全歷史第3.5百分位（ev-015，weight=0.95），比BTC的5.1百分位（ev-007，weight=0.95）壓縮更極端，方向性突破的彈性更大。\n\n**三、ETH選擇權市場實際偏向上行。**Put/Call OI比僅0.71（ev-052，weight=0.80），call持倉顯著多於put，市場用真金白銀押注ETH上行。25Δ Skew僅+1.86%（ev-052），遠低於BTC的+5.33%（ev-045），顯示ETH的下跌恐慌程度極低。正方將此解讀為「風險未被定價」，但同等邏輯下，BTC的高恐慌也可解讀為「市場預期BTC還會繼續跌」。\n\n**四、ETH鏈上活動趨勢正在轉折。**Gas Price 30天均值上升+29.85%（ev-020，weight=0.85），雖絕對值低，但趨勢拐點比絕對水平更具前瞻意義。BTC交易筆數近30天持平-0.40%（ev-018），實際鏈上使用量並無增長。\n\n**五、BTC結構性壓力更大。**BTC近一季跌-19.96%（ev-004）、近一年跌-44.49%（ev-005），處於加速下行通道。現價62887遠低於MA60=76044（ev-007），距離長期均線差距達21%，回歸壓力巨大但方向是繼續承壓。ETH近一季僅微跌（ev-012），下行斜率已趨平緩。",
+      "bear_evidence_ids": [
+        "ev-002",
+        "ev-003",
+        "ev-006",
+        "ev-007",
+        "ev-008",
+        "ev-014",
+        "ev-015",
+        "ev-016",
+        "ev-018",
+        "ev-020",
+        "ev-045",
+        "ev-052",
+        "ev-004",
+        "ev-005",
+        "ev-012"
+      ],
+      "has_debate": true,
+      "has_debate_summary": true,
+      "watchpoint": "ETH/BTC匯率連續5日走強且突破90日相對強弱下降趨勢線，顯示結構性輪動啟動",
+      "watchpoint_label": "最需留意的推翻條件"
+    },
+    "debate_summary": [
+      {
+        "point": "正方核心論據——CFTC機構配置BTC淨多vs ETH淨空（ev-044、ev-051）——反方批評其為long horizon與兩週主視野錯配，批評部分成立但未完全推翻：機構方向性仍是有效的相對偏好訊號，只是不能直接等同短期表現優勢。正方此點站得住但力度需下修。",
+        "evidence_ids": [
+          "ev-044",
+          "ev-051"
+        ],
+        "fingerprints": [
+          "F44",
+          "F51"
+        ]
+      },
+      {
+        "point": "反方成功推翻正方兩個初始論據：Mempool暴增（ev-018交易筆數持平-0.40%反駁「健康需求」解讀）及OI空頭回補（ev-041與ev-002日線跌-2.92%的時間粒度矛盾）。正方第二輪主動撤回，反方得分。",
+        "evidence_ids": [
+          "ev-018",
+          "ev-041",
+          "ev-002"
+        ],
+        "fingerprints": [
+          "F18",
+          "F41",
+          "F2"
+        ]
+      },
+      {
+        "point": "正方將BTC高Skew+5.33%（ev-045）重新解讀為「下行已被充分定價」，反方批評此為事後合理化——同日仍暴跌-2.92%（ev-002）反駁「風險已消除」。反方批評成立，正方此點不成立。",
+        "evidence_ids": [
+          "ev-045",
+          "ev-002"
+        ],
+        "fingerprints": [
+          "F45",
+          "F2"
+        ]
+      },
+      {
+        "point": "反方主張ETH技術面反彈條件更優（RSI=30.8接近超賣，ev-014），但未被正方反駁。然而需注意：ev-014截至05-31，距今62天，且即時價格1865較當時2007再跌7%（ev-016），RSI可能已進一步惡化或反彈，數據時效性嚴重不足，此點證據力大打折扣。",
+        "evidence_ids": [
+          "ev-014",
+          "ev-016"
+        ],
+        "fingerprints": [
+          "F14",
+          "F16"
+        ]
+      },
+      {
+        "point": "反方主張ETH短期跌幅小於BTC（24h -2.13% vs -2.37%，ev-016 vs ev-008），數據成立但差距僅0.24個百分點，統計意義有限。結合ev-055結構性BTC跑贏格局（weight=0.95），單日微小差異不足以逆轉結構判斷。正方在此點上更有說服力。",
+        "evidence_ids": [
+          "ev-016",
+          "ev-008",
+          "ev-055"
+        ],
+        "fingerprints": [
+          "F16",
+          "F8",
+          "F55"
+        ]
+      }
+    ],
+    "core_facts": [
+      {
+        "fingerprint": "F1",
+        "text": "BTC 過去 14 日（2026-07-18～07-31）收盤價由 64834.22 跌至 62887.88 USDT，跌幅 -3.00%，期間高 66956.15／低 62466.00。近 10 日（07-22～07-31）跌幅更陡，-4.88%。最近一日（07-31）單日跌 -2.92%，收盤 62887.88。CoinGecko 即時報價 62930 USD，24h 跌 -2.37%。"
+      },
+      {
+        "fingerprint": "F6",
+        "text": "BTC 技術指標（截至 07-31）：SMA7=64156.86、SMA14=64701.42、MA20=64474.83，現價均跌破三條均線。RSI14=45.3 處中性但位於近 30 天第 10 百分位（偏低端）。14 日報酬波動率 1.48%（近 30 天第 17 百分位，偏低）。7 日均量較前 7 日下降 -5.74%，量能處近 30 天第 17 百分位。"
+      },
+      {
+        "fingerprint": "F4",
+        "text": "結構脈絡：BTC 近一季（90 日）跌 -19.96%（78568→62887），近一年跌 -44.49%（113297→62887）。長期均線 MA60=76044.92、MA120=72613.46 均遠高於現價。近 14 日波動率位於全歷史第 5.1 百分位（極低波動），90 天滾動百分位 7.8。"
+      },
+      {
+        "fingerprint": "F9",
+        "text": "ETH 可用價格資料止於 2026-05-31（距執行日 62 天，缺少近兩個月數據）。截至 05-31 的 14 日（05-18～05-31）跌幅 -5.78%（2130→2007），近 10 日跌 -2.85%。最後一日收盤 2007.01，單日跌 -0.76%。CoinGecko 即時報價 1865.48 USD，24h 跌 -2.13%。"
+      },
+      {
+        "fingerprint": "F14",
+        "text": "ETH 技術指標（截至 05-31）：SMA7=2037.93、SMA14=2075.29、MA20=2120.37，收盤價均跌破。RSI14=30.8（接近超賣），期間曾低至 19.42。14 日報酬波動率 1.39%（近 30 天第 13 百分位）。7 日均量較前 7 日下降 -7.68%。"
+      },
+      {
+        "fingerprint": "F12",
+        "text": "結構脈絡：ETH 近一季（截至 05-31）微漲 +1.22%（1982→2007），近一年跌 -20.96%（2539→2007）。MA60=2227.64、MA120=2141.35 均高於當時收盤價。波動率位於全歷史第 3.5 百分位（極低）。"
+      },
+      {
+        "fingerprint": "F55",
+        "text": "雙幣相對指標（近 90 日截至 05-31）：日報酬相關係數 0.9293（高度正相關），Beta（BTC 對 ETH）0.7024。BTC 最大回撤 11.85% vs ETH 17.03%。相對強弱比值百分位 98.9%，顯示 BTC 在該期間大幅跑贏 ETH。"
+      },
+      {
+        "fingerprint": "F17",
+        "text": "BTC 鏈上：區塊高度 960496，24h 交易筆數 632600，mempool 待確認 9082 筆。算力近 30 天增 +3.53%（約 985 EH/s）。24h 交易筆數近 30 天幾乎持平（-0.40%），但 Mempool 待確認筆數近 30 天暴增 +2907%、大小增 +12362%，顯示近期鏈上擁堵急劇上升。"
+      },
+      {
+        "fingerprint": "F19",
+        "text": "ETH 鏈上：最新區塊 25656911，即時 Gas Price 0.05 Gwei（極低）。但 Etherscan 歷史數據顯示近 30 天 Gas Price 均值 1.09 Gwei，較前期上升 +29.85%。整體鏈上活動仍處低位。"
+      },
+      {
+        "fingerprint": "F40",
+        "text": "BTC 衍生品：資金費率 +0.00412%，近 30 天百分位 22.2（中性偏低）。OI 下降而價格上升→空頭回補跡象。散戶多空比 2.22、大戶多空比 1.57，同向偏多。期貨曲線 contango，當季年化基差 +4.12%、次季 +4.14%（溫和正價差）。選擇權 25Δ Skew +5.33%（put IV 高於 call IV，下跌避險溢價明顯）。Put/Call OI 比 0.99。Coinbase 溢價 -0.11%（無異常）。"
+      },
+      {
+        "fingerprint": "F47",
+        "text": "ETH 衍生品：資金費率 +0.00674%，近 30 天百分位 81.1（中性偏高但未達極端）。OI 上升且價格上升→多頭增倉。散戶多空比 2.67、大戶多空比 1.37，同向偏多。期貨曲線 contango，當季年化基差 +2.16%、次季 +2.30%（正價差較 BTC 低）。選擇權 25Δ Skew +1.86%（輕微 put 溢價）。Put/Call OI 比 0.71（call 持倉多於 put）。CEX 年化費率 +5.68% vs DEX +10.43%，差距不大。Coinbase 溢價 -0.10%（無異常）。"
+      },
+      {
+        "fingerprint": "F44",
+        "text": "CFTC 持倉（截至 07-28，長期脈絡）：Asset Manager 淨多 +2299（本週減 428），Leveraged Funds 淨空 -6873。機構配置型仍持淨多但在減倉。"
+      },
+      {
+        "fingerprint": "F51",
+        "text": "CFTC 持倉（截至 07-28，長期脈絡）：Asset Manager 淨空 -3472（本週再減 1052），Leveraged Funds 淨空 -5396。機構配置型對 ETH 持淨空且持續加碼空頭。"
+      },
+      {
+        "fingerprint": "F36",
+        "text": "Fear & Greed Index 當前值 27（Fear），近 30 天範圍 20-33，百分位 66.7%（在近期恐懼區間中偏高端）。美元匯率：USD/EUR=0.8707、USD/JPY=160.24。上次 FOMC 決議 07-29（3 天前），下次 09-16；下次 CPI 公布 08-12（11 天後）。"
+      },
+      {
+        "fingerprint": "F38",
+        "text": "BTC 供給節奏（結構脈絡）：上次減半 2024-04-20（第 4 次，獎勵 6.25→3.125 BTC），下次預估 2028-04-17（約 625 天後）。目前處於減半後約 2 年 3 個月的位置。"
+      },
+      {
+        "fingerprint": "F21",
+        "text": "Bitcoin Optech 近兩週發布 Newsletter #414-#416 及 Recap Podcast，#416（07-31）提及「企業／國家儲備」題材。無重大協議升級或安全事件報導。"
+      },
+      {
+        "fingerprint": "F26",
+        "text": "Ethereum Foundation 近期發布 Board Update（07-29）。較早期文章涉及 Devcon 8 門票（07-14）、AI agents 用於協議代碼（07-09）、政府與機構應用（07-01）、EF 新架構（06-23）。無重大硬分叉或安全事件。"
+      },
+      {
+        "fingerprint": "F31",
+        "text": "Reddit r/CryptoCurrency 近期熱門帖文主題包括：Coldcard 硬體錢包 3800 萬美元損失事件、MicroStrategy 自 6 月以來交易虧損約 1800 萬美元、Fed 與 BoJ 維持利率不變導致 BTC 跌至兩週低點、以及散戶「是時候賣出」的情緒帖。整體社群情緒偏悲觀。"
+      }
+    ],
+    "bullish_evidence": [
+      {
+        "fingerprint": "F44",
+        "evidence_id": "ev-044"
+      },
+      {
+        "fingerprint": "F51",
+        "evidence_id": "ev-051"
+      },
+      {
+        "fingerprint": "F47",
+        "evidence_id": "ev-047"
+      },
+      {
+        "fingerprint": "F49",
+        "evidence_id": "ev-049"
+      },
+      {
+        "fingerprint": "F40",
+        "evidence_id": "ev-040"
+      },
+      {
+        "fingerprint": "F45",
+        "evidence_id": "ev-045"
+      },
+      {
+        "fingerprint": "F52",
+        "evidence_id": "ev-052"
+      },
+      {
+        "fingerprint": "F55",
+        "evidence_id": "ev-055"
+      },
+      {
+        "fingerprint": "F5",
+        "evidence_id": "ev-005"
+      },
+      {
+        "fingerprint": "F16",
+        "evidence_id": "ev-016"
+      },
+      {
+        "fingerprint": "F18",
+        "evidence_id": "ev-018"
+      },
+      {
+        "fingerprint": "F41",
+        "evidence_id": "ev-041"
+      },
+      {
+        "fingerprint": "F1",
+        "evidence_id": "ev-001"
+      },
+      {
+        "fingerprint": "F8",
+        "evidence_id": "ev-008"
+      }
+    ],
+    "risk_evidence": [
+      {
+        "fingerprint": "F2",
+        "evidence_id": "ev-002"
+      },
+      {
+        "fingerprint": "F3",
+        "evidence_id": "ev-003"
+      },
+      {
+        "fingerprint": "F6",
+        "evidence_id": "ev-006"
+      },
+      {
+        "fingerprint": "F7",
+        "evidence_id": "ev-007"
+      },
+      {
+        "fingerprint": "F8",
+        "evidence_id": "ev-008"
+      },
+      {
+        "fingerprint": "F14",
+        "evidence_id": "ev-014"
+      },
+      {
+        "fingerprint": "F15",
+        "evidence_id": "ev-015"
+      },
+      {
+        "fingerprint": "F16",
+        "evidence_id": "ev-016"
+      },
+      {
+        "fingerprint": "F18",
+        "evidence_id": "ev-018"
+      },
+      {
+        "fingerprint": "F20",
+        "evidence_id": "ev-020"
+      },
+      {
+        "fingerprint": "F45",
+        "evidence_id": "ev-045"
+      },
+      {
+        "fingerprint": "F52",
+        "evidence_id": "ev-052"
+      },
+      {
+        "fingerprint": "F4",
+        "evidence_id": "ev-004"
+      },
+      {
+        "fingerprint": "F5",
+        "evidence_id": "ev-005"
+      },
+      {
+        "fingerprint": "F12",
+        "evidence_id": "ev-012"
+      }
+    ],
+    "limitations": [
+      "ETH價格數據僅至2026-05-31，距執行日62天，技術指標（RSI、均線、波動率）均為過時數據，無法準確反映近兩週真實狀態，僅能以CoinGecko即時報價（ev-016）做粗略推估",
+      "BTC衍生品OI判讀（ev-041）存在時間粒度矛盾（小時vs日線），無法確認空頭回補是否真實發生",
+      "CFTC持倉為長期配置訊號（horizon=long），與本題兩週主視野存在尺度落差，其對短期表現的預測力有限",
+      "雙幣相對強弱百分位（ev-055）截至05-31，62天後的即時相對表現可能已發生變化",
+      "ETH槓桿結構「散戶多vs機構空→清算」為歷史類比推論，缺乏本輪具體觸發條件的證據支持"
+    ],
+    "invalidation_conditions": [
+      "ETH/BTC匯率連續5日走強且突破90日相對強弱下降趨勢線，顯示結構性輪動啟動",
+      "ETH CFTC Asset Manager淨空頭寸轉為淨多或大幅回補（如從-3472回到-1500以內）",
+      "BTC資金費率百分位從22.2升至70以上且OI同步大幅增加，顯示BTC槓桿風險追上ETH",
+      "BTC跌破60000且ETH Gas Price持續上升至5 Gwei以上，顯示資金從BTC流向ETH生態"
+    ],
+    "follow_up_watchpoints": [
+      "ETH資金費率是否從百分位81.1繼續攀升至90+（若是則清算風險急劇上升），或回落至50以下（槓桿壓力釋放）",
+      "下次CFTC報告（約08-04）ETH Asset Manager淨空是否繼續擴大或出現回補跡象",
+      "08-12 CPI公布後BTC波動率是否從歷史第5.1百分位突破（方向性選擇的催化劑）",
+      "ETH/BTC即時匯率（當前約0.0296）是否跌破0.028或反彈至0.032以上，確認相對強弱方向"
+    ]
+  }
+}

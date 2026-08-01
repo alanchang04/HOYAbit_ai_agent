@@ -91,6 +91,31 @@ class TestLevelMapping:
         ev = _make_evidence(source=source, source_type=source_type)
         b = compute_four_factor_weight(ev, CONFIG)
         assert b.final_weight == pytest.approx(expected)
+
+    @pytest.mark.parametrize(
+        "source,source_type,expected",
+        [
+            # Phase 8.5（五檔粒度）／Phase 2（長期結構指標）新增的 price.py 來源字串，
+            # 落地時沒有同步補信譽表關鍵字，全部掉到預設 D 級（0.45）——
+            # 比 CoinGecko 聚合報價（0.80）還低，且會誤導辯論層對這些「官方基準／
+            # 決定性本地運算」證據的權重判讀（2026-07-30 真實跑實測發現）。
+            ("本地區間統計（依 BTC 日線 最近一日，非外部資料）", SourceType.PRICE, 0.95),
+            ("本地區間統計（依 BTC 日線 近一季，非外部資料）", SourceType.PRICE, 0.95),
+            (
+                "本地長期結構指標計算（依 data/BTC_daily_ohlcv.csv 全歷史 1826 日計算，非外部資料）",
+                SourceType.PRICE,
+                0.95,
+            ),
+            ("Binance Futures /fapi/v1/premiumIndex", SourceType.PRICE, 0.80),
+        ],
+    )
+    def test_price_five_granularity_and_perp_basis_sources_not_lost_to_default(
+        self, source, source_type, expected
+    ):
+        ev = _make_evidence(source=source, source_type=source_type)
+        b = compute_four_factor_weight(ev, CONFIG)
+        assert b.final_weight == pytest.approx(expected)
+        assert b.level_name != "D", f"{source!r} 落到預設等級，信譽表關鍵字又漏了"
         assert b.freshness == 1.0
         assert b.coverage_factor == 1.0
         assert b.dedup_factor == 1.0

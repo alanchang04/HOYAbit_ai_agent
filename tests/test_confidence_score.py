@@ -32,7 +32,7 @@ from agent.reasoning.confidence import (
     compute_evidence_strength,
     compute_signal_consensus,
 )
-from agent.schemas import Evidence, HorizonClass, SourceType, now_iso
+from agent.schemas import Evidence, HorizonClass, Persistence, SourceType, now_iso
 
 
 def _make_evidence(
@@ -41,6 +41,7 @@ def _make_evidence(
     eid: str = "ev-001",
     horizon: HorizonClass = HorizonClass.MEDIUM,
     window: tuple[str, str] | None = ("2026-07-01", "2026-07-30"),
+    persistence: Persistence = Persistence.MEDIUM,
 ) -> Evidence:
     return Evidence(
         id=eid,
@@ -54,10 +55,11 @@ def _make_evidence(
         horizon_class=horizon,
         window_start=window[0] if window else None,
         window_end=window[1] if window else None,
+        persistence=persistence,
     )
 
 
-def _full_coverage_evidences() -> list[Evidence]:
+def _full_coverage_evidences(persistence: Persistence = Persistence.MEDIUM) -> list[Evidence]:
     """六類都達「完整」門檻的證據集合（source_weight 一律 0.8）。"""
     out: list[Evidence] = []
     n = 0
@@ -65,7 +67,11 @@ def _full_coverage_evidences() -> list[Evidence]:
         min_count, _ = DATA_COMPLETENESS_THRESHOLD[source_type]
         for _ in range(min_count):
             n += 1
-            out.append(_make_evidence(source_type=source_type, eid=f"ev-{n:03d}", source_weight=0.8))
+            out.append(
+                _make_evidence(
+                    source_type=source_type, eid=f"ev-{n:03d}", source_weight=0.8, persistence=persistence
+                )
+            )
     return out
 
 
@@ -126,6 +132,57 @@ class TestDataConfidence:
         score, detail = compute_data_confidence([])
         assert score == 0.0
         assert all(item["tier"] == TIER_MISSING for item in detail.values())
+
+
+class TestPersistenceCoverageCheck:
+    """R8-2：有效期覆蓋檢查。修的是實測發現的自相矛盾——問「過去一年」時，
+    19 筆全短效期證據仍判六類「完整」拿 100 分，報告卻同時警告「主視野無可用證據」。
+
+    門檻刻意設在「差距 ≥2 帶」而非「只要短於主視野」，理由見 confidence.py
+    `_SEVERE_PERSISTENCE_MISMATCH_GAP` 的註解：字面版會讓 social（persistence=short）
+    在預設 primary=medium 下永遠卡在 partial，那正是三題型真實 Bedrock 驗證過的
+    最常見情境，不該回歸。
+    """
+
+    def test_default_medium_horizon_with_short_persistence_not_penalized(self):
+        """差距只有 1 帶（short→medium）：不觸發，維持已驗證的預設行為。"""
+        evidences = _full_coverage_evidences(persistence=Persistence.SHORT)
+        score, detail = compute_data_confidence(evidences, HorizonClass.MEDIUM)
+        assert score == pytest.approx(100.0, abs=0.1)
+        assert all(item["persistence_covers_primary"] for item in detail.values())
+
+    def test_structural_horizon_with_short_persistence_is_capped(self):
+        """design.md §3.9.2 的原始案例：問「過去一年」（primary=structural）但
+        全部是 short-persistence 證據，差距 3 帶——必須被扣分，不能再判「完整」。
+        """
+        evidences = _full_coverage_evidences(persistence=Persistence.SHORT)
+        score, detail = compute_data_confidence(evidences, HorizonClass.STRUCTURAL)
+        assert score == pytest.approx(60.0, abs=0.1)
+        assert all(item["tier"] == TIER_PARTIAL for item in detail.values())
+        assert all("覆蓋不到主視野" in item["reason"] for item in detail.values())
+
+    def test_long_persistence_covers_structural_horizon(self):
+        """persistence=long 視為能覆蓋到最長帶，即使主視野是 structural 也不扣分。"""
+        evidences = _full_coverage_evidences(persistence=Persistence.LONG)
+        score, detail = compute_data_confidence(evidences, HorizonClass.STRUCTURAL)
+        assert score == pytest.approx(100.0, abs=0.1)
+        assert all(item["persistence_covers_primary"] for item in detail.values())
+
+    def test_no_regression_when_primary_horizon_omitted(self):
+        """不傳 primary_horizon 時退回預設 medium，行為與傳 medium 完全相同。"""
+        evidences = _full_coverage_evidences(persistence=Persistence.SHORT)
+        score_default, _ = compute_data_confidence(evidences)
+        score_explicit, _ = compute_data_confidence(evidences, HorizonClass.MEDIUM)
+        assert score_default == score_explicit
+
+    def test_end_to_end_report_no_longer_self_contradictory(self):
+        """完整驗證：compute_confidence() 傳 primary_horizon 後，資料品質不再與
+        「主視野無可用證據」的報告揭露互相矛盾。"""
+        evidences = _full_coverage_evidences(persistence=Persistence.SHORT)
+        score, breakdown = compute_confidence(
+            evidences, {}, primary_horizon=HorizonClass.STRUCTURAL
+        )
+        assert breakdown["data_confidence"] == pytest.approx(60.0, abs=0.1)
 
 
 # --- 訊號一致性（對應舊制 contradiction_penalty）---

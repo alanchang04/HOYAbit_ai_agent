@@ -8,16 +8,24 @@ import csv
 import math
 from pathlib import Path
 
-from agent.schemas import EvidenceDraft, HorizonClass, now_iso
+from agent.schemas import DecayPattern, EvidenceDraft, HorizonClass, Persistence, now_iso
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+RAW_PRICE_DIR = Path(__file__).resolve().parent.parent.parent / "raw_data" / "price"
 WINDOW = 90  # 90 日窗口
+
+
+def _resolve_csv_path(ticker: str, data_dir: Path | None = None) -> Path:
+    """Explicit test/config paths win; normal runs prefer the refreshed extension cache."""
+    if data_dir is not None:
+        return data_dir / f"{ticker}_daily_ohlcv.csv"
+    extended = RAW_PRICE_DIR / ticker / f"{ticker}_daily_ohlcv.csv"
+    return extended if extended.exists() else DATA_DIR / f"{ticker}_daily_ohlcv.csv"
 
 
 def _load_closes(ticker: str, data_dir: Path | None = None) -> list[float]:
     """從本地 CSV 讀取收盤價（按日期升序）。"""
-    base = data_dir if data_dir else DATA_DIR
-    csv_path = base / f"{ticker}_daily_ohlcv.csv"
+    csv_path = _resolve_csv_path(ticker, data_dir)
     if not csv_path.exists():
         raise FileNotFoundError(f"找不到 {ticker} 的 OHLCV CSV: {csv_path}")
     closes: list[float] = []
@@ -30,8 +38,7 @@ def _load_closes(ticker: str, data_dir: Path | None = None) -> list[float]:
 
 def _load_dates(ticker: str, data_dir: Path | None = None) -> list[str]:
     """讀 CSV 的日期欄（升序），只給 horizon 標註用的觀察窗起訖，不參與任何計算。"""
-    base = data_dir if data_dir else DATA_DIR
-    csv_path = base / f"{ticker}_daily_ohlcv.csv"
+    csv_path = _resolve_csv_path(ticker, data_dir)
     with open(csv_path, "r", encoding="utf-8") as f:
         return [row["date"] for row in csv.DictReader(f)]
 
@@ -159,4 +166,7 @@ def compute_relative_metrics(
         # 90 日窗口＝31-180 天帶。相對強弱是「這一季誰比較強」的結構位置，
         # 不是當前訊號，不該與短窗方向訊號放在同一個矛盾判定裡。
         horizon_class=HorizonClass.LONG,
+        # 結構性比較，緩慢變化，跟 CME COT／供給節奏日曆同一類。
+        persistence=Persistence.LONG,
+        decay=DecayPattern.SLOW,
     )

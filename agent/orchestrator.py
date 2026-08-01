@@ -14,13 +14,15 @@ from datetime import date
 from pathlib import Path
 
 from agent.collectors.base import BaseCollector
-from agent.collectors.coin_map import detect_coins_in_text
+from agent.collectors.coin_map import detect_coins_in_text, get_coin_info
 from agent.collectors.derivatives import DerivativesCollector
 from agent.collectors.dry_run import DryRunCollector
+from agent.collectors.horizon import resolve_primary_horizon
 from agent.collectors.macro import MacroCollector
 from agent.collectors.news import NewsCollector
 from agent.collectors.onchain import OnchainCollector
 from agent.collectors.price import PriceCollector
+from agent.collectors.reference_pages import resolve_reference_url
 from agent.collectors.social import SocialCollector
 from agent.config import Settings, check_optional_keys, get_settings
 from agent.logging_utils import ExecutionLogger
@@ -77,12 +79,19 @@ def build_collectors(logger: ExecutionLogger, settings: Settings, dry_run: bool)
 
 
 async def collect_all(
-    collectors: list[BaseCollector], coins: list[str], remaining_seconds: float
+    collectors: list[BaseCollector],
+    coins: list[str],
+    remaining_seconds: float,
+    primary_horizon: HorizonClass | None = None,
 ) -> list[EvidenceDraft]:
     """對每個 collector × 每個幣種平行執行（比較分析題型會有 2 個幣種）。
 
     特例：macro collector 產出的是幣種無關的全域資料（Fear & Greed Index、
     央行匯率等），無論有幾個幣種都只用主幣種跑一次，避免重複證據。
+
+    `primary_horizon`（R8-5）：傳給每個 collector 的 `run()`／`fetch()`，各自
+    盡力依此調整查詢窗；`BaseCollector.run()` 用 `**kwargs` 透傳，不支援調整的
+    collector 會直接忽略這個參數、維持既有行為（R6-1 降級優先，不會因此失敗）。
     """
     if remaining_seconds <= 0:
         return []
@@ -90,10 +99,10 @@ async def collect_all(
     for c in collectors:
         if c.source_type == "macro":
             # macro 是幣種無關的全域資料，只用主幣種跑一次
-            tasks.append(c.run(coins[0]))
+            tasks.append(c.run(coins[0], primary_horizon=primary_horizon))
         else:
             for coin in coins:
-                tasks.append(c.run(coin))
+                tasks.append(c.run(coin, primary_horizon=primary_horizon))
     results = await asyncio.gather(*tasks)
     drafts: list[EvidenceDraft] = []
     for r in results:
@@ -136,10 +145,27 @@ def _horizon_annotation_issue(ev: Evidence) -> str | None:
     return None
 
 
+def _resolve_chain(coin: str) -> str | None:
+    """幣種 → 鏈別（供 onchain 的 RPC 端點對照瀏覽器）。未知幣種回 None。"""
+    try:
+        return get_coin_info(coin).chain
+    except Exception:  # noqa: BLE001 - 未知幣種不該中斷流程（R6-1）
+        return None
+
+
 def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Evidence]:
     evidences = []
     for i, draft in enumerate(drafts, start=1):
-        ev = Evidence(id=f"ev-{i:03d}", **draft.model_dump())
+        payload = draft.model_dump()
+        # 補上「人看的頁面」。集中在這裡推導而非散在 7 個 collector 的 32 個
+        # EvidenceDraft 呼叫點：對照表只有一份、可稽核、可單獨測，且新增來源時
+        # 不改 collector 也能受惠。collector 若自己就知道更好的頁面（例如 news／
+        # social 的原文網址），可直接填 reference_url，這裡不覆蓋。
+        if not payload.get("reference_url"):
+            payload["reference_url"] = resolve_reference_url(
+                payload.get("source_url"), draft.coin, _resolve_chain(draft.coin)
+            )
+        ev = Evidence(id=f"ev-{i:03d}", **payload)
         # horizon-aware R2-3：標註缺漏／矛盾只記警示 log，絕不拋錯或過濾掉證據（R6-1 降級優先）。
         issue = _horizon_annotation_issue(ev) if logger is not None else None
         if issue:
@@ -238,6 +264,17 @@ def run_pipeline(
 
     collectors = build_collectors(logger, settings, dry_run)
 
+    # R8-5：主視野在蒐集階段就先解出來，讓有能力調整查詢窗的 collector（如
+    # social／news）可以據此決定抓多長的窗；resolve_primary_horizon 是純函式，
+    # 跟 pipeline.py 推理層各自獨立呼叫同一份、結果必然一致，不需要跨層傳遞狀態。
+    primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
+    logger.log(
+        phase=LogPhase.COLLECT,
+        action="primary_horizon_for_collection",
+        detail=f"primary_horizon={primary_horizon.value}, basis={primary_horizon_basis or '（題目未明示，用預設）'}",
+        status=LogStatus.OK,
+    )
+
     elapsed = time.monotonic() - start_time
     remaining_before_collect = settings.hard_deadline_seconds - elapsed
     degraded_mode = elapsed > settings.degraded_mode_trigger_seconds
@@ -255,7 +292,9 @@ def run_pipeline(
         drafts: list[EvidenceDraft] = []
         degraded_reasons.append("collector timeout（已超過 degraded_mode_trigger_seconds）")
     else:
-        drafts = asyncio.run(collect_all(collectors, coins, remaining_before_collect))
+        drafts = asyncio.run(
+            collect_all(collectors, coins, remaining_before_collect, primary_horizon=primary_horizon)
+        )
 
     evidences = assign_evidence_ids(drafts, logger=logger)
 

@@ -1,4 +1,4 @@
-"""R1-2／R1-3／R1-5 缺口補齊：官方 CSV 末日 → 執行日之間以 Binance 公開日線補足。
+"""R1-2／R1-3／R1-5 缺口補齊：Coinbase 優先，缺日以 Binance 公開日線補足。
 
 全部用 mock，不打真實網路。驗的是併接規則與降級行為，不是 Binance 回傳的數字。
 """
@@ -16,6 +16,7 @@ from agent.collectors.horizon import utc_today
 from agent.collectors.price import (
     PriceCollector,
     build_gap_note,
+    coinbase_candles_to_rows,
     gap_days_since,
     klines_to_rows,
     splice_ohlcv,
@@ -43,6 +44,11 @@ def _open_time_ms(day) -> int:
 def _kline(day, close="100", volume="10"):
     ts = _open_time_ms(day)
     return [ts, "100", "110", "90", close, volume, ts + 86_399_999]
+
+
+def _coinbase_candle(day, close="100", volume="10"):
+    ts = _open_time_ms(day) // 1000
+    return [ts, "90", "110", "100", close, volume]
 
 
 def _write_csv(path, start_day, days: int):
@@ -104,6 +110,92 @@ def test_klines_to_rows_maps_fields_by_position():
     }]
 
 
+def test_coinbase_candles_to_rows_maps_sorts_and_drops_open_day():
+    today = utc_today()
+    payload = [
+        _coinbase_candle(today),
+        _coinbase_candle(today - timedelta(days=1), close="105"),
+        _coinbase_candle(today - timedelta(days=2), close="101"),
+    ]
+    rows = coinbase_candles_to_rows(payload, today=today)
+    assert [row["date"] for row in rows] == [
+        (today - timedelta(days=2)).isoformat(),
+        (today - timedelta(days=1)).isoformat(),
+    ]
+    assert rows[-1]["close"] == "105"
+
+
+@pytest.mark.asyncio
+async def test_gap_fill_prefers_coinbase_when_complete(logger, tmp_path):
+    csv_end = utc_today() - timedelta(days=4)
+    _write_csv(tmp_path / "BTC_daily_ohlcv.csv", csv_end - timedelta(days=200), 201)
+    gap = [_coinbase_candle(csv_end + timedelta(days=i)) for i in range(1, 4)]
+    calls = []
+
+    async def mock_get(url, **kwargs):
+        calls.append(url)
+        if "api.exchange.coinbase.com/products/BTC-USD/candles" in url:
+            return _resp(gap)
+        raise RuntimeError("其他來源本測試不驗")
+
+    collector = PriceCollector(logger, settings=_Settings(tmp_path))
+    with patch("agent.collectors.price.httpx.AsyncClient") as cls:
+        cls.return_value = _client(mock_get)
+        evidences = await collector.fetch("BTC")
+
+    ohlcv = next(e for e in evidences if "共同基準資料集" in e.source)
+    assert ohlcv.window_end == (utc_today() - timedelta(days=1)).isoformat()
+    assert "Coinbase Exchange USD 公開日線補齊" in ohlcv.content_reference
+    assert not any("api/v3/klines" in url for url in calls)
+
+
+@pytest.mark.asyncio
+async def test_formal_collector_uses_verified_cache_before_network(logger, tmp_path):
+    """7/31-style refreshed cache is the first formal gap source, not merely an artifact."""
+    csv_end = utc_today() - timedelta(days=4)
+    official_dir = tmp_path / "official"
+    raw_root = tmp_path / "raw_price"
+    coin_dir = raw_root / "BTC"
+    official_dir.mkdir()
+    coin_dir.mkdir(parents=True)
+    official_path = official_dir / "BTC_daily_ohlcv.csv"
+    _write_csv(official_path, csv_end - timedelta(days=200), 201)
+    official_rows = list(csv_module.DictReader(official_path.open(encoding="utf-8")))
+    extension = [
+        {
+            "date": (csv_end + timedelta(days=i)).isoformat(), "open": "100",
+            "high": "110", "low": "90", "close": str(100 + i), "volume": "10",
+        }
+        for i in range(1, 4)
+    ]
+    with (coin_dir / "BTC_daily_ohlcv.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv_module.DictWriter(handle, fieldnames=list(official_rows[0]))
+        writer.writeheader()
+        writer.writerows(official_rows + extension)
+    (raw_root / "update_manifest.json").write_text(
+        json.dumps({"coins": {"BTC": {"extended_end": extension[-1]["date"]}}}),
+        encoding="utf-8",
+    )
+
+    calls = []
+    async def mock_get(url, **kwargs):
+        calls.append(url)
+        raise RuntimeError("non-gap live sources are irrelevant to this test")
+
+    collector = PriceCollector(logger, settings=_Settings(official_dir))
+    with (
+        patch("agent.collectors.price.RAW_PRICE_DIR", raw_root),
+        patch("agent.collectors.price.httpx.AsyncClient") as cls,
+    ):
+        cls.return_value = _client(mock_get)
+        evidences = await collector.fetch("BTC")
+
+    ohlcv = next(e for e in evidences if "共同基準資料集" in e.source)
+    assert ohlcv.window_end == (utc_today() - timedelta(days=1)).isoformat()
+    assert "已驗證的 raw_data 價格快取" in ohlcv.content_reference
+    assert not any("/candles" in url or "api/v3/klines" in url for url in calls)
+
+
 def test_splice_prefers_csv_on_duplicate_date():
     """同日重複時保留 CSV：官方資料集是共同基準，補齊只補它沒涵蓋的日子。"""
     csv_rows = [{"date": "2026-05-31", "open": "1", "high": "1", "low": "1", "close": "CSV", "volume": "1"}]
@@ -160,7 +252,7 @@ async def test_gap_fill_success_advances_as_of_date(logger, tmp_path):
     ohlcv = next(e for e in evidences if "共同基準資料集" in e.source)
     # 當日未收盤那根被剔除，序列推進到昨天
     assert ohlcv.window_end == (utc_today() - timedelta(days=1)).isoformat()
-    assert "採 Binance 公開日線補齊" in ohlcv.content_reference
+    assert "Binance Spot USDT 公開日線補齊" in ohlcv.content_reference
     assert f"官方基準資料集止於 {csv_end.isoformat()}" in ohlcv.content_reference
 
 
@@ -224,6 +316,6 @@ async def test_no_gap_makes_zero_api_calls(logger, tmp_path):
         cls.return_value = _client(mock_get)
         evidences = await collector.fetch("BTC")
 
-    assert not [u for u in calls if "api/v3/klines" in u]
+    assert not [u for u in calls if "api/v3/klines" in u or "products/BTC-USD/candles" in u]
     ohlcv = next(e for e in evidences if "共同基準資料集" in e.source)
     assert "補齊" not in ohlcv.content_reference
