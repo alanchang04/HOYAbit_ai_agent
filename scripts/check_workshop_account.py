@@ -48,6 +48,15 @@ def _hr(title: str) -> None:
     print(f"\n{'=' * 66}\n{title}\n{'=' * 66}")
 
 
+def _is_inference_profile(model_id: str) -> bool:
+    """推論設定檔帶區域前綴（`global.` / `us.`）；裸模型 id 沒有。
+
+    裸 id 呼叫一律 ValidationException——新模型只能透過設定檔叫，所以試呼叫
+    階段直接略過它們，把時間花在真正可能可用的候選上。
+    """
+    return model_id.startswith(("global.", "us.", "eu.", "apac.", "jp."))
+
+
 def check_identity() -> str | None:
     """確認憑證有效、印出帳號 id。回傳帳號 id 供後續組 ARN 用。"""
     _hr("1. 憑證是否有效")
@@ -156,13 +165,22 @@ def main() -> int:
 
     _hr("3. 實際試呼叫（列得出來 ≠ 叫得動）")
     working: list[tuple[str, str]] = []
-    # Sonnet 系列優先試，其次其他；每個 region 最多試 6 個免得跑太久
+
+    # 2026-08-01 的教訓：初版把清單截斷成每區 6 個、又讓 sonnet 排前面，
+    # 結果 Opus 全被砍掉沒測到，害我回報「只有 Sonnet 4.5 可用」——實際上
+    # Opus 4.6／Sonnet 4.6 兩個 region 都能叫。**不要再截斷清單。**
+    # 另外只試推論設定檔：裸模型 id 一律 ValidationException，試它純浪費時間。
     def _rank(item: tuple[str, str]) -> tuple[int, str]:
         _, mid = item
-        return (0 if "sonnet" in mid.lower() else 1, mid)
+        # 新版本優先（4-6 > 4-5 > 4），同代 opus 排在 sonnet 前
+        newest = 0 if ("4-6" in mid or "-5" in mid.rsplit(".", 1)[-1][:20]) else 1
+        return (newest, mid)
 
     for region in EVENT_REGIONS:
-        in_region = sorted([c for c in candidates if c[0] == region], key=_rank)[:6]
+        in_region = sorted(
+            [c for c in candidates if c[0] == region and _is_inference_profile(c[1])],
+            key=_rank,
+        )
         if in_region:
             print(f"\n--- {region} ---")
         for _, model_id in in_region:
