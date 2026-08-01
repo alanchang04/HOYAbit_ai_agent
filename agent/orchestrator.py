@@ -44,6 +44,12 @@ SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 # 產出），所以推理層拿到的 deadline 要比真正的截止早一點，不能剛好用滿。
 REPORT_RESERVE_SECONDS = 20
 
+# 一題最多蒐集幾個幣種的證據。比較題型「題目提到幾個就抓幾個」，這個上限純粹是
+# 時間與 prompt 長度的保護：collector 之間是平行的（牆鐘不隨幣種數線性成長），
+# 但證據筆數會——實測 2 幣種約 40-47 筆、Step D 的 prompt 已達 18k 字。
+# 3 個幣種約 60-70 筆仍在 15 分鐘預算內。超出上限的幣種會照實揭露為未涵蓋。
+MAX_COMPARISON_COINS = 3
+
 
 @dataclass
 class RunResult:
@@ -173,25 +179,33 @@ def run_pipeline(
     # 否則嘗試從題目文字自動偵測（題目模板通常會直接寫出「比較【幣種A】與
     # 【幣種B】」）。偵測不到就維持單幣種證據，report 會依既有 framing
     # 在限制中明確揭露比較對象資料不足，而非憑空比較。
-    # 題目提到但本次不會蒐集的幣種（多於 MAX_COMPARISON_COINS 時）。報告要誠實揭露，
+    # 題目提到、但超出上限而沒蒐集的幣種。報告要誠實揭露，
     # 不能讓模型去比較一個它根本沒有資料的幣。
     uncovered_coins: list[str] = []
+    # 主幣以外、本次也會蒐集證據的幣種（比較題型才有）。
+    extra_coins: list[str] = []
     if question_type == "comparison":
         detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
-        if coin2 is None and detected:
-            coin2 = detected[0]
-        # 題目提到三個以上幣種時，`coin2` 只裝得下一個。其餘的既然蒐集不到，
-        # 就必須讓下游知道——否則模型會拿「題目要我比較 SOL」和「證據裡沒有 SOL」
-        # 硬湊，那是憑空比較。
-        extra = [c for c in detected if c != (coin2 or "").upper()]
-        if extra:
-            uncovered_coins = extra
+        if coin2:
+            # 使用者用 --coin2 明確指定時，把它排到最前面（其餘偵測到的仍會蒐集）
+            coin2 = coin2.upper()
+            detected = [coin2] + [c for c in detected if c != coin2]
+        # **題目提到幾個幣就蒐集幾個**，不是只取第一個。少蒐集一個幣的代價是
+        # 題目根本回答不了，而且錯在蒐集階段、事後無法補救；多蒐集的代價只是
+        # 多花一點時間與 prompt 長度。上限 MAX_COMPARISON_COINS 是時間預算的保護，
+        # 不是設計取捨——超出的部分照實揭露，不假裝有分析到。
+        extra_coins = detected[: MAX_COMPARISON_COINS - 1]
+        uncovered_coins = detected[MAX_COMPARISON_COINS - 1 :]
+        # `coin2` 是既有下游（framing／相對指標／報告標題）的相容欄位，
+        # 維持「第一個非主幣」的語意。完整清單走 `coins`。
+        coin2 = extra_coins[0] if extra_coins else None
+        if uncovered_coins:
             logger.log(
                 phase=LogPhase.COLLECT,
                 action="comparison_coins_uncovered",
                 detail=(
-                    f"題目提到 {', '.join(extra)} 但本次僅蒐集 {coin.upper()}"
-                    f"{f'／{coin2}' if coin2 else ''} 的證據，報告需揭露此限制"
+                    f"題目提到 {', '.join(uncovered_coins)} 但超出本次蒐集上限"
+                    f"（{MAX_COMPARISON_COINS} 個幣種），報告需揭露此限制"
                 ),
                 status=LogStatus.SKIPPED,
             )
@@ -213,7 +227,7 @@ def run_pipeline(
     else:
         coin2 = None
 
-    coins = [coin] + ([coin2] if coin2 else [])
+    coins = [coin] + extra_coins
 
     logger.log(
         phase=LogPhase.COLLECT,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.collectors.coin_map import SUPPORTED_COINS
 from agent.filters.injection import escape_for_markdown
 from agent.filters.source_weights import reputation_appendix_lines
 from agent.reasoning.confidence import confidence_label
@@ -38,6 +39,20 @@ def validate_evidence_references(result: ReasoningResult, evidences: list[Eviden
         raise EvidenceReferenceError(
             f"報告引用了不存在於 evidence.json 的 id: {sorted(missing)}"
         )
+
+
+def _coins_with_evidence(coin: str, evidences: list[Evidence]) -> list[str]:
+    """本次實際有證據的幣種（主幣在前，依證據出現順序去重）。
+
+    **只認幣種池成員**：雙幣相對指標那筆證據的 `coin` 是 `"BTC/ETH"` 這種合成值，
+    直接取 `e.coin` 會讓它變成一個假幣種混進清單。
+    """
+    seen = [coin.upper()]
+    for e in evidences:
+        c = (e.coin or "").upper()
+        if c in SUPPORTED_COINS and c not in seen:
+            seen.append(c)
+    return seen
 
 
 def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
@@ -333,7 +348,10 @@ def build_report_markdown(
     # 條列裡——讀者必須在讀任何比較結論之前就知道「這份比較少了誰」，
     # 否則會誤以為結論涵蓋了題目要求的全部對象。
     if uncovered_coins:
-        covered = coin + (f"／{coin2}" if coin2 else "")
+        # 涵蓋清單要用「實際有證據的所有幣種」，不能只印 coin/coin2——
+        # 三個幣種時 coin2 只裝得下第二個，印出來會少報一個已分析的幣。
+        covered_coins = _coins_with_evidence(coin, evidences)
+        covered = "／".join(covered_coins)
         lines.append(
             f"> ⚠ 題目提到 **{'、'.join(uncovered_coins)}**，但本次**未蒐集其證據**，"
             f"以下比較僅涵蓋 {covered}。缺漏對象的任何結論都不應由本報告推得。"

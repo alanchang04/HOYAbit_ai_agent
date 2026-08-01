@@ -12,6 +12,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from agent.collectors.coin_map import SUPPORTED_COINS
 from agent.collectors.horizon import resolve_primary_horizon
 from agent.filters.injection import is_quarantined
 from agent.logging_utils import ExecutionLogger
@@ -482,11 +483,13 @@ def _real_reasoning(
     # `coin2` 只裝得下一個幣，但題目可能提到三個以上（orchestrator 只蒐集得到它
     # 解析出來的那些）。framing 需要知道「證據實際涵蓋哪些幣」，才不會叫模型去比較
     # 一個它根本沒有資料的幣種。
-    coins_with_evidence = [coin.upper()] + [
-        c
-        for c in dict.fromkeys(e.coin.upper() for e in evidences if e.coin)
-        if c != coin.upper()
-    ]
+    # 只認幣種池成員：雙幣相對指標那筆證據的 coin 是 "BTC/ETH" 這種合成值，
+    # 直接取 e.coin 會讓它變成一個假幣種混進清單。
+    coins_with_evidence = [coin.upper()]
+    for e in evidences:
+        c = (e.coin or "").upper()
+        if c in SUPPORTED_COINS and c not in coins_with_evidence:
+            coins_with_evidence.append(c)
     # 主視野由題目的時間範圍決定（R7-2）：問「最近一年」時 long/structural 才是
     # 當前訊號，五年結構資料不該被排除在共識投票外。未明示時沿用預設 medium。
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)

@@ -707,3 +707,57 @@ class TestUncoveredCoinsAreDisclosed:
     def test_no_note_when_all_coins_covered(self):
         assert "未蒐集其證據" not in self._report(None)
         assert "未蒐集其證據" not in self._report([])
+
+
+class TestHardWallClockCapPerCall:
+    """`read_timeout` 不是總時長上限——實測一次呼叫跑了 6756s（read_timeout=150s）。
+
+    原因是 `read_timeout` 量的是「兩次 socket 讀取之間的間隔」，Bedrock 的連線
+    只要持續有資料進來，計時器就一直被重置。唯一可靠的總時長上限是呼叫端強制中斷。
+    """
+
+    def _client(self):
+        from agent.config import Settings
+        from agent.reasoning.bedrock_client import BedrockClient
+
+        return BedrockClient(Settings(), max_retries=1)
+
+    def test_slow_call_is_aborted_at_the_cap(self):
+        import time
+
+        from agent.reasoning.bedrock_client import BedrockClientError
+
+        c = self._client()
+        c.deadline = time.monotonic() + 20  # _effective_timeout ≈ 20-10-5 = 5s
+
+        class HangingClient:
+            def converse(self, **kwargs):
+                time.sleep(30)  # 遠超過上限，但「連線正常」
+                return {}
+
+        c._clients = {}
+        c._client_with_timeout = lambda t: HangingClient()
+
+        started = time.monotonic()
+        with pytest.raises(BedrockClientError) as exc:
+            c.converse("sys", "user")
+        elapsed = time.monotonic() - started
+        assert "硬上限" in str(exc.value)
+        assert elapsed < 15, f"沒有在上限附近中斷，實際等了 {elapsed:.1f}s"
+
+    def test_fast_call_is_unaffected(self):
+        import time
+
+        c = self._client()
+        c.deadline = time.monotonic() + 300
+
+        class FastClient:
+            def converse(self, **kwargs):
+                return {
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                    "output": {"message": {"content": [{"text": "ok"}]}},
+                    "stopReason": "end_turn",
+                }
+
+        c._client_with_timeout = lambda t: FastClient()
+        assert c.converse("sys", "user") == "ok"
