@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import uuid
+from pathlib import Path
 
 if sys.platform == "win32":
     # Windows 終端機預設非 UTF-8 codepage，避免中文輸出亂碼
@@ -67,14 +69,22 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
+    # 未明確指定 --output-dir 時，比照 webapp（output/webapp_runs/<run_id>/）給每次
+    # CLI 執行一個獨立子目錄——否則會落回固定的 output/，每次重跑覆蓋上一次的
+    # report.md／evidence.json／execution_log.jsonl，舊紀錄無從查證。使用者明確
+    # 指定路徑時尊重其選擇（可能仍會覆蓋，但那是主動選的，不是預設行為的坑）。
+    output_dir = args.output_dir
+    if output_dir is None:
+        output_dir = str(Path("output") / "cli_runs" / uuid.uuid4().hex[:8])
+
     result = run_pipeline(
-        coin=coin, question=args.question, dry_run=args.dry_run, output_dir=args.output_dir, coin2=coin2,
+        coin=coin, question=args.question, dry_run=args.dry_run, output_dir=output_dir, coin2=coin2,
         with_baseline=args.with_baseline,
     )
 
     print(f"執行完成，耗時 {result.elapsed_seconds:.2f} 秒（degraded_mode={result.degraded_mode}）")
     print(f"證據筆數：{len(result.evidences)}")
-    print("已產出 report.md / evidence.json / execution_log.jsonl 於輸出目錄。")
+    print(f"已產出 report.md / evidence.json / execution_log.jsonl 於 {output_dir}/")
     return 0
 
 
