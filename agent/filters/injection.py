@@ -101,8 +101,9 @@ def _p(code: str, severity: str, regex: str, desc: str) -> InjectionPattern:
 #
 # 規則寫在**正規化後**的文字上（NFKC＋去不可見字元＋casefold），所以
 # 「ｉｇｎｏｒｅ　ｐｒｅｖｉｏｕｓ」與「i<ZWSP>gnore previous」都會命中。
-# 格式破壞（換行／`|`）則必須看**原文**，因為 NFKC 會把 collector 自己用的
-# 全形 `｜` 正規化成半形 `|`，在正規化文字上檢查會全部誤判。
+# 也因為 NFKC 會把 collector 自己用的全形 `｜` 轉成半形 `|`，任何「以分隔符
+# 判斷格式破壞」的規則放在這裡都會全滅——這是格式破壞不列為命中的技術原因之一
+# （另一個更根本的原因見 `_scan_text` 的實測數據）。
 #
 # 選詞原則：寧可漏抓也不要誤殺——每條都要求多詞共現或結構性特徵，
 # 不收「ignore」「urgent」這種單字。BTC 的官方源 Bitcoin Optech 是技術電子報，

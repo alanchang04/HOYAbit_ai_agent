@@ -62,6 +62,30 @@
 - **Docker image 已 push 到 ECR**（`hoyabit-agent:latest`，`ap-northeast-1`）
 - App Runner 所需 IAM role（ECR 存取角色＋Bedrock 呼叫用 instance role）已建立
 
+### Stage 7：爬蟲證據的 prompt injection 防護（2026-08-01）
+> 完整記錄見 **`SECURITY_prompt_injection.md`**，以下只列重點。
+
+- 動機：`news`／`social` 抓的是任何人都能發布的公開內容（Reddit 標題與作者名、
+  RSS title/summary、第三方 `og:description`），改版前原封不動流進四個下游邊界。
+  證據清單以 ` | ` 分欄、換行分列，一則貼文含換行＋`|` 就能偽造出一整筆高權重證據
+- `agent/filters/injection.py`（純程式、零 LLM 呼叫，與 L2 其他 check 同層）：
+  - **跳脫（主力）**：不可見字元／控制字元／換行／半形 `|`／長度洪水一律中和，
+    結構性防線，不依賴詞庫猜得中什麼是攻擊
+  - **偵測與隔離**：13 條規則（含針對本專案的 `SCHEMA_HIJACK`、`EVIDENCE_FORGERY`）。
+    比對走 NFKC＋去不可見字元＋casefold 的**副本**，全形字與零寬夾藏都擋得下；
+    high → 不進任何 LLM prompt，但完整留在 `evidence.json`（比照 dedup 可回溯慣例）
+  - 不改 `content_reference`、不動 `source_weight` 與四因子契約
+- 四道邊界全部收口（原本只有第一道被注意到）：證據清單／baseline 對照組／
+  `report.md` 引用列／四面板 view。清單加證據區塊界線標記，並誠實揭露隔離筆數
+- 順帶修掉兩個既有問題：(a) `known_ids` 未排除隔離者 → 模型引用被隔離 id 時
+  `_sanitize_ids` 會放行、內容經 `report.md` 重新出現，等於隔離白做；
+  (b) L3 `removal_rate` 把隔離筆數算成「事實層剔除」，既記錯層別又灌高對外品質指標
+- **誤報教訓**：初版把換行與半形 `|` 列為命中，拿 `output/` 598 筆真實證據掃描
+  誤報 57 筆（9.5%）**全部是我們自己 collector 的格式**、零筆真實攻擊。
+  已改為不列為命中（跳脫本來就無條件中和它們），修正後同一份語料 0 誤報
+- 驗證：`tests/test_injection_filter.py` 43 項、全套 656 項通過、真實語料 0 誤報、
+  惡意 Atom feed 端到端 6 項檢核通過
+
 ## 尚未完成 / 待辦
 
 1. **App Runner service 建立**（阻塞項，非程式問題）：ECR image 與 IAM role 都已就緒，但建立 service 被 AWS 帳號「Free plan」限制擋住（`SubscriptionRequiredException`），需要完成帳號驗證或升級方案才能繼續
