@@ -123,10 +123,51 @@ class ReasoningResult:
     # 讀者才能檢查系統有沒有誤解題目的時間範圍。
     primary_horizon: str = "medium"
     primary_horizon_basis: str = ""
+    # 依主題分組的事實重述（v1.2 新增，附加欄位，不動 Evidence.related_claim）。
+    # 見 `_build_related_claims()`。
+    related_claims: list[dict] = field(default_factory=list)
 
 
 class ReasoningStepError(RuntimeError):
     """某一步驟呼叫 LLM 或解析回應失敗時拋出，由呼叫端決定如何降級處理。"""
+
+
+# source_type → 中文主題標籤，僅用於組 related_claims 的 topic 字串。
+_SOURCE_TYPE_LABEL: dict[str, str] = {
+    "price": "價格",
+    "onchain": "鏈上",
+    "news": "新聞",
+    "social": "社群",
+    "macro": "總經",
+    "derivatives": "衍生品",
+}
+
+
+def _build_related_claims(facts: list[dict]) -> list[dict]:
+    """把已通過 grounding 稽核的 facts 依 (coin, source_type) 分組，重組成
+    `{"topic": ..., "related_claims": [...]}` 的附加結構。
+
+    刻意不呼叫新的 LLM、不新增判斷——facts 的 summary 已經是逐字轉錄且通過
+    grounding 稽核的事實，這裡只是換一種分組方式呈現，是「真正的 claim
+    mapping」之前的輕量第一版；不動 `Evidence.related_claim`（主題標籤欄位，
+    80+ 呼叫點沿用原樣）。
+    """
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for fact in facts:
+        summary = fact.get("summary", "")
+        if not isinstance(summary, str) or not summary.strip():
+            continue
+        source_type = fact.get("source_type", "") or ""
+        coin = fact.get("coin", "") or ""
+        key = (coin, source_type)
+        grouped.setdefault(key, []).append(summary)
+
+    result: list[dict] = []
+    for (coin, source_type), claims in grouped.items():
+        label = _SOURCE_TYPE_LABEL.get(source_type, source_type or "未分類")
+        topic = f"{coin} {label}".strip() if coin else label
+        result.append({"topic": topic, "related_claims": claims})
+    return result
 
 
 def _dry_run_reasoning(
@@ -152,6 +193,7 @@ def _dry_run_reasoning(
 
     facts = [
         {
+            "source_type": stype,
             "summary": f"（dry-run 假資料）{stype} 類來源共 {len(evs)} 筆證據可供參考。",
             "evidence_ids": [e.id for e in evs],
         }
@@ -237,6 +279,7 @@ def _dry_run_reasoning(
         confidence_breakdown=breakdown,
         primary_horizon=primary_horizon.value,
         primary_horizon_basis=primary_horizon_basis,
+        related_claims=_build_related_claims(facts),
     )
 
 
@@ -938,6 +981,7 @@ def _real_reasoning(
         confidence_breakdown=breakdown,
         primary_horizon=primary_horizon.value,
         primary_horizon_basis=primary_horizon_basis,
+        related_claims=_build_related_claims(facts),
     )
 
 

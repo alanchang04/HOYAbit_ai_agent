@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from agent.reasoning.pipeline import run_reasoning
+from agent.reasoning.pipeline import _build_related_claims, run_reasoning
 from agent.schemas import Evidence, now_iso
 
 
@@ -606,3 +606,54 @@ class TestStepAGroundingRetry:
 
         assert len(result.facts) == 1
         assert client.call_count == 5
+
+
+class TestBuildRelatedClaims:
+    """v1.2 新增：把 facts 依 (coin, source_type) 分組成 topic → claims 附加結構，
+    不動 `Evidence.related_claim`，也不呼叫新的 LLM（見 pipeline.py 的說明）。"""
+
+    def test_groups_by_coin_and_source_type(self):
+        facts = [
+            {"source_type": "onchain", "coin": "BTC", "summary": "鏈上活躍地址數上升", "evidence_ids": ["ev-001"]},
+            {"source_type": "onchain", "coin": "BTC", "summary": "交易量近兩週下降", "evidence_ids": ["ev-002"]},
+            {"source_type": "price", "coin": "BTC", "summary": "收盤價持穩", "evidence_ids": ["ev-003"]},
+        ]
+        result = _build_related_claims(facts)
+
+        by_topic = {item["topic"]: item["related_claims"] for item in result}
+        assert by_topic["BTC 鏈上"] == ["鏈上活躍地址數上升", "交易量近兩週下降"]
+        assert by_topic["BTC 價格"] == ["收盤價持穩"]
+
+    def test_missing_coin_falls_back_to_label_only_topic(self):
+        facts = [{"source_type": "macro", "summary": "美元走強", "evidence_ids": ["ev-001"]}]
+        result = _build_related_claims(facts)
+        assert result == [{"topic": "總經", "related_claims": ["美元走強"]}]
+
+    def test_empty_or_blank_summary_is_skipped(self):
+        facts = [
+            {"source_type": "price", "coin": "BTC", "summary": "", "evidence_ids": []},
+            {"source_type": "price", "coin": "BTC", "summary": "   ", "evidence_ids": []},
+        ]
+        assert _build_related_claims(facts) == []
+
+    def test_unknown_source_type_falls_back_to_raw_value(self):
+        facts = [{"source_type": "weird_type", "coin": "BTC", "summary": "x", "evidence_ids": []}]
+        result = _build_related_claims(facts)
+        assert result[0]["topic"] == "BTC weird_type"
+
+
+def test_run_reasoning_populates_related_claims():
+    """STEP_A_RESPONSE 沒有 coin 欄位（`_sanitize_facts` 只在模型有回傳時才保留），
+    topic 落回純標籤——這正是 `_build_related_claims` 對缺 coin 的降級行為。"""
+    client = FakeLLMClient([STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, BEAR_CONVERGED_RESPONSE, STEP_D_RESPONSE])
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.related_claims == [{"topic": "價格", "related_claims": ["s"]}]
+
+
+def test_dry_run_also_populates_related_claims():
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(2), dry_run=True)
+
+    assert len(result.related_claims) == 1
+    assert result.related_claims[0]["topic"] == "價格"  # dry-run facts 沒有 coin 欄位

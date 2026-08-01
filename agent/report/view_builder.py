@@ -507,6 +507,7 @@ def _build_panel4(
         "limitations": limitations,
         "invalidation_conditions": conclusion.get("invalidation_conditions", []),
         "follow_up_watchpoints": reasoning_result.follow_up_watchpoints,
+        "related_claims": reasoning_result.related_claims,
     }
 
 
