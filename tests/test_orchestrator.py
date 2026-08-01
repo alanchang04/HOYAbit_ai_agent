@@ -90,6 +90,10 @@ def test_degraded_mode_triggers_and_skips_collection(monkeypatch, tmp_path):
     assert (tmp_path / "report.md").exists()
     assert (tmp_path / "evidence.json").exists()
     assert (tmp_path / "execution_log.jsonl").exists()
+    assert (tmp_path / "report.html").exists()
+    assert (tmp_path / "evidence.html").exists()
+    assert (tmp_path / "execution_log.html").exists()
+    assert (tmp_path / "deliverables.html").exists()
 
     log_text = (tmp_path / "execution_log.jsonl").read_text(encoding="utf-8")
     assert "degraded_mode" in log_text

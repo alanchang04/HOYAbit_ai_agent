@@ -70,6 +70,11 @@ def _dry_run_reasoning(
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
     by_type: dict[str, list[Evidence]] = {}
     for ev in evidences:
+        # dry-run fixture 會刻意注入一筆重複轉載，讓評審在零成本模式也能看到
+        # 「原始證據 → 去重後事實」的實際差異。Evidence 仍完整保留供回溯，
+        # 但已標 duplicate_of 的項目不再進入事實層。
+        if ev.duplicate_of is not None:
+            continue
         by_type.setdefault(ev.source_type.value, []).append(ev)
 
     facts = [
@@ -98,7 +103,7 @@ def _dry_run_reasoning(
             metrics={"input": input_count, "kept": kept_count, "removed": removed_count, "removal_rate": round(removal_rate, 4)},
         )
 
-    all_ids = [e.id for e in evidences]
+    all_ids = [e.id for e in evidences if e.duplicate_of is None]
     coin_label = f"{coin} 與 {coin2}" if coin2 else coin
 
     cross_validation = {

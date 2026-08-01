@@ -154,7 +154,7 @@ class RunMetrics(BaseModel):
     confidence: int = 0
     noise_removal_rate: float = 0.0
     total_tokens: int = 0
-    integrity_status: str = "INTACT"  # INTACT | DEGRADED
+    integrity_status: str = "INTACT"  # INTACT | PARTIAL | DEGRADED
     raw_evidence_count: int = 0
     kept_fact_count: int = 0
     degraded_reasons: list[str] = Field(default_factory=list)

@@ -42,10 +42,18 @@ def dry_run_result(client: TestClient) -> dict:
 def test_index_renders(client: TestClient) -> None:
     resp = client.get("/")
     assert resp.status_code == 200
+    assert "一鍵觀看信任提煉 Demo" in resp.text
 
 
 def test_result_page_renders(dry_run_result: dict) -> None:
     assert "報告" in dry_run_result["html"]
+    assert "目前判斷" in dry_run_result["html"]
+    assert "三個核心依據" in dry_run_result["html"]
+    assert "展開完整分析報告與執行紀錄" in dry_run_result["html"]
+    assert "deliverables.html" in dry_run_result["html"]
+    assert "report.html" in dry_run_result["html"]
+    assert "evidence.html" in dry_run_result["html"]
+    assert "execution_log.html" in dry_run_result["html"]
 
 
 def test_result_page_stat_cards_not_na(dry_run_result: dict) -> None:
@@ -69,6 +77,11 @@ def test_view_page_renders_four_panels(client: TestClient, dry_run_result: dict)
     assert resp.status_code == 200
 
     html = resp.text
+    assert "投資者決策摘要" in html
+    assert "三個核心依據" in html
+    assert "推翻／觀察條件" in html
+    assert '<details class="technical-detail">' in html
+    assert "提煉介入率" in html
     assert "原始證據流" in html
     assert "信任提煉流水線" in html
     # R12 改版後的新區塊
@@ -98,3 +111,13 @@ def test_view_page_l5_layer_expanded_by_default(client: TestClient, dry_run_resu
 def test_view_page_unknown_run_id_404(client: TestClient) -> None:
     resp = client.get("/view/doesnotexist")
     assert resp.status_code == 404
+
+
+def test_legacy_demo_is_normalized_and_marked_partial(client: TestClient) -> None:
+    """既有 wsopus46 產於 v1.1 護欄前；顯示時不得保留已知矛盾或錯標 INTACT。"""
+    resp = client.get("/view/wsopus46")
+    assert resp.status_code == 200
+    assert "15個月" not in resp.text
+    assert "2年3個月" in resp.text
+    assert "PARTIAL" in resp.text
+    assert "BTC 缺少 onchain 資料" in resp.text
