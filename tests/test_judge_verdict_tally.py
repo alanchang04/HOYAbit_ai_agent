@@ -111,7 +111,7 @@ class TestTallyDrivesConfidence:
         _, bd = compute_confidence(
             [], {}, debate_summary=[_point("bear_valid"), _point("bull_defended")],
         )
-        assert "反方批評成立 1 點 × -3" in bd["debate_verdict_detail"]
+        assert "反方成立 1 點 × -3" in bd["debate_verdict_detail"]
         assert "正方擋下 1 點 × +1" in bd["debate_verdict_detail"]
 
     def test_discriminates_where_the_scalar_did_not(self):
@@ -597,3 +597,265 @@ class TestCoinCountOverridesKeywords:
 
     def test_single_coin_is_not_forced_to_comparison(self):
         assert self._c("分析 BTC 過去兩週的市場表現與整體市場狀態。") == "multi_source"
+
+
+# --- 10. 彈性化：分類只給骨架，維度交給 LLM（JUDGE_TEST_REPORT.md §17）---
+
+
+class TestQuestionPrimacy:
+    """framing 不得規定分析維度——維度一律以題目原文為準。
+
+    改版前 comparison 的 framing 寫死「請比較 A 與 B 在流動性、市場關注度、
+    風險敞口上的差異」，那三項是從命題文件範例三抄來的。題目若問「開發者活躍度
+    與機構託管規模」，系統會照樣注入流動性那三項，framing 覆寫了題目的實際要求。
+    """
+
+    def _framing(self, qtype="comparison", coin="BTC", coin2="ETH", coins=None):
+        from agent.reasoning.prompts import _resolve_framing
+
+        return _resolve_framing(qtype, coin, coin2, coins=coins)
+
+    def test_framing_no_longer_prescribes_dimensions(self):
+        f = self._framing()
+        for hardcoded in ("流動性", "市場關注度", "風險敞口"):
+            assert hardcoded not in f, f"framing 仍寫死維度「{hardcoded}」"
+
+    def test_primacy_rule_is_attached_to_every_type(self):
+        from agent.reasoning.prompts import QUESTION_PRIMACY_RULE
+
+        for qtype in ("multi_source", "hypothesis_test", "comparison"):
+            assert QUESTION_PRIMACY_RULE in self._framing(qtype)
+
+    def test_framing_lists_all_coins_with_evidence(self):
+        """三個以上幣種時 `coin2` 裝不下，framing 要用完整清單。"""
+        f = self._framing(coins=["BTC", "ETH", "SOL"])
+        assert "BTC、ETH、SOL" in f
+
+    def test_coin_header_covers_three_coins(self):
+        from agent.reasoning.prompts import build_step_d_prompt
+
+        p = build_step_d_prompt(
+            "BTC", "比較 BTC、ETH 與 SOL", "comparison", [], {}, [],
+            coin2="ETH", coins=["BTC", "ETH", "SOL"],
+        )
+        assert "幣種：BTC／ETH／SOL" in p
+
+
+class TestRelationalQuestionsAreNotForcedToComparison:
+    """題目提到別的幣種不一定是要比較——也可能只是拿它當參照。
+
+    「分析 SOL 當前狀況，並說明其與 BTC 的相關性是否鬆動」的主體是 SOL，
+    判成 comparison 會讓正反方去爭「SOL 還是 BTC 更值得關注」，那不是題目要問的。
+    """
+
+    def _c(self, q):
+        from agent.reasoning.prompts import classify_question_type
+
+        return classify_question_type(q)
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "分析 SOL 當前市場狀況，並說明其與 BTC 的相關性是否鬆動。",
+            "分析 ETH 近期表現，說明其與 BTC 的連動是否減弱。",
+            "分析 SOL 當前市場狀況，說明其是否已與 BTC 脫鉤。",
+        ],
+    )
+    def test_relational_phrasing_stays_single_subject(self, question):
+        assert self._c(question) != "comparison"
+
+    def test_explicit_comparison_verb_still_wins(self):
+        """關係型措辭遇上明確的比較動詞時，仍判為 comparison。"""
+        assert self._c("比較 SOL 與 BTC 的相關性強弱。") == "comparison"
+
+    def test_plain_two_coin_question_is_still_comparison(self):
+        """沒有關係型措辭的雙幣種題目，維持 comparison（86e3380 的核心案例）。"""
+        assert self._c("SOL 與 XRP 何者在當前宏觀環境下風險敞口較高？") == "comparison"
+
+
+class TestUncoveredCoinsAreDisclosed:
+    """題目提到但沒蒐集到證據的幣種，必須在報告最上方揭露。
+
+    `86e3380` 讓「≥2 個幣種」判 comparison，但 orchestrator 只取第一個非主幣當
+    `coin2`，第三個幣直接被忽略。若不揭露，讀者會以為這份比較涵蓋了題目要求的
+    全部對象——那是拿不存在的證據作答。
+    """
+
+    def _report(self, uncovered):
+        from agent.reasoning.pipeline import ReasoningResult
+        from agent.report.builder import build_report_markdown
+        from agent.schemas import Evidence, now_iso
+
+        ev = [Evidence(id="ev-001", coin="BTC", source="s", fetched_at=now_iso(),
+                       content_reference="r", related_claim="c", source_type="price")]
+        result = ReasoningResult(
+            question_type="comparison",
+            facts=[{"source_type": "price", "summary": "s", "evidence_ids": ["ev-001"]}],
+            conclusion={"market_judgment": "m", "confidence": "中", "evidence_ids": ["ev-001"]},
+        )
+        return build_report_markdown(
+            "BTC", "比較 BTC、ETH 與 SOL 三者的風險特徵。", result, ev,
+            coin2="ETH", uncovered_coins=uncovered,
+        )
+
+    def test_uncovered_coin_is_flagged_before_any_conclusion(self):
+        report = self._report(["SOL"])
+        assert "SOL" in report and "未蒐集其證據" in report
+        # 必須出現在結論之前，否則讀者已經讀完比較才知道少了誰
+        assert report.index("未蒐集其證據") < report.index("## 1. 結論／市場判斷")
+
+    def test_no_note_when_all_coins_covered(self):
+        assert "未蒐集其證據" not in self._report(None)
+        assert "未蒐集其證據" not in self._report([])
+
+
+class TestHardWallClockCapPerCall:
+    """`read_timeout` 不是總時長上限——實測一次呼叫跑了 6756s（read_timeout=150s）。
+
+    原因是 `read_timeout` 量的是「兩次 socket 讀取之間的間隔」，Bedrock 的連線
+    只要持續有資料進來，計時器就一直被重置。唯一可靠的總時長上限是呼叫端強制中斷。
+    """
+
+    def _client(self):
+        from agent.config import Settings
+        from agent.reasoning.bedrock_client import BedrockClient
+
+        return BedrockClient(Settings(), max_retries=1)
+
+    def test_slow_call_is_aborted_at_the_cap(self):
+        import time
+
+        from agent.reasoning.bedrock_client import BedrockClientError
+
+        c = self._client()
+        c.deadline = time.monotonic() + 20  # _effective_timeout ≈ 20-10-5 = 5s
+
+        class HangingClient:
+            def converse(self, **kwargs):
+                time.sleep(30)  # 遠超過上限，但「連線正常」
+                return {}
+
+        c._clients = {}
+        c._client_with_timeout = lambda t: HangingClient()
+
+        started = time.monotonic()
+        with pytest.raises(BedrockClientError) as exc:
+            c.converse("sys", "user")
+        elapsed = time.monotonic() - started
+        assert "硬上限" in str(exc.value)
+        assert elapsed < 15, f"沒有在上限附近中斷，實際等了 {elapsed:.1f}s"
+
+    def test_fast_call_is_unaffected(self):
+        import time
+
+        c = self._client()
+        c.deadline = time.monotonic() + 300
+
+        class FastClient:
+            def converse(self, **kwargs):
+                return {
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                    "output": {"message": {"content": [{"text": "ok"}]}},
+                    "stopReason": "end_turn",
+                }
+
+        c._client_with_timeout = lambda t: FastClient()
+        assert c.converse("sys", "user") == "ok"
+
+
+# --- 11. 級距隨題型（JUDGE_TEST_REPORT.md §13.4／§15.3）---
+
+
+class TestVerdictScaleByQuestionType:
+    """不對稱級距預設「反方＝質疑者」，那個前提只有多源整合題成立。
+
+    比較題兩邊都是倡議者；假設驗證題的正方被指派去論證一個可能為假的命題。
+    在這兩種題型下沿用不對稱級距，分數會取決於「誰被指派站哪一邊」。
+    """
+
+    def _pts(self, **kw):
+        out = []
+        for verdict, n in kw.items():
+            out += [{"point": "x", "evidence_ids": [], "verdict": verdict}] * n
+        return out
+
+    def test_comparison_is_perfectly_mirrored(self):
+        """比較題把兩幣語序對調時，同一場辯論的分數必須鏡射。
+
+        用 Q3／T2 的真實 verdict：Q3 主幣 SOL 得到 bear_valid×2 + bull_defended×1
+        + bear_partial×2；主幣換成 XRP 時角色互換，各判定跟著鏡射。
+        """
+        sol_first = self._pts(bear_valid=2, bull_defended=1, bear_partial=2)
+        xrp_first = self._pts(bull_defended=2, bear_valid=1, bull_partial=2)
+        a, _ = tally_debate_verdicts(sol_first, "comparison")
+        b, _ = tally_debate_verdicts(xrp_first, "comparison")
+        assert a == -b, f"語序對調後分數未鏡射：{a} vs {b}"
+
+    def test_bull_partial_exists_in_symmetric_scales(self):
+        """粒度也必須對稱——只補幅度、不補等級的話，
+        「XRP 方部分成立」表達得出、「SOL 方部分成立」表達不出。"""
+        from agent.reasoning.confidence import scores_for_question_type
+
+        for qtype in ("comparison", "hypothesis_test"):
+            scores = scores_for_question_type(qtype)
+            assert scores["bull_partial"] == -scores["bear_partial"]
+            assert scores["bull_defended"] == -scores["bear_valid"]
+
+    def test_multi_source_keeps_the_asymmetry(self):
+        """多源整合的反方確實是質疑者，ADR-5 的防灌分理由在那裡仍然成立。"""
+        from agent.reasoning.confidence import scores_for_question_type
+
+        scores = scores_for_question_type("multi_source")
+        assert scores["bear_valid"] == -3
+        assert scores["bull_defended"] == 1
+        assert abs(scores["bear_valid"]) > scores["bull_defended"]
+
+    def test_false_hypothesis_is_penalised_less_than_before(self):
+        """T4 實測：假設在證據上站不住時，系統給出最明確的否定卻拿到最大扣分。
+
+        對稱級距把那個扣分收斂，但**不會歸零**——反方勝出仍然扣分。
+        這條鎖住「有改善」，不宣稱問題完全消失。
+        """
+        t4 = self._pts(bear_valid=3, bear_partial=2)
+        old, _ = tally_debate_verdicts(t4, "multi_source")
+        new, _ = tally_debate_verdicts(t4, "hypothesis_test")
+        assert new > old, f"對稱級距未減輕扣分：{old} → {new}"
+
+    def test_unknown_type_falls_back_to_asymmetric(self):
+        pts = self._pts(bear_valid=1)
+        assert tally_debate_verdicts(pts, None)[0] == tally_debate_verdicts(pts, "multi_source")[0]
+
+    def test_scale_is_selected_through_compute_confidence(self):
+        """題型必須真的傳達到計分，不能只是函式支援但沒接線。"""
+        pts = self._pts(bull_defended=3)
+        _, sym = compute_confidence([], {}, debate_summary=pts, question_type="comparison")
+        _, asym = compute_confidence([], {}, debate_summary=pts, question_type="multi_source")
+        assert sym["debate_adjustment"] == 6 and asym["debate_adjustment"] == 3
+
+
+class TestClampRangeFollowsTheScale:
+    """夾值範圍必須跟著級距走，否則會把剛拆掉的不對稱從夾值那條路徑放回來。
+
+    對稱題型下 5 點全給正方是 +10；若沿用全域的 +5 上限，「正方全勝」被砍成 +5、
+    「反方全勝」的 −10 完整保留——語序對調的鏡射在夾值後就破了。
+    """
+
+    def _adj(self, verdict, n, qtype):
+        pts = [{"point": "x", "evidence_ids": [], "verdict": verdict}] * n
+        _, bd = compute_confidence([], {}, debate_summary=pts, question_type=qtype)
+        return bd["debate_adjustment"]
+
+    @pytest.mark.parametrize("qtype", ["comparison", "hypothesis_test"])
+    def test_symmetric_extremes_mirror_after_clamping(self, qtype):
+        assert self._adj("bull_defended", 5, qtype) == -self._adj("bear_valid", 5, qtype)
+
+    def test_asymmetric_range_is_unchanged(self):
+        from agent.reasoning.confidence import (
+            DEBATE_ADJUSTMENT_MAX, DEBATE_ADJUSTMENT_MIN, adjustment_range_for,
+        )
+
+        assert adjustment_range_for("multi_source") == (
+            DEBATE_ADJUSTMENT_MIN, DEBATE_ADJUSTMENT_MAX,
+        )
+        assert self._adj("bear_valid", 5, "multi_source") == DEBATE_ADJUSTMENT_MIN
+        assert self._adj("bull_defended", 5, "multi_source") == DEBATE_ADJUSTMENT_MAX
