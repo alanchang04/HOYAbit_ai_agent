@@ -294,7 +294,9 @@ def _window_span_days(ev: Evidence) -> int:
 
 
 def compute_data_confidence(
-    evidences: list[Evidence], primary_horizon: HorizonClass | None = None
+    evidences: list[Evidence],
+    primary_horizon: HorizonClass | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> tuple[float, dict]:
     """資料品質（R3-1/R3-2）：六類各佔 100/6，依三檔評分。純統計，不呼叫 LLM。
 
@@ -305,13 +307,23 @@ def compute_data_confidence(
     問「過去一年」時，19 筆全 17 天窗的證據仍判六類「完整」拿 100 分，但報告
     開頭同時寫著「⚠ 主視野無可用證據」。原函式完全不讀 horizon_class／persistence，
     看不出這種錯配。
+
+    `applicable_categories`（2026-08-02 新增，選填）：某些呼叫端的因子集合
+    結構性就不會產出特定類別的證據（例：HOYA BIT demo 目前六個 factor 只映射到
+    derivatives/onchain/macro/news，price/social 從未被使用）。這種「設計上就
+    不涵蓋」跟「該補資料但沒補到」是兩件事，不該套同一個扣分公式——後者才是
+    「缺資料」，前者是「這類別本來就不在這次分析範圍內」。不傳時預設仍是完整
+    六類（既有行為不變，其他呼叫端／測試不受影響）；傳入子集合時，100 分只在
+    子集合裡分配，未涵蓋的類別完全不出現在 detail／why-lines 裡（不是「缺一項
+    扣分」，是「這題本來就不問這項」）。
     """
     primary = primary_horizon or DEFAULT_PRIMARY_HORIZON
-    per_type_score = 100.0 / len(SOURCE_TYPE_CATEGORIES)
+    categories = applicable_categories or SOURCE_TYPE_CATEGORIES
+    per_type_score = 100.0 / len(categories)
     detail: dict[str, dict] = {}
     total = 0.0
 
-    for source_type in sorted(SOURCE_TYPE_CATEGORIES, key=lambda t: t.value):
+    for source_type in sorted(categories, key=lambda t: t.value):
         items = [e for e in evidences if e.source_type == source_type]
         min_count, min_window = DATA_COMPLETENESS_THRESHOLD[source_type]
         max_span = max((_window_span_days(e) for e in items), default=0)
@@ -406,16 +418,23 @@ def compute_signal_consensus(
     }
 
 
-def compute_evidence_strength(evidences: list[Evidence]) -> tuple[float, dict]:
+def compute_evidence_strength(
+    evidences: list[Evidence], applicable_categories: set[SourceType] | None = None
+) -> tuple[float, dict]:
     """證據強度（R3-6）：各類平均 `source_weight` × 類別覆蓋度折減。
 
     刻意**不**引入 LLM 主觀評分（ADR-4）——需求方的核心訴求是可解釋、可複現，
     若讓 LLM 給「Price=90, Social=60」這類分數，等於在剛拆掉的主觀基底旁邊
     裝一個新的。R12 四因子信譽（新鮮度×來源等級×覆蓋度×dedup_penalty）已經是
     「這個訊號有多強」的既有答案，重造輪子只會產生兩套打架的權威度定義。
+
+    `applicable_categories`：同 `compute_data_confidence()`，覆蓋度分母只算
+    有意義納入這次分析的類別，結構性不涵蓋的類別不拖累 coverage（見該函式
+    docstring 的完整說明）。
     """
+    categories = applicable_categories or SOURCE_TYPE_CATEGORIES
     per_type: dict[str, float] = {}
-    for source_type in SOURCE_TYPE_CATEGORIES:
+    for source_type in categories:
         weights = [e.source_weight for e in evidences if e.source_type == source_type]
         if weights:
             per_type[source_type.value] = round(sum(weights) / len(weights), 4)
@@ -424,7 +443,7 @@ def compute_evidence_strength(evidences: list[Evidence]) -> tuple[float, dict]:
         return 0.0, {"per_type_avg_weight": {}, "coverage": 0.0}
 
     avg_weight = sum(per_type.values()) / len(per_type)
-    coverage = len(per_type) / len(SOURCE_TYPE_CATEGORIES)
+    coverage = len(per_type) / len(categories)
     strength = avg_weight * coverage * 100
     return round(strength, 2), {
         "per_type_avg_weight": per_type,
@@ -478,6 +497,7 @@ def compute_confidence(
     primary_horizon: HorizonClass | None = None,
     debate_summary: list[dict] | None = None,
     question_type: str | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> tuple[int, dict]:
     """計算 L5 信心分數，回傳 (score, breakdown)。
 
@@ -486,12 +506,15 @@ def compute_confidence(
 
     `structural_context` **不進入任何扣分路徑**（R2-8）——跨尺度差異是位置關係
     不是矛盾，那正是本規格要修的核心問題。
+
+    `applicable_categories`：見 `compute_data_confidence()` docstring。不傳時
+    行為與改動前完全一致。
     """
-    data_conf, data_detail = compute_data_confidence(evidences, primary_horizon)
+    data_conf, data_detail = compute_data_confidence(evidences, primary_horizon, applicable_categories)
     consensus, consensus_detail = compute_signal_consensus(
         cross_validation.get("direction_matrix", []) or [], evidences, primary_horizon
     )
-    strength, strength_detail = compute_evidence_strength(evidences)
+    strength, strength_detail = compute_evidence_strength(evidences, applicable_categories)
 
     base = WEIGHT_DATA * data_conf + WEIGHT_CONSENSUS * consensus + WEIGHT_STRENGTH * strength
 
@@ -536,6 +559,9 @@ def compute_confidence(
         "debate_verdict_detail": format_verdict_tally(verdict_counts, question_type),
         "primary_horizon": (primary_horizon or DEFAULT_PRIMARY_HORIZON).value,
         "structural_context_count": len(cross_validation.get("structural_context", []) or []),
+        "applicable_categories": sorted(
+            t.value for t in (applicable_categories or SOURCE_TYPE_CATEGORIES)
+        ),
         "final": final,
     }
     breakdown["why"] = build_why_lines(breakdown)

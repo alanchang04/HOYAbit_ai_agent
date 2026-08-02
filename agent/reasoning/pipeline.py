@@ -31,7 +31,7 @@ from agent.reasoning.prompts import (
     classify_question_type,
     extract_json,
 )
-from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType
+from agent.schemas import Evidence, LogPhase, LogStatus, PipelineLayer, QuestionType, SourceType
 
 # 辯論輪數上限。多智能體辯論的增益在第 2 輪後大致飽和，再往上主要是燒 token 與延遲，
 # 因此預設 2 輪（= 7 次 LLM 呼叫）。反方自報無新論點時會更早收斂。
@@ -178,6 +178,7 @@ def _dry_run_reasoning(
     evidences: list[Evidence],
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> ReasoningResult:
     primary_horizon, primary_horizon_basis = resolve_primary_horizon(question)
     by_type: dict[str, list[Evidence]] = {}
@@ -247,6 +248,7 @@ def _dry_run_reasoning(
         primary_horizon=primary_horizon,
         debate_summary=conclusion.get("debate_summary"),
         question_type=question_type,
+        applicable_categories=applicable_categories,
     )
     if logger:
         logger.log(
@@ -543,6 +545,7 @@ def _real_reasoning(
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
     deadline: float | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> ReasoningResult:
     # 可被引用的 id **排除被注入隔離者**。證據清單會誠實揭露「哪幾筆被隔離」
     # （否則模型會誤以為證據涵蓋度比實際高），但那段揭露文字本身也把 id 送到了
@@ -966,6 +969,7 @@ def _real_reasoning(
         primary_horizon=primary_horizon,
         debate_summary=conclusion.get("debate_summary"),
         question_type=question_type,
+        applicable_categories=applicable_categories,
     )
     if logger:
         logger.log(
@@ -1009,16 +1013,23 @@ def run_reasoning(
     coin2: str | None = None,
     logger: ExecutionLogger | None = None,
     deadline: float | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> ReasoningResult:
     """執行四步推理鏈。
 
     `deadline` 是 `time.monotonic()` 的絕對值，用來在多輪辯論之間做時間預算控制；
     傳 None 代表不限時（測試與 dry-run 皆如此）。
+
+    `applicable_categories`：見 `agent/reasoning/confidence.py::compute_data_confidence()`
+    docstring。不傳時預設仍是完整六類，既有呼叫端行為不變。
     """
     question_type = classify_question_type(question)
 
     if dry_run:
-        return _dry_run_reasoning(coin, question, question_type, evidences, coin2=coin2, logger=logger)
+        return _dry_run_reasoning(
+            coin, question, question_type, evidences, coin2=coin2, logger=logger,
+            applicable_categories=applicable_categories,
+        )
 
     if llm_client is None:
         raise RuntimeError("非 dry-run 模式需要傳入 llm_client。")
@@ -1026,4 +1037,5 @@ def run_reasoning(
     return _real_reasoning(
         coin, question, question_type, evidences, llm_client,
         log_step=log_step, coin2=coin2, logger=logger, deadline=deadline,
+        applicable_categories=applicable_categories,
     )

@@ -255,23 +255,56 @@
   }
   .stage-lead b { color: var(--ink); font-weight: 600; }
 
-  /* 三型差異對照表：Statistical／Event／Sentiment 在該層各自被怎麼處理 */
-  .type-table {
-    margin: 0 0 14px 36px; border-collapse: collapse; font-size: 12.5px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
-  }
-  .type-table th, .type-table td {
-    text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top;
-  }
-  .type-table tr:last-child td { border-bottom: none; }
-  .type-table th { color: var(--muted); font-weight: 600; white-space: nowrap; background: var(--surface-2); }
-  .type-table td:first-child { white-space: nowrap; font-weight: 600; color: var(--ink); }
-  .type-table code { font-size: 11.5px; }
+  /* 三型差異對照表：Statistical／Event／Sentiment 在該層各自被怎麼處理。
+     原本是三欄擠滿散文、行高又緊，讀起來像一團字；改成每格「結論一行、理由一行」
+     的層次，型別欄用色票區分，欄寬固定避免第一欄被擠爛。 */
   details.type-box { margin: 14px 0 0; }
   details.type-box > summary {
-    cursor: pointer; font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-bottom: 8px;
+    cursor: pointer; font-size: 12.5px; color: var(--ink-2); font-weight: 600;
+    padding: 7px 10px; border-radius: 8px; background: var(--surface-2);
+    border: 1px solid var(--line); list-style: revert;
   }
-  details.type-box .type-table { margin-left: 0; }
+  details.type-box[open] > summary { margin-bottom: 10px; }
+
+  .type-table {
+    width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;
+    font-size: 12.5px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  .type-table th, .type-table td {
+    text-align: left; padding: 11px 14px; vertical-align: top; line-height: 1.65;
+  }
+  .type-table thead th {
+    font-size: 11.5px; font-weight: 700; letter-spacing: .02em;
+    color: var(--muted); background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .type-table tbody tr + tr td { border-top: 1px solid var(--line); }
+  .type-table tbody tr:hover td { background: var(--surface-2); }
+
+  /* 型別欄：色票 + 適用的 factor 清單 */
+  .t-chip {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+  }
+  .t-chip.stat  { background: var(--accent-4); color: var(--accent-4-bg); }
+  .t-chip.event { background: var(--accent-2); color: var(--accent-2-bg); }
+  .t-chip.sent  { background: var(--accent-3); color: var(--accent-3-bg); }
+  .t-chip.gap   { background: var(--muted);    color: var(--surface); }
+  .t-factors {
+    margin-top: 6px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; color: var(--muted); line-height: 1.6; word-break: break-word;
+  }
+
+  /* 內容欄：結論粗體一行，理由淡色一行 */
+  .t-lead { color: var(--ink); font-weight: 600; }
+  .t-why  { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .type-table code {
+    font-size: 11.5px; padding: 1px 5px; border-radius: 4px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    word-break: keep-all; white-space: nowrap;
+  }
+  .type-table tbody tr:hover code { background: var(--surface); }
   .stage-badge {
     width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 700; flex: none;
@@ -407,17 +440,63 @@
     color: var(--ink-2); font-style: italic;
   }
   .debate-turn .dt-evidence { margin-top: 8px; }
+  .debate-turn p { margin: 0 0 9px; }
+  .debate-turn p:last-of-type { margin-bottom: 0; }
+  .debate-turn .dt-critique p:last-of-type { margin-bottom: 0; }
+
+  .fact-item { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .fact-item:first-child { padding-top: 0; }
+  .fact-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .fact-item .fi-tag {
+    display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 9px;
+    border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line-strong);
+    color: var(--ink-2); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 7px;
+  }
+  .fact-item .fi-summary { font-size: 13px; line-height: 1.65; color: var(--ink); margin-bottom: 7px; }
 
   /* 結論層＋信心分數：圓環量表 */
   .conclusion-box { font-size: 13.5px; line-height: 1.7; }
-  .confidence-gauge { display: flex; align-items: center; gap: 18px; margin: 10px 0 16px; flex-wrap: wrap; }
+  .confidence-gauge {
+    display: flex; align-items: center; gap: 24px; margin: 10px 0 16px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 22px;
+  }
   .cg-ring { flex: none; }
-  .cg-breakdown { flex: 1 1 240px; min-width: 200px; }
-  .cg-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12px; }
-  .cg-bar-row .cg-label { flex: 0 0 92px; color: var(--muted); }
-  .cg-bar-track { flex: 1 1 auto; height: 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
-  .cg-bar-fill { height: 100%; background: var(--accent-9); border-radius: 999px; }
-  .cg-bar-row .cg-value { flex: 0 0 34px; text-align: right; font-weight: 600; }
+  .cg-breakdown { flex: 1 1 260px; min-width: 220px; }
+  .cg-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 12.5px; }
+  .cg-bar-row .cg-label { flex: 0 0 118px; color: var(--ink-2); }
+  .cg-bar-row .cg-label .cg-weight { color: var(--muted); font-size: 11px; }
+  .cg-bar-track { flex: 1 1 auto; height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .cg-bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+  .cg-bar-fill.tier-low { background: var(--danger); }
+  .cg-bar-fill.tier-mid { background: var(--accent-7); }
+  .cg-bar-fill.tier-high { background: var(--accent-6); }
+  .cg-bar-row .cg-value { flex: 0 0 30px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cg-stats { display: flex; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-strong); flex-wrap: wrap; }
+  .cg-stat { flex: 1 1 120px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .cg-stat .cg-stat-k { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .cg-stat .cg-stat-v { font-size: 14px; font-weight: 700; }
+
+  /* 信心分數逐類別明細（每一類的分數都列出來，不是只給三個彙總數字） */
+  .cat-detail { margin-top: 12px; }
+  .cat-detail summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); font-weight: 600; list-style: revert; }
+  .cat-detail[open] summary { margin-bottom: 10px; }
+  .cat-detail-note { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .cat-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid var(--line); font-size: 12.5px;
+  }
+  .cat-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .cat-row .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 5px; }
+  .cat-row .cat-dot.tier-low { background: var(--danger); }
+  .cat-row .cat-dot.tier-mid { background: var(--accent-7); }
+  .cat-row .cat-dot.tier-high { background: var(--accent-6); }
+  .cat-row .cat-body { flex: 1 1 auto; }
+  .cat-row .cat-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .cat-row .cat-name { font-weight: 700; color: var(--ink); text-transform: uppercase; letter-spacing: .02em; }
+  .cat-row .cat-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cat-row .cat-reason { color: var(--ink-2); line-height: 1.5; }
+  .cat-row .cat-weight { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .cg-stat .cg-stat-reason { font-size: 11.5px; color: var(--ink-2); font-weight: 400; margin-top: 2px; line-height: 1.4; }
 
   .field-row { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 10px; }
   .field { min-width: 140px; }
@@ -584,41 +663,43 @@
         <div class="stage-head">
           <span class="stage-badge">2</span>
           <span class="stage-title">Stage 2 — Feature Extraction</span>
-          <span class="stage-tag">4 factors live</span>
+          <span class="stage-tag" id="stage2-live-pill">抓取中…</span>
         </div>
         <div class="stage-lead"><b>去抓資料，只記事實。</b>每個 factor 各自打自己的資料源，算出「現在的值、相對歷史的什麼位置、近期往哪個方向走」。抓多長由 LLM 依上一層的 Horizon 現場判斷。這層不解讀好壞、不給方向結論。<br>每張卡片下方可展開的 <b>Knowledge Layer</b> 是配套的背景知識——「這個 factor 本身是什麼、擅長什麼尺度、跟誰互相印證」，純查表不推理。</div>
         <div class="factor-row" id="stage2-factors"></div>
         <details class="type-box">
           <summary>三型資料在這層的差異——抓法與算得出來的欄位都不同（點開）</summary>
           <table class="type-table">
-            <tr><th>型別</th><th>窗口的單位與意義</th><th>算得出來的欄位</th><th>算不出來的欄位（結構性，不是漏做）</th></tr>
-            <tr>
-              <td>Statistical<br><span class="lr-note">funding_rate／active_address／etf</span></td>
-              <td><b>天</b>——「回看多久」。由 LLM 依 Horizon 現場判斷</td>
-              <td>現值、<code>percentile</code>（相對這段窗口的位置）、<code>trend</code>（窗口內前後半段比較）</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td>Event<br><span class="lr-note">cpi</span></td>
-              <td><b>月</b>——資料本身是月頻，LLM 判斷的天數要先換算成月（<code>window_months</code>）</td>
-              <td>現值、<code>percentile</code>、<code>mom_pct</code>／<code>yoy_pct</code>（月增／年增，事件型才有意義的變化率）</td>
-              <td><code>trend</code>——月頻資料在短窗口內只有 1~2 筆，做前後半段比較沒有意義</td>
-            </tr>
-            <tr>
-              <td>Sentiment<br><span class="lr-note">panews_sentiment</span></td>
-              <td><b>天,但只決定「往回翻多深」</b>——超出窗口的文章標記為非近期<b>但照樣計入</b>，不是過濾邊界</td>
-              <td>情緒分數、<code>nonzero_ratio</code>（關鍵字法的覆蓋率）、<code>window_covered</code>（有沒有翻到窗口底）</td>
-              <td>嚴格的 <code>percentile</code>——分數是簡化版關鍵字計分而非 NLP 模型，母體本身可信度有限</td>
-            </tr>
-            <tr>
-              <td>資料源缺歷史<br><span class="lr-note">liquidation</span></td>
-              <td><b>秒</b>——沒有「回看窗口」這個概念，只能開 WebSocket 監聽固定秒數</td>
-              <td>觀察窗內的清算筆數與金額</td>
-              <td><code>percentile</code>／<code>trend</code>／<code>slope</code> 全部——查歷史的 API 已停用，沒有母體可比</td>
-            </tr>
+            <colgroup><col style="width:23%"><col style="width:25%"><col style="width:26%"><col style="width:26%"></colgroup>
+            <thead><tr><th>型別</th><th>窗口的單位與意義</th><th>算得出來的欄位</th><th>算不出來（結構性，不是漏做）</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf</div></td>
+                <td><div class="t-lead">天 — 回看多久</div><div class="t-why">由 LLM 依 Horizon 現場判斷</div></td>
+                <td><div class="t-lead">現值 · <code>percentile</code> · <code>trend</code></div><div class="t-why">percentile 是相對這段窗口的位置；trend 是窗口內前後半段比較</div></td>
+                <td><div class="t-why">—</div></td>
+              </tr>
+              <tr>
+                <td><span class="t-chip event">Event</span><div class="t-factors">cpi</div></td>
+                <td><div class="t-lead">月 — 資料本身月頻</div><div class="t-why">LLM 判斷的天數要先換算成月（<code>window_months</code>）</div></td>
+                <td><div class="t-lead">現值 · <code>percentile</code> · <code>mom_pct</code> · <code>yoy_pct</code></div><div class="t-why">月增／年增才是事件型有意義的變化率</div></td>
+                <td><div class="t-lead"><code>trend</code></div><div class="t-why">月頻在短窗口內只有 1~2 筆，做前後半段比較沒有意義</div></td>
+              </tr>
+              <tr>
+                <td><span class="t-chip sent">Sentiment</span><div class="t-factors">panews_sentiment</div></td>
+                <td><div class="t-lead">天 — 但只決定「往回翻多深」</div><div class="t-why">超出窗口的文章標記為非近期<b>但照樣計入</b>，不是過濾邊界</div></td>
+                <td><div class="t-lead">情緒分數 · <code>nonzero_ratio</code> · <code>window_covered</code></div><div class="t-why">nonzero_ratio 是關鍵字法的覆蓋率；window_covered 表示有沒有翻到窗口底</div></td>
+                <td><div class="t-lead">嚴格的 <code>percentile</code></div><div class="t-why">分數是簡化版關鍵字計分而非 NLP 模型，母體本身可信度有限</div></td>
+              </tr>
+              <tr>
+                <td><span class="t-chip gap">資料源缺歷史</span><div class="t-factors">liquidation</div></td>
+                <td><div class="t-lead">秒 — 沒有「回看窗口」</div><div class="t-why">只能開 WebSocket 監聽固定秒數</div></td>
+                <td><div class="t-lead">觀察窗內的清算筆數與金額</div></td>
+                <td><div class="t-lead"><code>percentile</code> · <code>trend</code> · <code>slope</code> 全部</div><div class="t-why">查歷史的 API 已停用，沒有母體可比</div></td>
+              </tr>
+            </tbody>
           </table>
         </details>
-        <div class="todo-note"><span class="dot"></span><span>五個 factor 各自真的去抓真實資料，不是同一套邏輯換名字——funding_rate／active_address 窗口＝天、由 LLM 依 Horizon 現場判斷（不是查表），而且各自有專屬的背景知識 prompt；cpi 窗口＝月，換算後才抓；liquidation 沒有「回看窗口」這個概念，是真的開 WebSocket 監聽固定秒數，percentile／trend 等需要歷史序列的欄位這個 factor 結構性沒有，一律不產生；panews_sentiment 的窗口只決定「往回翻多深」而不是過濾邊界（超出窗口的文章標記為非近期但照樣計入），翻不到窗口底時會標 <code>window_covered=false</code> 並說明只翻到哪天，情緒分數是簡化版關鍵字計分、不是 NLP 模型（<code>nonzero_ratio</code> 就是這套方法的覆蓋率）。active_address 目前只支援 BTC（資料源限制），查其他幣種會顯示原因。每張卡片下方「查看 Knowledge Layer」點開才是原本獨立一個 Stage 3 區塊的內容——Knowledge 本來就是查表用的背景知識，不是每次都要看的即時數字，跟 Stage 2 的即時抓取結果放在一起、預設收合比較合理。五份內容分別讀自 <code>Stage 3 — Knowledge Layer/{factor}.md</code>——Ken 手動研究、附真實學術／產業出處的正式版本，欄位對照 11流程圖模板.md 的 Statistical／Event／Sentiment Knowledge schema（三型不同骨架，不是同一份欄位表）。刻意不對齊結論：funding_rate 產業文獻偏肯定短期訊號，active_address 近期研究反而在講預測力減弱，cpi 學界對通膨關係沒有共識、liquidation 只能即時監聽沒有歷史可驗證、panews_sentiment 的預測力是狀態依存（極端情緒下才顯著）——每份都根據各自的資料現實寫，不是同一套模板換名字。單一事實來源是這些 .md，這支 demo 只是讀檔解析，刻意不打 LLM（Knowledge Layer 本身是 library，不是推理層）。</span></div>
       </div>
 
       <div class="stage-card s4">
@@ -632,22 +713,25 @@
         <details class="type-box">
           <summary>三型資料在這層的差異——Prior 用哪種算法、Modifier 讀哪些欄位（點開）</summary>
           <table class="type-table">
-            <tr><th>型別</th><th>Prior Weight 怎麼來</th><th>Modifier 的線索差在哪</th></tr>
-            <tr>
-              <td>Statistical<br><span class="lr-note">funding_rate／active_address／etf／panews_sentiment</span></td>
-              <td><code>rolling_spearman_ic</code> <b>現場真的算</b>——因為它們每天都有連續數值，可以跟未來報酬配對算相關係數</td>
-              <td>時間尺度比對 <code>primary_horizon.applicable_days</code>；關聯訊號讀 <code>confirms／conflicts</code></td>
-            </tr>
-            <tr>
-              <td>Event<br><span class="lr-note">cpi</span></td>
-              <td><b>不算 ic</b>，讀 Knowledge 的 <code>impact_level</code> 分級（Very High→0.8）——離散事件沒有「每天的值」可以跟每天的報酬配對，套 ic 的前提不成立</td>
-              <td>時間尺度比對的是 <code>reaction_window</code>＋<code>expected_duration</code> 換算的區間（兩段不連續尺度的聯集）；關聯訊號讀 <code>usually_affects／related_events</code>（不是 confirms/conflicts）；<b>freshness 語意是「距上次公布多久」</b>，月頻資料本質上不可能「很新」</td>
-            </tr>
-            <tr>
-              <td>資料源缺歷史<br><span class="lr-note">liquidation</span></td>
-              <td><b>ic 算不出來</b>（沒有歷史序列可配對），改用 Domain Knowledge 給有理由的低分（0.3）——低是因為它本質是確認性訊號，不是「沒算出來所以給 0」</td>
-              <td>時間尺度幾乎必然不合（適用尺度是分鐘級）；<b>freshness 恆等於「當下」</b>，因為沒有「查詢過去」這個選項</td>
-            </tr>
+            <colgroup><col style="width:26%"><col style="width:37%"><col style="width:37%"></colgroup>
+            <thead><tr><th>型別</th><th>Prior Weight 怎麼來</th><th>Modifier 的線索差在哪</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf · panews_sentiment</div></td>
+                <td><div class="t-lead"><code>rolling_spearman_ic</code> 現場真的算</div><div class="t-why">它們每天都有連續數值，可以跟未來報酬配對算相關係數</div></td>
+                <td><div class="t-lead">比對 <code>applicable_days</code></div><div class="t-why">關聯訊號讀 <code>confirms</code> ／ <code>conflicts</code></div></td>
+              </tr>
+              <tr>
+                <td><span class="t-chip event">Event</span><div class="t-factors">cpi</div></td>
+                <td><div class="t-lead">不算 ic，讀 <code>impact_level</code> 分級</div><div class="t-why">Very High → 0.8。離散事件沒有「每天的值」可跟每天的報酬配對，套 ic 的前提不成立</div></td>
+                <td><div class="t-lead">比對 <code>reaction_window</code> ＋ <code>expected_duration</code></div><div class="t-why">兩段不連續尺度的聯集；關聯訊號改讀 <code>usually_affects</code> ／ <code>related_events</code>（不是 confirms/conflicts）；freshness 語意是「距上次公布多久」——月頻資料本質上不可能「很新」</div></td>
+              </tr>
+              <tr>
+                <td><span class="t-chip gap">資料源缺歷史</span><div class="t-factors">liquidation</div></td>
+                <td><div class="t-lead">ic 算不出來，改用 Domain Knowledge 給 0.3</div><div class="t-why">沒有歷史序列可配對。低分是因為它本質是<b>確認性訊號</b>，不是「沒算出來所以給 0」</div></td>
+                <td><div class="t-lead">時間尺度幾乎必然不合</div><div class="t-why">適用尺度是分鐘級；freshness 恆等於「當下」，因為沒有「查詢過去」這個選項</div></td>
+              </tr>
+            </tbody>
           </table>
           <div class="lr-note" style="margin-top:6px;">三種 Prior Weight 來源最後都收斂成同一個 <code>evidence_weight</code> 概念，不是三套互不相容的系統——所以下一層可以直接照它排序。</div>
         </details>
@@ -826,7 +910,9 @@
     document.getElementById("r-reasoning").textContent = data.reasoning ? ("判斷依據：" + data.reasoning) : "";
   }
 
-  // ---------- 五個 factor 共用的骨架 ----------
+  // ---------- 六個 factor 共用的骨架（FACTOR_IDS 是單一事實來源，別處要顯示
+  // factor 數量一律讀 FACTOR_IDS.length 或 Object.keys(byFactor).length，
+  // 不要手寫數字——手寫數字就是這次 etf 加進來後被抓到的那種 bug）----------
   const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf"];
   const FACTOR_TYPE_LABEL = {
     funding_rate: "Statistical",
@@ -1071,6 +1157,7 @@
   // 刻意只打一次：Stage 5 內部本來就會呼叫 Stage 2/3/4，如果前端另外再打一次
   // Stage 2 顯示，兩邊的 LLM 窗口判斷可能給出不同天數，畫面上就會出現「同一個
   // factor 兩個不同窗口」的矛盾。用同一份回應渲染三個區塊，數字保證一致。
+  const stage2LivePill = document.getElementById("stage2-live-pill");
   const weightLivePill = document.getElementById("weight-live-pill");
   const weightLiveError = document.getElementById("weight-live-error");
   const cardLivePill = document.getElementById("card-live-pill");
@@ -1179,8 +1266,8 @@
         <div class="lr-note">${f.window_reasoning || ""}</div>
         <div class="lr-row" style="margin-top:8px;"><span class="lr-k">CPI</span><span class="lr-v">${f.current_value}</span></div>
         <div class="lr-row"><span class="lr-k">Percentile</span><span class="lr-v">${f.percentile}</span></div>
-        <div class="lr-row"><span class="lr-k">MoM</span><span class="lr-v">${f.mom_pct || "（無）"}</span></div>
-        <div class="lr-row"><span class="lr-k">YoY</span><span class="lr-v">${f.yoy_pct || "（無）"}</span></div>
+        ${rowIf("MoM", f.mom_pct)}
+        ${rowIf("YoY", f.yoy_pct)}
         <div class="lr-note">${f.source} · ${f.sample_count} 筆樣本</div>
       `;
     }
@@ -1224,6 +1311,25 @@
     const thm = dm.time_horizon_match;
     const modifierSourceLabel = dm.source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗，中性值 1.0）";
 
+    // cross_source_consensus 是第二條「程式真的算得出來」的線索。比的是**這次查詢當下**
+    // 各 factor 的 trend 方向，不是 Knowledge 裡預存的快照——關係是靜態知識，同不同向
+    // 是當下觀察，兩件事不能混（13 2026-08-02 修正）。算不出來就把原因列出來，
+    // 不要讓畫面上看起來像「沒有關係」。
+    const csc = dm.cross_source_consensus;
+    let cscHtml = "";
+    if (csc) {
+      const computed = csc.status === "computed";
+      const agreed = (csc.checks || []).filter(c => c.agree).length;
+      cscHtml = `
+        <div class="lr-row" style="margin-top:8px;"><span class="lr-k">跨源一致性（程式算）</span>
+          <span class="lr-v">${computed ? `${agreed} / ${csc.checks.length} 組相符` : "這次無法比對"}</span></div>
+        ${(csc.checks || []).map(c => `<div class="lr-note" style="margin-top:2px;">${c.agree ? "✓" : "✗"} ${esc(c.note)}</div>`).join("")}
+        ${(csc.unavailable || []).length ? `<details class="ref-box" style="margin-top:6px;"><summary>為什麼有${csc.unavailable.length}項比不了</summary><div class="ref-body">${
+          csc.unavailable.map(u => `<div class="lr-note" style="color:var(--ink);">・${esc(u.note)}</div>`).join("")
+        }</div></details>` : ""}
+      `;
+    }
+
     // Prior Weight 顯示的是**換算後**的 prior_strength（六個 factor 共同的尺），
     // 原始測量值（帶號 ic／人工分級分數）另外顯示——只顯示換算後的數字會讓人
     // 看不出 0.24 是「ic 0.051 打完樣本折」還是「本來就是 0.24」。
@@ -1261,6 +1367,7 @@
       <div class="lr-note" style="margin-top:12px;">Dynamic Modifier</div>
       ${thm ? `<div class="lr-row"><span class="lr-k">時間尺度匹配（程式算）</span><span class="lr-v">${thm.score === null || thm.score === undefined ? "無法計算" : thm.score.toFixed(2)}</span></div>
       <div class="lr-note" style="margin-top:2px;">${thm.verdict || ""}${thm.scale ? `　｜　${FACTOR_LABEL_SHORT(w.factor)} 適用：${thm.scale}` : ""}</div>` : ""}
+      ${cscHtml}
       <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Context Modifier</span><span class="lr-v">${dm.context_modifier}（${modifierSourceLabel}）</span></div>
       ${dm.reasoning ? `<details class="ref-box" style="margin-top:6px;"><summary>LLM 為什麼給這個 Modifier</summary><div class="ref-body"><div class="lr-note" style="color:var(--ink);">${dm.reasoning}</div></div></details>` : ""}
       <div class="lr-row" style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--line-strong);">
@@ -1290,6 +1397,22 @@
     `;
   }
 
+  // 值是空的就整列不要出現——畫一整排「（無）」只是佔版面，讀的人還得自己過濾。
+  function rowIf(label, value, style) {
+    if (value === null || value === undefined || value === "") return "";
+    return `<div class="lr-row"${style ? ` style="${style}"` : ""}><span class="lr-k">${label}</span><span class="lr-v">${value}</span></div>`;
+  }
+
+  // Related Evidence 三格常常整組都空（例如 cpi／panews_sentiment 的知識庫
+  // 本來就沒有對稱關係欄位）——全空時連「Related Evidence」這個標題一起不畫。
+  function relatedEvidenceHtml(re) {
+    re = re || {};
+    const rows = [["Confirms", re.confirms], ["Conflicts", re.conflicts], ["Independent", re.independent]]
+      .map(([k, v]) => rowIf(k, v)).join("");
+    if (!rows) return "";
+    return `<div class="lr-note" style="margin-top:8px;">Related Evidence</div>${rows}`;
+  }
+
   function stage5CardHtml(card, rank) {
     const w = card.evidence_weight;
     const rv = card.ranking_value;
@@ -1304,16 +1427,16 @@
           <div class="lr-note" style="margin-top:8px;">Fact</div>
           ${factHtml(card.fact)}
           <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Evidence Weight（帶號原值）</span><span class="lr-v">${w === null || w === undefined ? "（算不出來，見 Stage 4 說明）" : fmt(w)}</span></div>
-          <div class="lr-row"><span class="lr-k">排序用 |weight|</span><span class="lr-v">${rv === null || rv === undefined ? "（無）" : fmt(rv)}</span></div>
-          <div class="lr-row"><span class="lr-k">方向</span><span class="lr-v">${dir.label || "（無）"}</span></div>
+          ${rowIf("排序用 |weight|", rv === null || rv === undefined ? "" : fmt(rv))}
+          ${rowIf("方向", dir.label)}
           ${dir.note ? `<div class="lr-note">${dir.note}</div>` : ""}
           ${card.confidence ? `<div class="lr-row"><span class="lr-k">Confidence</span><span class="lr-v">${card.confidence}（僅顯示，不影響名次）</span></div>` : ""}
-          <div class="lr-row"><span class="lr-k">適用尺度</span><span class="lr-v">${horizonScaleText(card.primary_horizon) || "（無）"}</span></div>
-          <div class="lr-note" style="margin-top:8px;">Related Evidence</div>
-          <div class="lr-row"><span class="lr-k">Confirms</span><span class="lr-v">${card.related_evidence.confirms || "（無）"}</span></div>
-          <div class="lr-row"><span class="lr-k">Conflicts</span><span class="lr-v">${card.related_evidence.conflicts || "（無）"}</span></div>
-          <div class="lr-row"><span class="lr-k">Independent</span><span class="lr-v">${card.related_evidence.independent || "（無）"}</span></div>
-          <div class="lr-note" style="margin-top:8px;">Traceability：${typeof card.traceability === "object" && card.traceability ? esc(card.traceability.source) : esc(card.traceability) || "（無）"}</div>
+          ${rowIf("適用尺度", horizonScaleText(card.primary_horizon))}
+          ${relatedEvidenceHtml(card.related_evidence)}
+          ${(function(){
+            const src = typeof card.traceability === "object" && card.traceability ? card.traceability.source : card.traceability;
+            return src ? `<div class="lr-note" style="margin-top:8px;">Traceability：${esc(src)}</div>` : "";
+          })()}
           ${typeof card.traceability === "object" && card.traceability && card.traceability.note ? `<div class="lr-note" style="white-space:pre-wrap;">${esc(card.traceability.note)}</div>` : ""}
           ${cardSpecHtml(card)}
           <details style="margin-top:10px;">
@@ -1546,6 +1669,8 @@
       blockStart("s2", id, "抓取中…");
       blockStart("s4", id, "計算中…");
     });
+    stage2LivePill.textContent = "抓取中…";
+    stage2LivePill.classList.remove("err");
     weightLivePill.textContent = "計算中…";
     weightLivePill.classList.remove("err");
     weightLiveError.style.display = "none";
@@ -1586,6 +1711,7 @@
         blockDone("s4", id, basis ? "live · " + basis : "live", stage4Html(card.weight_detail));
       });
 
+      stage2LivePill.textContent = `${Object.keys(byFactor).length} factors live`;
       weightLivePill.textContent = `${Object.keys(byFactor).length} factors live`;
       cardLivePill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
       stage5Cards.innerHTML = (data.evidence_cards || [])
@@ -1603,6 +1729,8 @@
         blockFail("s2", id, "抓取失敗", msg);
         blockFail("s4", id, "計算失敗", msg);
       });
+      stage2LivePill.textContent = "抓取失敗";
+      stage2LivePill.classList.add("err");
       weightLivePill.textContent = "計算失敗";
       weightLivePill.classList.add("err");
       cardLivePill.textContent = "組裝失敗";
@@ -1653,12 +1781,27 @@
     return (ids && ids.length) ? chipsHtml(ids) : `<span class="lr-note">（無引用）</span>`;
   }
 
+  // LLM 吐回來的辯論／事實論證常是一整塊沒有斷行的文字，裡面自己用「第一，」
+  // 「其次，」這類中文列點詞分過段——這裡照那些詞切成真正的 <p>，不改內容
+  // 只加斷行，讀起來才不會是一整片牆。找不到列點詞就整段當一個 <p>。
+  function paragraphize(text) {
+    if (!text) return "";
+    // 辯論輸出實測常用「一、二、三、」裸數字條列（不帶「第」字），原本的
+    // markers 沒收這種寫法，整段就永遠只有一個 <p>，變成無格式長文
+    // （2026-08-02 實測踩到：反方逐輪批評、結論核心訊息都是這個寫法）。
+    const markers = /(?=第[一二三四五六七八九十]+[，,、])|(?=首先[，,])|(?=其次[，,])|(?=再者[，,])|(?=最後[，,])|(?=另外[，,])|(?=同時[，,])|(?=綜合而言[，,])|(?=[一二三四五六七八九十]{1,2}、)/g;
+    const parts = String(text).split(markers).map(s => s.trim()).filter(Boolean);
+    if (parts.length <= 1) return `<p>${text}</p>`;
+    return parts.map(p => `<p>${p}</p>`).join("");
+  }
+
   function factsHtml(facts) {
     if (!facts || facts.length === 0) return `<div class="lr-note">（沒有抽出任何事實）</div>`;
     return facts.map(f => `
-      <div class="lr-row" style="margin-bottom:8px;">
-        <span class="lr-k">${f.source_type || "—"}</span>
-        <span class="lr-v">${f.summary || ""}　${evidenceIdsChips(f.evidence_ids)}</span>
+      <div class="fact-item">
+        <span class="fi-tag">${f.source_type || "—"}</span>
+        <div class="fi-summary">${f.summary || ""}</div>
+        ${evidenceIdsChips(f.evidence_ids)}
       </div>
     `).join("");
   }
@@ -1699,13 +1842,13 @@
         <div class="dr-label">第 ${round.round} 輪</div>
         <div class="debate-turn bull">
           <div class="dt-role">🐂 正方</div>
-          <div>${round.bull_argument || ""}</div>
+          ${paragraphize(round.bull_argument)}
           <div class="dt-evidence">${evidenceIdsChips(round.bull_evidence_ids)}</div>
         </div>
         <div class="debate-turn bear">
           <div class="dt-role">🐻 反方${round.bear_has_new_points === false ? "（自報無新論點，收斂）" : ""}</div>
-          ${round.bear_critique ? `<div class="dt-critique">批評正方：${round.bear_critique}</div>` : ""}
-          <div>${round.bear_argument || ""}</div>
+          ${round.bear_critique ? `<div class="dt-critique">批評正方：${paragraphize(round.bear_critique)}</div>` : ""}
+          ${paragraphize(round.bear_argument)}
           <div class="dt-evidence">${evidenceIdsChips(round.bear_evidence_ids)}</div>
         </div>
       </div>
@@ -1744,12 +1887,58 @@
 
   function confidenceBarRow(label, value, weight) {
     const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    const tier = pct < 45 ? "tier-low" : (pct < 70 ? "tier-mid" : "tier-high");
     return `
       <div class="cg-bar-row">
-        <span class="cg-label">${label}${weight ? `（×${weight}）` : ""}</span>
-        <span class="cg-bar-track"><span class="cg-bar-fill" style="width:${pct}%;"></span></span>
+        <span class="cg-label">${label}${weight ? `<span class="cg-weight">（×${weight}）</span>` : ""}</span>
+        <span class="cg-bar-track"><span class="cg-bar-fill ${tier}" style="width:${pct}%;"></span></span>
         <span class="cg-value">${pct.toFixed(0)}</span>
       </div>
+    `;
+  }
+
+  const CAT_LABELS = { price: "價格", onchain: "鏈上", news: "新聞", social: "社群", macro: "總經", derivatives: "衍生品" };
+
+  function categoryDetailHtml(b) {
+    const dataDetail = b.data_confidence_detail || {};
+    const strengthDetail = (b.evidence_strength_detail || {}).per_type_avg_weight || {};
+    const applicable = b.applicable_categories || Object.keys(dataDetail);
+    const cats = applicable.length ? applicable : Object.keys(dataDetail);
+    if (cats.length === 0) return "";
+
+    const rows = cats.map(cat => {
+      const d = dataDetail[cat] || {};
+      const score = typeof d.score === "number" ? d.score : 0;
+      const perTypeMax = 100 / cats.length;
+      const pct = perTypeMax > 0 ? Math.round((score / perTypeMax) * 100) : 0;
+      const tier = pct < 45 ? "tier-low" : (pct < 70 ? "tier-mid" : "tier-high");
+      const avgWeight = strengthDetail[cat];
+      return `
+        <div class="cat-row">
+          <span class="cat-dot ${tier}"></span>
+          <div class="cat-body">
+            <div class="cat-head">
+              <span class="cat-name">${CAT_LABELS[cat] || cat}</span>
+              <span class="cat-score">${score.toFixed(1)} 分（滿分 ${perTypeMax.toFixed(1)}）</span>
+            </div>
+            <div class="cat-reason">${d.reason || "（無說明）"}${d.count != null ? `　·　${d.count} 筆證據` : ""}</div>
+            ${avgWeight != null ? `<div class="cat-weight">證據強度平均權重：${avgWeight}</div>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    const skipped = Object.values(CAT_LABELS).length - cats.length;
+    const skippedNote = skipped > 0
+      ? `本次分析涵蓋 ${cats.length} 類（${cats.map(c => CAT_LABELS[c] || c).join("、")}）；其餘類別非本次 factor 集合涵蓋範圍，不計入分數，不算「缺資料扣分」。`
+      : `本次分析涵蓋完整六類，逐類分數如下。`;
+
+    return `
+      <details class="cat-detail">
+        <summary>各類別分數明細（把每一類的分數都列出來）</summary>
+        <div class="cat-detail-note">${skippedNote}</div>
+        ${rows}
+      </details>
     `;
   }
 
@@ -1763,7 +1952,7 @@
     const b = data.confidence_breakdown || {};
     const w = b.weights || {};
     return `
-      <div style="font-size:14.5px; font-weight:600; margin-bottom:10px;">${c.market_judgment || "（無結論）"}</div>
+      <div style="font-size:14.5px; font-weight:600; line-height:1.75; margin-bottom:10px;">${paragraphize(c.market_judgment) || "（無結論）"}</div>
       <div class="lr-row" style="margin-bottom:12px;"><span class="lr-k">適用尺度</span><span class="lr-v">${data.primary_horizon || "—"}${data.primary_horizon_basis ? "　" + data.primary_horizon_basis : ""}</span></div>
 
       <div class="confidence-gauge">
@@ -1772,10 +1961,17 @@
           ${confidenceBarRow("資料品質", b.data_confidence, w.data_confidence)}
           ${confidenceBarRow("訊號一致性", b.signal_consensus, w.signal_consensus)}
           ${confidenceBarRow("證據強度", b.evidence_strength, w.evidence_strength)}
-          <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Base</span><span class="lr-v">${b.base}</span></div>
-          <div class="lr-row"><span class="lr-k">辯論調整</span><span class="lr-v">${b.debate_adjustment > 0 ? "+" : ""}${b.debate_adjustment}${b.debate_adjustment_reason ? "　" + b.debate_adjustment_reason : ""}</span></div>
+          <div class="cg-stats">
+            <div class="cg-stat"><div class="cg-stat-k">Base</div><div class="cg-stat-v">${b.base}</div></div>
+            <div class="cg-stat">
+              <div class="cg-stat-k">辯論調整</div>
+              <div class="cg-stat-v">${b.debate_adjustment > 0 ? "+" : ""}${b.debate_adjustment}</div>
+              ${b.debate_adjustment_reason ? `<div class="cg-stat-reason">${b.debate_adjustment_reason}</div>` : ""}
+            </div>
+          </div>
         </div>
       </div>
+      ${categoryDetailHtml(b)}
 
       <div class="lr-note" style="margin-top:6px;">Limitations（這個結論的已知限制）</div>
       ${listOrNote(c.limitations, "（無）")}
@@ -1817,14 +2013,19 @@
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
 
+      // 三個區塊都包一層 .live-result（display:block 蓋掉預設 display:none）——
+      // 裡面用到的 .lr-row／.lr-note 樣式規則是寫成 `.live-result .lr-row` 這種
+      // 限定寫法（既有 CSS 慣例），沒包這層等於樣式規則整段不生效，變成無格式
+      // 純文字（2026-08-02 實測踩過這個坑，這裡修正）。
+      const liveWrapStyle = "display:block; margin-top:0; padding-top:0; border-top:none;";
       cvLivePill.textContent = `live · ${data.question_type || ""}`;
-      cvBody.innerHTML = cvHtml(data);
+      cvBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${cvHtml(data)}</div>`;
 
       debateLivePill.textContent = `live · ${(data.debate && data.debate.round_count) || 0} 輪`;
-      debateBody.innerHTML = debateHtml(data);
+      debateBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${debateHtml(data)}</div>`;
 
       conclusionLivePill.textContent = `live · 信心 ${data.confidence_score}`;
-      conclusionBody.innerHTML = conclusionHtml(data);
+      conclusionBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${conclusionHtml(data)}</div>`;
 
       stage9Card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (err) {

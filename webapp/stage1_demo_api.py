@@ -94,6 +94,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from agent.collectors.coin_map import get_coin_info
 from agent.collectors.derivatives import (
     FAPI_BASE,
     FUNDING_INTERVAL_HOURS,
@@ -193,7 +194,7 @@ CARD_DIR = Path(__file__).resolve().parent.parent / "Stage 5 — Evidence Card �
 # webapp/stage1_demo_api.py -> webapp -> HOYAbit_ai_agent -> data/
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-KNOWN_FACTORS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf"]
+KNOWN_FACTORS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf", "price"]
 
 
 # 學術出處的識別碼 → 可點擊的網址
@@ -1095,6 +1096,98 @@ async def stage2_liquidation(req: Stage2LiquidationRequest):
     }
 
 
+class Stage2PriceRequest(BaseModel):
+    coin: str
+    horizon: str | None = None  # 不影響抓取內容（快照跟 Horizon 無關），只是跟其他 factor
+                                 # 共用同一種呼叫介面，收下來原樣回顯，不做任何換算
+
+
+@app.post("/api/stage2/price")
+async def stage2_price(req: Stage2PriceRequest):
+    """Stage 2 Feature Extraction 的 price 版本：真的去抓 CoinGecko 現貨報價
+    （免 key），失敗則退 CryptoCompare（免 key）——跟 agent/collectors/price.py
+    既有的容錯順序一致，這裡是同一個資料源的簡化版（只取即時報價快照，不含
+    五檔粒度統計／技術指標，見 Stage 3 price.md「跟既有知識庫的關係」）。
+
+    這個 factor 沒有回看窗口，不呼叫 `_resolve_window_days_via_llm`——這不是
+    偷懶省略，是 Stage 2 price.yaml 明講的本質限制：快照沒有「回看多久」這個
+    問題可問。coingecko_id／cryptocompare_symbol 兩個資料源慣用的幣種代號都不是
+    PERP_SYMBOL（永續合約代號），直接讀 agent/collectors/coin_map.py 的
+    get_coin_info()，不重複維護一份對照表。"""
+    coin = req.coin.upper()
+    try:
+        coin_info = get_coin_info(coin)
+    except KeyError:
+        raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
+
+    spec = load_feature_spec("price")
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            resp = await client.get(
+                spec["endpoint"],
+                params={
+                    "ids": coin_info.coingecko_id,
+                    "vs_currencies": "usd",
+                    "include_24hr_change": "true",
+                    "include_24hr_vol": "true",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()[coin_info.coingecko_id]
+            current_value = float(data["usd"])
+            change_24h_pct = float(data.get("usd_24h_change", 0.0))
+            volume_24h_usd = float(data.get("usd_24h_vol", 0.0))
+            source = f"CoinGecko /simple/price {spec['endpoint']}"
+        except Exception as exc:  # noqa: BLE001
+            try:
+                resp = await client.get(
+                    "https://min-api.cryptocompare.com/data/pricemultifull",
+                    params={"fsyms": coin_info.cryptocompare_symbol, "tsyms": "USD"},
+                )
+                resp.raise_for_status()
+                raw = resp.json()["RAW"][coin_info.cryptocompare_symbol]["USD"]
+                current_value = float(raw["PRICE"])
+                change_24h_pct = float(raw.get("CHANGEPCT24HOUR", 0.0))
+                volume_24h_usd = float(raw.get("VOLUME24HOURTO", 0.0))
+                source = "CryptoCompare /data/pricemultifull（CoinGecko 失敗備援）"
+            except Exception as exc2:  # noqa: BLE001
+                raise HTTPException(
+                    502, f"price 抓取失敗（CoinGecko: {exc}；CryptoCompare 備援: {exc2}）"
+                ) from exc2
+
+    features, feature_report = compute_series_features(
+        "price",
+        spec,
+        [],
+        provided={
+            "current_value": current_value,
+            "change_24h_pct": change_24h_pct,
+            "volume_24h_usd": volume_24h_usd,
+        },
+    )
+
+    return {
+        "coin": coin,
+        "factor": "price",
+        "horizon": req.horizon,
+        "current_value": f"{current_value:,.4f}",
+        "change_24h_pct": f"{change_24h_pct:+.2f}%",
+        "volume_24h_usd": f"{volume_24h_usd:,.0f}",
+        "percentile": None,
+        "trend": None,
+        "sample_count": 1,
+        "source": source,
+        "note": (
+            "即時快照，不是回看窗口的統計量——沒有 percentile／trend／slope 等需要歷史序列的欄位，"
+            "一律不產生（見 Stage 2 price.yaml）。要看更長趨勢請看 agent/collectors/price.py 的五檔"
+            "粒度區間統計或技術指標，不是這支端點的範圍。"
+        ),
+        "features": features,
+        "feature_spec": feature_report,
+    }
+
+
 PANEWS_ENDPOINT = "https://universal-api.panewslab.com/articles"
 PANEWS_PAGE_SIZE = 100          # 分頁大小，Stage 2 panews_sentiment.yaml 的實測用值
 PANEWS_MAX_PAGES = 30           # demo 防呆上限（3000 篇）。⚠ 這不是「抓到這裡就夠了」，
@@ -1622,8 +1715,121 @@ def _horizon_match(horizon_days: int, knowledge: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# cross_source_consensus —— Stage 4 四條線索裡的第三條
+# ---------------------------------------------------------------------------
+# 13 拍板：比的是「今天方向是否同向」，而且是**查詢當下**才算——不預先算好放進
+# Knowledge（早上算好的快照到下午提問時早就過期了，見 13 Stage 3 段落的修正）。
+# 這裡只比同一次查詢裡真的有卡片的關聯對象，其餘逐項說明為什麼不能比。
+
+# Stage 2 的 trend 字串長這樣：「Decreasing（21-day window）」「資料不足以判斷趨勢」
+_TREND_WORDS = {"Increasing": "up", "Decreasing": "down", "Flat": "flat"}
+
+
+def _trend_direction(stage2: dict | None) -> str | None:
+    """從 Stage 2 輸出抽出方向（up／down／flat）。抽不到就回 None——代表這個
+    factor 結構性沒有 trend（liquidation 只有單次監聽窗、cpi 月頻樣本太少），
+    不是抓取失敗。"""
+    if not stage2:
+        return None
+    trend = stage2.get("trend")
+    if not isinstance(trend, str):
+        return None
+    for word, direction in _TREND_WORDS.items():
+        if trend.startswith(word):
+            return direction
+    return None
+
+
+_DIRECTION_LABEL = {"up": "上升", "down": "下降", "flat": "持平"}
+
+
+def _cross_source_consensus(factor_id: str, knowledge: dict, batch: dict[str, dict]) -> dict:
+    """batch：這一次查詢裡每個 factor 的 {trend_direction: ...}。
+
+    只處理 `confirms`／`conflicts` 兩種關係——`independent` 的定義就是「兩者無關」，
+    本來就沒有「應該同向」的預期，比方向沒有意義，所以直接跳過不列為缺口。
+    """
+    checks: list[dict] = []
+    unavailable: list[dict] = []
+    self_dir = (batch.get(factor_id) or {}).get("trend_direction")
+
+    for relation in ("confirms", "conflicts"):
+        raw = knowledge.get(relation)
+        if not raw:
+            continue
+        text = str(raw)
+        # Knowledge 寫的是自然語言（例如「funding_rate ＋ open_interest（未平倉量）」），
+        # 用「同批 factor 的 id 有沒有出現在字串裡」來認關聯對象，跟 Stage 6 Graph 同一招
+        targets = [fid for fid in batch if fid != factor_id and fid in text]
+        if not targets:
+            unavailable.append({
+                "relation": relation,
+                "reason": "no_card",
+                "note": f"{relation} 指向的關聯 factor 這批查詢沒有對應卡片，不猜也不補抓",
+            })
+            continue
+
+        for target in targets:
+            target_dir = (batch.get(target) or {}).get("trend_direction")
+            if self_dir is None or target_dir is None:
+                missing = factor_id if self_dir is None else target
+                unavailable.append({
+                    "relation": relation, "target": target, "reason": "no_direction",
+                    "note": f"{missing} 結構性沒有 trend（單次觀察窗／樣本過少），無法比方向",
+                })
+                continue
+
+            same = self_dir == target_dir
+            if relation == "confirms":
+                agree = same
+                verdict = "與預期一致（互相印證的兩者同向）" if same else "與預期不符（應互相印證卻反向）"
+            else:  # conflicts：知識庫說這兩者會背離，所以「反向」才是符合預期
+                agree = not same
+                verdict = "與預期一致（預期背離，確實反向）" if not same else "與預期不符（預期背離卻同向）"
+
+            checks.append({
+                "relation": relation, "target": target,
+                "self_direction": self_dir, "target_direction": target_dir,
+                "agree": agree,
+                "note": (
+                    f"{factor_id} {_DIRECTION_LABEL[self_dir]}、{target} "
+                    f"{_DIRECTION_LABEL[target_dir]} → {verdict}"
+                ),
+            })
+
+    if checks:
+        agreed = sum(1 for c in checks if c["agree"])
+        summary = f"可比對 {len(checks)} 組，其中 {agreed} 組與知識庫預期一致"
+        status = "computed"
+    else:
+        summary = "這次沒有可比對的關聯 factor（原因見 unavailable）"
+        status = "unavailable"
+
+    return {"status": status, "summary": summary, "checks": checks, "unavailable": unavailable}
+
+
+def _consensus_clue_text(related: str, consensus: dict | None) -> str:
+    """把 cross_source_consensus 的計算結果寫成一句給 LLM 看的線索。
+    算得出來就給實際比對結果；算不出來要說**為什麼**（關聯 factor 沒卡片／
+    對方結構性沒有 trend），不要含糊丟一句「當未知處理」——那會讓 LLM 分不出
+    是「缺資料」還是「真的沒有關係」，這兩件事對 modifier 的意義完全不同。"""
+    if not consensus or consensus.get("status") != "computed":
+        reasons = "；".join(u["note"] for u in (consensus or {}).get("unavailable", []))             or "這批查詢沒有可比對的關聯 factor"
+        return (
+            f"該 factor 知識庫列出的關聯訊號為「{related}」，但這次無法比對方向"
+            f"（{reasons}），當未知處理、不加分也不扣分"
+        )
+    lines = "；".join(c["note"] for c in consensus["checks"])
+    extra = ""
+    if consensus.get("unavailable"):
+        extra = "；另有無法比對的部分：" + "；".join(u["note"] for u in consensus["unavailable"])
+    return f"{consensus['summary']}——{lines}{extra}"
+
+
 def _stage4_modifier_prompt(
-    factor_id: str, knowledge: dict, horizon: str | None, horizon_days: int, freshness_note: str
+    factor_id: str, knowledge: dict, horizon: str | None, horizon_days: int, freshness_note: str,
+    consensus: dict | None = None,
 ) -> str:
     """Dynamic Modifier 的四條線索要逐 factor 換內容——confirms／conflicts 直接
     讀該 factor 自己的 Stage 3 知識庫，不是共用 funding_rate 的關聯訊號清單。
@@ -1666,8 +1872,7 @@ def _stage4_modifier_prompt(
         f"這次評估的 factor：{factor_id}\n\n"
         f"1. market_regime：尚未接上真實 FOMC／利率資料源（這輪 demo 沒做，當未知處理）\n"
         f"2. time_horizon_match：{time_property}\n"
-        f"3. cross_source_consensus：該 factor 知識庫列出的關聯訊號為「{related}」，"
-        f"但這些關聯 factor 今天的方向這輪 demo 還沒接上真實資料（當未知處理）\n"
+        f"3. cross_source_consensus：{_consensus_clue_text(related, consensus)}\n"
         f"4. freshness：{freshness_note}"
     )
 
@@ -1862,7 +2067,10 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
     }
 
 
-async def _compute_stage4(factor_id: str, coin: str, horizon: str | None, horizon_days: int) -> dict:
+async def _compute_stage4(
+    factor_id: str, coin: str, horizon: str | None, horizon_days: int,
+    batch_directions: dict[str, dict] | None = None,
+) -> dict:
     """Stage 4 的共用實作：Prior Weight × Dynamic Modifier（LLM 判斷）＝
     final_evidence_weight。四個 factor 走同一套流程，差別只在 Prior Weight 從
     哪來（ic 現場算／impact_level 分級／Domain Knowledge），見
@@ -1884,7 +2092,12 @@ async def _compute_stage4(factor_id: str, coin: str, horizon: str | None, horizo
         )
     else:
         freshness_note = "資料是這次請求當下即時打 API 拿到的，非常新鮮"
-    user_prompt = _stage4_modifier_prompt(factor_id, knowledge, horizon, horizon_days, freshness_note)
+    # cross_source_consensus 只有在「同一次查詢裡有其他 factor 的卡片」時才算得出來——
+    # 單獨呼叫 /api/stage4/{factor} 時沒有同批資料，會誠實回報無法比對。
+    consensus = _cross_source_consensus(factor_id, knowledge, batch_directions or {})
+    user_prompt = _stage4_modifier_prompt(
+        factor_id, knowledge, horizon, horizon_days, freshness_note, consensus
+    )
 
     settings = get_settings()
     try:
@@ -1916,10 +2129,15 @@ async def _compute_stage4(factor_id: str, coin: str, horizon: str | None, horizo
             "reasoning": modifier_reasoning,
             "source": modifier_source,
             "time_horizon_match": match,
+            "cross_source_consensus": consensus,
             "inputs_status": {
                 "market_regime": "stub（尚未接上真實資料源）",
                 "time_horizon_match": "real（程式用 applicable_days 數值比對算出，非 LLM 讀散文猜）",
-                "cross_source_consensus": "stub（關聯 factor 今天的方向這輪未接上）",
+                "cross_source_consensus": (
+                    "real（同批 factor 的 trend 方向當場比對）"
+                    if consensus.get("status") == "computed"
+                    else "unavailable（這次沒有可比對的關聯 factor，原因見 cross_source_consensus.unavailable）"
+                ),
                 "freshness": "real（依該 factor 的資料頻率如實描述）",
             },
         },
@@ -1970,10 +2188,15 @@ async def _stage2_fact_for(factor_id: str, coin: str, horizon: str | None) -> di
         return await stage2_panews_sentiment(Stage2PanewsRequest(coin=coin, horizon=horizon))
     if factor_id == "etf":
         return await stage2_etf(Stage2ETFRequest(coin=coin, horizon=horizon))
+    if factor_id == "price":
+        return await stage2_price(Stage2PriceRequest(coin=coin, horizon=horizon))
     raise ValueError(f"未知 factor：{factor_id}")
 
 
-async def _build_evidence_card(factor_id: str, coin: str, horizon: str | None, horizon_days: int) -> dict:
+async def _build_evidence_card(
+    factor_id: str, coin: str, horizon: str | None, horizon_days: int,
+    stage2: dict | None = None, batch_directions: dict[str, dict] | None = None,
+) -> dict:
     """組裝一張 Evidence Card。
 
     **卡片有哪些格子、fact 有哪些欄位、哪一格是對應到 Knowledge 的別的欄位，全部讀自
@@ -1990,9 +2213,12 @@ async def _build_evidence_card(factor_id: str, coin: str, horizon: str | None, h
 
     下面幾個 key 是**執行期才有的東西**，卡片檔不會有（也不該有）：weight_detail
     （這次的計算過程）、confidence、ranking_value／weight_direction（排序用）。"""
-    stage2 = await _stage2_fact_for(factor_id, coin, horizon)
+    # Stage 5 會先把全部 factor 的 Stage 2 跑完再進來（才有同批方向可比），
+    # 這裡沒帶就自己抓——單獨呼叫時仍然可用。
+    if stage2 is None:
+        stage2 = await _stage2_fact_for(factor_id, coin, horizon)
     knowledge = stage3_factor(factor_id)["knowledge"]
-    stage4 = await _compute_stage4(factor_id, coin, horizon, horizon_days)
+    stage4 = await _compute_stage4(factor_id, coin, horizon, horizon_days, batch_directions)
 
     card, card_report = build_evidence_card(
         factor_id,
@@ -2090,8 +2316,29 @@ async def stage5_all(req: Stage5FundingRequest):
     # 那會讓 time_horizon_match 不管問幾年都以為在問兩週）。
     horizon_days, _ = await _resolve_effective_horizon_days(req.horizon, req.horizon_days)
 
+    # 兩段式：先把所有 factor 的 Stage 2 跑完，才有「同批其他 factor 今天往哪走」
+    # 可以拿來比 —— cross_source_consensus 必須在 Stage 4 打 LLM **之前**就備好，
+    # 否則它就只是事後補的裝飾，進不了 modifier 的判斷。
+    stage2_results = await asyncio.gather(
+        *(_stage2_fact_for(f, coin, req.horizon) for f in KNOWN_FACTORS),
+        return_exceptions=True,
+    )
+    stage2_by_factor: dict[str, dict] = {}
+    batch_directions: dict[str, dict] = {}
+    for f, r in zip(KNOWN_FACTORS, stage2_results):
+        if isinstance(r, BaseException):
+            continue
+        stage2_by_factor[f] = r
+        batch_directions[f] = {"trend_direction": _trend_direction(r)}
+
     results = await asyncio.gather(
-        *(_build_evidence_card(f, coin, req.horizon, horizon_days) for f in KNOWN_FACTORS),
+        *(
+            _build_evidence_card(
+                f, coin, req.horizon, horizon_days,
+                stage2=stage2_by_factor.get(f), batch_directions=batch_directions,
+            )
+            for f in KNOWN_FACTORS
+        ),
         return_exceptions=True,
     )
 
@@ -2292,6 +2539,7 @@ SOURCE_TYPE_BY_FACTOR = {
     "cpi": SourceType.MACRO,
     "panews_sentiment": SourceType.NEWS,
     "etf": SourceType.MACRO,  # 最接近的既有分類，非精確匹配，見上方說明
+    "price": SourceType.PRICE,  # 唯一一個精確匹配：SourceType 本來就有 PRICE 這一類
 }
 
 _DEBATE_RELATION_TO_CARD_KEY = {"supports": "confirms", "conflicts": "conflicts", "independent": "independent"}
@@ -2307,7 +2555,13 @@ def _fact_summary_text(card: dict) -> str:
 def _cards_to_evidences(cards: list[dict], coin: str) -> tuple[list[Evidence], dict[str, str]]:
     """把 Stage 5 Evidence Card 轉成 Evidence 物件，回傳 (evidences, id_map)——
     id_map 是 {原本的 evidence_id: 新配的 ev-NNN}，前端顯示辯論逐字稿時要用它
-    把 ev-001 對回 FUNDING_RATE_BTC 這種可讀名稱。"""
+    把 ev-001 對回 FUNDING_RATE_BTC 這種可讀名稱。
+
+    liquidation 目前資料源只有單次 6 秒觀察窗，不具統計代表性、無方向性資訊量
+    （2026-08-02 Ken 確認：「這沒辦法當一個證據」）——在這裡整組排除，不進交叉
+    驗證／辯論鏈；Stage 5/6 卡片本身仍照樣呈現，只是不會被當成推理輸入。
+    """
+    cards = [c for c in cards if c.get("factor") != "liquidation"]
     id_map = {c["evidence_id"]: f"ev-{i:03d}" for i, c in enumerate(cards, start=1)}
     graph = _build_evidence_graph(cards)  # 複用 Stage 6 已經做好的關係解析，不重寫一次
 
@@ -2374,8 +2628,13 @@ async def stage789(req: Stage789Request):
         raise HTTPException(500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}") from exc
 
     try:
+        # applicable_categories＝這批 demo 六個 factor 實際映射到的四類（見
+        # SOURCE_TYPE_BY_FACTOR），不是完整六類。2026-08-02 Ken 指出：price／
+        # social 對這批 factor 集合是結構性不涵蓋，不是「該補資料但沒補」，
+        # 不該套用同一套扣分公式（confidence.py 的 docstring 有完整說明）。
         result = await asyncio.to_thread(
-            run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None
+            run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None,
+            set(SOURCE_TYPE_BY_FACTOR.values()),
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"推理鏈執行失敗（backend={settings.llm_backend}）：{exc}") from exc
