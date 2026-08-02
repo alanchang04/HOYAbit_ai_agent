@@ -657,19 +657,22 @@ class PriceCollector(BaseCollector):
         try:
             while cursor < cutoff:
                 chunk_end = min(cursor + timedelta(days=COINBASE_CANDLES_MAX_DAYS), cutoff)
-                resp = await client.get(
-                    COINBASE_CANDLES_URL.format(product=f"{ticker}-USD"),
-                    params={
-                        "granularity": 86_400,
-                        "start": datetime(
-                            cursor.year, cursor.month, cursor.day, tzinfo=timezone.utc
-                        ).isoformat(),
-                        "end": datetime(
-                            chunk_end.year, chunk_end.month, chunk_end.day, tzinfo=timezone.utc
-                        ).isoformat(),
-                    },
-                )
+                coinbase_url = COINBASE_CANDLES_URL.format(product=f"{ticker}-USD")
+                coinbase_params = {
+                    "granularity": 86_400,
+                    "start": datetime(
+                        cursor.year, cursor.month, cursor.day, tzinfo=timezone.utc
+                    ).isoformat(),
+                    "end": datetime(
+                        chunk_end.year, chunk_end.month, chunk_end.day, tzinfo=timezone.utc
+                    ).isoformat(),
+                }
+                resp = await client.get(coinbase_url, params=coinbase_params)
                 resp.raise_for_status()
+                self.log_subsource(
+                    "coinbase_gap_fill", coin, LogStatus.OK,
+                    f"endpoint={coinbase_url}, params={coinbase_params}",
+                )
                 for row in coinbase_candles_to_rows(resp.json(), today=cutoff):
                     if cursor.isoformat() <= row["date"] < chunk_end.isoformat():
                         coinbase_rows[row["date"]] = row
@@ -698,20 +701,22 @@ class PriceCollector(BaseCollector):
                 fallback_start.year, fallback_start.month, fallback_start.day, tzinfo=timezone.utc
             ).timestamp() * 1000
         )
+        binance_params = {
+            "symbol": symbol,
+            "interval": "1d",
+            "startTime": start_ms,
+            "limit": BINANCE_KLINES_LIMIT,
+        }
         try:
-            resp = await client.get(
-                BINANCE_KLINES_URL,
-                params={
-                    "symbol": symbol,
-                    "interval": "1d",
-                    "startTime": start_ms,
-                    "limit": BINANCE_KLINES_LIMIT,
-                },
-            )
+            resp = await client.get(BINANCE_KLINES_URL, params=binance_params)
             resp.raise_for_status()
         except Exception as exc:  # noqa: BLE001
             self.log_subsource("binance_gap_fill", coin, LogStatus.SKIPPED, f"symbol={symbol}, error={_exc_text(exc)}")
             return [], ""
+        self.log_subsource(
+            "binance_gap_fill", coin, LogStatus.OK,
+            f"endpoint={BINANCE_KLINES_URL}, params={binance_params}",
+        )
         binance_rows = klines_to_rows(resp.json(), today=cutoff)
         binance_by_date = {row["date"]: row for row in binance_rows}
         if not binance_by_date:
@@ -916,16 +921,21 @@ class PriceCollector(BaseCollector):
 
             # --- 即時報價：CoinGecko（免 key），失敗則退 CryptoCompare（免 key）---
             try:
+                coingecko_params = {
+                    "ids": info.coingecko_id,
+                    "vs_currencies": "usd",
+                    "include_24hr_change": "true",
+                    "include_24hr_vol": "true",
+                }
                 resp = await client.get(
                     "https://api.coingecko.com/api/v3/simple/price",
-                    params={
-                        "ids": info.coingecko_id,
-                        "vs_currencies": "usd",
-                        "include_24hr_change": "true",
-                        "include_24hr_vol": "true",
-                    },
+                    params=coingecko_params,
                 )
                 resp.raise_for_status()
+                self.log_subsource(
+                    "coingecko", coin, LogStatus.OK,
+                    f"endpoint=https://api.coingecko.com/api/v3/simple/price, params={coingecko_params}",
+                )
                 data = resp.json()[info.coingecko_id]
                 evidences.append(
                     EvidenceDraft(
@@ -948,11 +958,16 @@ class PriceCollector(BaseCollector):
             except Exception as exc:  # noqa: BLE001
                 self.log_subsource("coingecko", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}, fallback=cryptocompare")
                 try:
+                    cryptocompare_params = {"fsyms": info.cryptocompare_symbol, "tsyms": "USD"}
                     resp = await client.get(
                         "https://min-api.cryptocompare.com/data/pricemultifull",
-                        params={"fsyms": info.cryptocompare_symbol, "tsyms": "USD"},
+                        params=cryptocompare_params,
                     )
                     resp.raise_for_status()
+                    self.log_subsource(
+                        "cryptocompare", coin, LogStatus.OK,
+                        f"endpoint=https://min-api.cryptocompare.com/data/pricemultifull, params={cryptocompare_params}",
+                    )
                     raw = resp.json()["RAW"][info.cryptocompare_symbol]["USD"]
                     evidences.append(
                         EvidenceDraft(
@@ -976,11 +991,16 @@ class PriceCollector(BaseCollector):
 
             # --- 永續基差：Binance Futures premiumIndex（免 key），mark/index 價差是多空情緒佐證 ---
             try:
+                perp_basis_params = {"symbol": f"{info.ticker}USDT"}
                 resp = await client.get(
                     "https://fapi.binance.com/fapi/v1/premiumIndex",
-                    params={"symbol": f"{info.ticker}USDT"},
+                    params=perp_basis_params,
                 )
                 resp.raise_for_status()
+                self.log_subsource(
+                    "perp_basis", coin, LogStatus.OK,
+                    f"endpoint=https://fapi.binance.com/fapi/v1/premiumIndex, params={perp_basis_params}",
+                )
                 data = resp.json()
                 basis = compute_perp_basis(
                     mark_price=float(data["markPrice"]),

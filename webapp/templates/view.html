@@ -20,7 +20,7 @@
   </header>
 
   <div class="container container-wide">
-    <h1>信任提煉四面板檢視</h1>
+    <h1>投資者決策摘要</h1>
     <p class="meta">
       幣種：{{ view.meta.coin }}{% if view.meta.coin2 %} vs {{ view.meta.coin2 }}{% endif %}
       ｜題型：{{ view.meta.question_type }}
@@ -35,21 +35,72 @@
         <span class="stat-value">{{ view.meta.metrics.confidence }}%</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">雜訊剔除率</span>
-        <span class="stat-value">{{ "%.1f"|format(view.meta.metrics.noise_removal_rate * 100) }}%</span>
+        <span class="stat-label">提煉介入率</span>
+        {% set impact = view.panel3_refinement.get("refinement_impact", {}) %}
+        <span class="stat-value">{{ "%.1f"|format(impact.get("affected_rate", view.meta.metrics.noise_removal_rate) * 100) }}%</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">完整性</span>
         <span class="stat-value stat-value-tag">{{ view.meta.metrics.integrity_status }}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Tokens</span>
-        <span class="stat-value">{{ view.meta.metrics.total_tokens }}</span>
+        <span class="stat-label">可回溯證據</span>
+        <span class="stat-value">{{ view.meta.metrics.raw_evidence_count }} 筆</span>
       </div>
     </div>
 
+    {% set p4 = view.panel4_report %}
+    {% set summary = p4.summary %}
+    <section class="investor-brief">
+      <div class="brief-heading">
+        <div>
+          <span class="brief-kicker">目前判斷</span>
+          <h2>{{ view.meta.coin }}{% if view.meta.coin2 %} vs {{ view.meta.coin2 }}{% endif %}</h2>
+        </div>
+        <span class="integrity-badge integrity-{{ p4.integrity_status|lower }}">{{ p4.integrity_status }}</span>
+      </div>
+
+      {% if p4.integrity_status != "INTACT" and p4.degraded_reasons %}
+        <div class="integrity-note">資料限制：{{ p4.degraded_reasons|join("；") }}</div>
+      {% endif %}
+
+      <p class="decision-brief">
+        {{ summary.get("decision_brief", p4.market_judgment[:360]) }}{% if not summary.get("decision_brief") and p4.market_judgment|length > 360 %}…{% endif %}
+      </p>
+
+      <div class="brief-columns">
+        <div class="brief-column">
+          <h3>三個核心依據</h3>
+          <ul>
+            {% set top_facts = summary.get("top_facts", p4.core_facts[:3]) %}
+            {% for fact in top_facts %}
+              <li><span class="fingerprint-badge">{{ fact.fingerprint }}</span> {{ fact.text }}</li>
+            {% else %}
+              <li class="data-missing">本次沒有可顯示的核心事實</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="brief-column brief-risk">
+          <h3>主要限制</h3>
+          <ul>
+            {% set top_risks = summary.get("top_risks", p4.limitations[:2]) %}
+            {% for risk in top_risks %}<li>{{ risk }}</li>{% else %}<li>未列出重大限制</li>{% endfor %}
+          </ul>
+        </div>
+        <div class="brief-column brief-watch">
+          <h3>推翻／觀察條件</h3>
+          <ul>
+            {% set top_watchpoints = summary.get("top_watchpoints", p4.invalidation_conditions[:3]) %}
+            {% for point in top_watchpoints %}<li>{{ point }}</li>{% else %}<li>未列出具體條件</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    </section>
+
     {# Four-panel grid #}
-    <div class="four-panel">
+    <details class="technical-detail">
+      <summary>展開信任提煉四面板、完整辯論與 Evidence</summary>
+      <div class="four-panel">
 
       {# Panel 1: 原始證據流 #}
       <div class="panel">
@@ -112,6 +163,12 @@
       <div class="panel">
         <div class="panel-header">③ 信任提煉流水線</div>
         <p class="note">雜訊剔除率：{{ "%.1f"|format(view.panel3_refinement.noise_removal_rate * 100) }}%</p>
+        {% if impact %}
+          <div class="refinement-impact">
+            原始 {{ impact.raw_count }} 筆 → 進入事實層 {{ impact.retained_count }} 筆；
+            剔除 {{ impact.removed_count }}、降權 {{ impact.downweighted_count }}、低信度標記 {{ impact.low_trust_count }}。
+          </div>
+        {% endif %}
 
         {% if view.panel3_refinement.skipped_layers %}
           <div class="skipped-warning">
@@ -134,7 +191,7 @@
               {% if layer.layer == "L1_source" %}
                 權威 {{ layer.summary.authoritative }} / 一般 {{ layer.summary.normal }} / 低信度 {{ layer.summary.low }}
               {% elif layer.layer == "L2_content" %}
-                話術命中 {{ layer.checks[0].hits|length }} 筆，去重剔除 {{ layer.checks[1].removed|length }} 筆
+                話術命中 {{ layer.checks[0].hits|length }} 筆，去重剔除 {{ layer.checks[1].removed|length }} 筆{% set inj = layer.checks|selectattr("code", "equalto", "INJ")|list %}{% if inj %}，注入隔離 {{ inj[0].quarantined|length }} 筆{% endif %}
               {% elif layer.layer == "L3_fact" %}
                 輸入 {{ layer.input }} → 保留 {{ layer.kept }}（剔除率 {{ "%.1f"|format(layer.removal_rate * 100) }}%）
               {% elif layer.layer == "L4_cross" %}
@@ -175,6 +232,14 @@
                   {% else %}
                     <p class="data-missing">F9 情緒分布：未啟用</p>
                   {% endif %}
+                {% elif check.code == "INJ" %}
+                  <p><strong>Prompt injection 掃描</strong>：{{ check.note }}</p>
+                  {% for item in check.quarantined %}
+                    <div class="filter-hit">🚫 {{ item.fingerprint }} — {{ item.reason }}</div>
+                  {% endfor %}
+                  {% for item in check.flagged %}
+                    <div class="filter-hit">⚠️ {{ item.fingerprint }} — {{ item.reason }}</div>
+                  {% endfor %}
                 {% endif %}
               {% endfor %}
 
@@ -328,9 +393,9 @@
       <div class="panel">
         <div class="panel-header">④ 分析報告</div>
 
-        {% if view.panel4_report.integrity_status == "DEGRADED" %}
-          <div class="skipped-warning">
-            ⚠️ 完整性：DEGRADED
+        {% if view.panel4_report.integrity_status != "INTACT" %}
+          <div class="skipped-warning integrity-warning-{{ view.panel4_report.integrity_status|lower }}">
+            ⚠️ 完整性：{{ view.panel4_report.integrity_status }}
             {% if view.panel4_report.degraded_reasons %}
               — {{ view.panel4_report.degraded_reasons|join("；") }}
             {% endif %}
@@ -448,7 +513,8 @@
         {% endif %}
       </div>
 
-    </div>{# /.four-panel #}
+      </div>{# /.four-panel #}
+    </details>
   </div>{# /.container #}
 </body>
 </html>

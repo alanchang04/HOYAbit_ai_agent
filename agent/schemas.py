@@ -154,7 +154,7 @@ class RunMetrics(BaseModel):
     confidence: int = 0
     noise_removal_rate: float = 0.0
     total_tokens: int = 0
-    integrity_status: str = "INTACT"  # INTACT | DEGRADED
+    integrity_status: str = "INTACT"  # INTACT | PARTIAL | DEGRADED
     raw_evidence_count: int = 0
     kept_fact_count: int = 0
     degraded_reasons: list[str] = Field(default_factory=list)
@@ -192,6 +192,13 @@ class EvidenceDraft(BaseModel):
     dedup_rate: float | None = None
     duplicate_of: str | None = None  # 被去重剔除時，指向保留的那筆證據 id
 
+    # 資安：prompt injection 偵測（agent/filters/injection.py）。
+    # "high" = 隔離（不送進任何 LLM prompt，但證據本身完整保留可回溯）；
+    # "medium" = 僅標記，照常送進 LLM。None = 未命中。
+    # 有預設值以維持向後相容：舊 evidence.json 無此欄位仍可載入（R2-9）。
+    injection_flag: str | None = None
+    injection_reason: str = ""
+
     # horizon-aware R2: 時間尺度標註（由 collector 決定性填入，見 .kiro/steering/horizon-annotation.md）
     # window_end ≠ fetched_at：前者是「觀察涵蓋到哪一天」，後者是「何時抓的」。
     # 官方 CSV 證據的 fetched_at 是執行日，但 window_end 是 CSV 末日——這兩個值不同正是本欄位存在的理由。
@@ -205,6 +212,13 @@ class EvidenceDraft(BaseModel):
     # 也不要無根據地把它判成 short/fast 而錯誤壓低其份量。
     persistence: Persistence = Persistence.MEDIUM
     decay: DecayPattern = DecayPattern.SLOW
+
+    # Evidence Graph：跟其他證據的關係（對應 13_流程圖迭代定案v2.md Stage 6）。
+    # 只存「id 指到 id」的關係，不含市場方向；三個 key 固定為 supports／conflicts／independent，
+    # 缺的 key 視為空清單。由 knowledge layer 或後製步驟決定性填入，不由辯論層現場推斷
+    # ——辯論當下才推斷關係，等於又製造一次 Ken v3 提案要防的錨定（辯論前就先有預判）。
+    # 有預設值以維持向後相容：舊 evidence.json 無此欄位仍可載入（R2-9）。
+    related_evidence: dict[str, list[str]] = Field(default_factory=dict)
 
     @field_validator("fetched_at")
     @classmethod

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.filters.injection import escape_for_prompt, is_quarantined
 from agent.reasoning.llm_client import LLMClient
 from agent.schemas import Evidence
 
@@ -22,10 +23,15 @@ def run_baseline(
 ) -> dict:
     """執行未過濾對照組分析。成功回傳 {"analysis": str, "caveat": str}，失敗回傳 {"error": str}。"""
     try:
-        # 組合全量證據為純文字（不帶權重）
+        # 組合全量證據為純文字（不帶權重）。
+        # **對照組「未過濾」指的是不做信源加權與雜訊過濾，不含資安層**：
+        # 注入隔離與跳脫兩組一律套用，否則一則惡意貼文就能直接操控對照組輸出，
+        # 而對照組的結果是要印進報告的。這不影響對照的公平性——被隔離的是
+        # 攻擊載荷，不是本來要拿來比較的雜訊。
         evidence_text = "\n".join(
-            f"[{ev.id}] {ev.source}: {ev.content_reference}"
+            f"[{ev.id}] {escape_for_prompt(ev.source)}: {escape_for_prompt(ev.content_reference)}"
             for ev in evidences
+            if not is_quarantined(ev)
         )
         coin_label = f"{coin} vs {coin2}" if coin2 else coin
         user_prompt = (

@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
+from agent.reasoning.confidence import confidence_label
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.schemas import (
     Evidence,
     FilterDecision,
+    FilterVerdict,
     LogEntry,
     LogStatus,
     PipelineLayer,
@@ -134,6 +137,10 @@ def _build_panel1(
                 "content_reference": ev.content_reference,
                 "coin": ev.coin,
                 "filter_decisions": decisions_by_ev.get(ev.id, []),
+                # 資安旗標：Web UI 據此標示「這筆被判定含注入內容／已隔離」。
+                # 模板已走 Jinja autoescape，內文本身不需要在這裡跳脫。
+                "injection_flag": getattr(ev, "injection_flag", None),
+                "injection_reason": getattr(ev, "injection_reason", ""),
             }
         )
 
@@ -211,6 +218,10 @@ def _build_panel3(
     pr_hits = [fd for fd in filter_decisions if fd.check_code == "PR"]
     dedup_removed = [fd for fd in filter_decisions if fd.check_code == "DEDUP"]
     f10_pairs = [fd for fd in filter_decisions if fd.check_code == "F10"]
+    # INJ：high 走 REMOVED（已隔離、未進 LLM），medium 走 KEPT（僅標記）
+    inj_all = [fd for fd in filter_decisions if fd.check_code == "INJ"]
+    inj_quarantined = [fd for fd in inj_all if fd.verdict == FilterVerdict.REMOVED]
+    inj_flagged = [fd for fd in inj_all if fd.verdict != FilterVerdict.REMOVED]
 
     def _fd_items(fds: list[FilterDecision]) -> list[dict]:
         return [
@@ -237,6 +248,15 @@ def _build_panel3(
             },
             # F10 模板相似度已由 Phase 2 去重（DEDUP）取代，保留欄位相容
             {"code": "F10", "pairs": _fd_items(f10_pairs)},
+            {
+                "code": "INJ",
+                "quarantined": _fd_items(inj_quarantined),
+                "flagged": _fd_items(inj_flagged),
+                "note": (
+                    f"prompt injection 掃描：{len(inj_quarantined)} 筆隔離（未送入 LLM）、"
+                    f"{len(inj_flagged)} 筆標記"
+                ),
+            },
             (
                 {"code": "F9", **{k: v for k, v in f9_metrics.items()}}
                 if f9_metrics.get("enabled")
@@ -252,15 +272,16 @@ def _build_panel3(
     l3_removed = l3_metrics.get("removed", 0)
     l3_removal_rate = l3_metrics.get("removal_rate", run_metrics.noise_removal_rate)
 
+    removed_items = _compute_removed_items(
+        evidences, reasoning_result, filter_decisions, fingerprint_map
+    )
     l3_layer = {
         "layer": "L3_fact",
         "input": l3_input,
         "kept": l3_kept,
         "removed": l3_removed,
         "removal_rate": l3_removal_rate,
-        "removed_items": _compute_removed_items(
-            evidences, reasoning_result, filter_decisions, fingerprint_map
-        ),
+        "removed_items": removed_items,
     }
 
     # L4 cross validation
@@ -332,8 +353,31 @@ def _build_panel3(
     # log_events_by_layer
     log_events_by_layer = _group_log_by_layer(log_entries)
 
+    removed_ids = {
+        decision.evidence_id
+        for decision in filter_decisions
+        if decision.verdict.value == "removed"
+    } | {item["evidence_id"] for item in removed_items}
+    downweighted_ids = {
+        decision.evidence_id
+        for decision in filter_decisions
+        if decision.verdict.value == "downweighted"
+    }
+    low_trust_ids = {evidence.id for evidence in evidences if evidence.source_weight < 0.35}
+    affected_ids = removed_ids | downweighted_ids | low_trust_ids
+    impact = {
+        "raw_count": len(evidences),
+        "retained_count": max(len(evidences) - len(removed_ids), 0),
+        "removed_count": len(removed_ids),
+        "downweighted_count": len(downweighted_ids),
+        "low_trust_count": len(low_trust_ids),
+        "affected_count": len(affected_ids),
+        "affected_rate": round(len(affected_ids) / len(evidences), 4) if evidences else 0.0,
+    }
+
     return {
         "noise_removal_rate": run_metrics.noise_removal_rate,
+        "refinement_impact": impact,
         "layers": layers,
         "skipped_layers": skipped_layers or [],
         "log_events_by_layer": log_events_by_layer,
@@ -427,8 +471,17 @@ def _build_panel4(
             }
         )
 
+    limitations = conclusion.get("limitations", [])
+    compact_watchpoints = invalidation_conditions or reasoning_result.follow_up_watchpoints
     summary = {
-        "confidence_label": conclusion.get("confidence", "未知"),
+        # 與 report.md 讀同一個來源：等級由決定性分數推得，不用 LLM 自報的
+        # conclusion["confidence"]。兩邊各讀各的等於把不一致從「報告內」搬到
+        # 「報告與面板之間」，問題沒有解決只是換了位置。
+        "confidence_label": confidence_label(reasoning_result.confidence_score),
+        "decision_brief": _compact_text(conclusion.get("market_judgment", "")),
+        "top_facts": core_facts[:3],
+        "top_risks": limitations[:2],
+        "top_watchpoints": compact_watchpoints[:3],
         "bull_argument": debate.get("bull_argument", ""),
         "bull_evidence_ids": bull_ids,
         "bear_argument": debate.get("bear_argument", ""),
@@ -451,13 +504,25 @@ def _build_panel4(
         "core_facts": core_facts,
         "bullish_evidence": bullish_evidence,
         "risk_evidence": risk_evidence,
-        "limitations": conclusion.get("limitations", []),
+        "limitations": limitations,
         "invalidation_conditions": conclusion.get("invalidation_conditions", []),
         "follow_up_watchpoints": reasoning_result.follow_up_watchpoints,
+        "related_claims": reasoning_result.related_claims,
     }
 
 
 # --- Utility ---
+
+
+def _compact_text(text: str, max_sentences: int = 2, max_chars: int = 360) -> str:
+    """把市場判斷壓成投資者首頁可掃讀的兩句，不額外呼叫 LLM。"""
+    if not text:
+        return ""
+    pieces = [piece.strip() for piece in re.split(r"(?<=[。！？])", text) if piece.strip()]
+    compact = "".join(pieces[:max_sentences]) if pieces else text.strip()
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 1].rstrip() + "…"
 
 
 def _compute_removed_items(

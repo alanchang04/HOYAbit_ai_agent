@@ -115,7 +115,7 @@ class TestOrchestratorWiring:
 
     def test_orchestrator_fills_reference_url(self):
         """集中在 assign_evidence_ids 推導，collector 不必逐一改。"""
-        [ev] = assign_evidence_ids([self._draft()])
+        [ev], _ = assign_evidence_ids([self._draft()])
         assert ev.reference_url == "https://www.coingecko.com/en/coins/bitcoin"
         # 出處必須原樣保留——那是可稽核性的根據，不可被人類頁面取代
         assert ev.source_url == "https://api.coingecko.com/api/v3/simple/price"
@@ -123,11 +123,11 @@ class TestOrchestratorWiring:
     def test_collector_supplied_reference_url_is_not_overwritten(self):
         """collector 若自己就知道更好的頁面（news／social 的原文），不該被蓋掉。"""
         draft = self._draft(reference_url="https://example.com/original-article")
-        [ev] = assign_evidence_ids([draft])
+        [ev], _ = assign_evidence_ids([draft])
         assert ev.reference_url == "https://example.com/original-article"
 
     def test_local_computation_evidence_keeps_both_none(self):
         draft = self._draft(source="本地區間統計（非外部資料）", source_url=None)
-        [ev] = assign_evidence_ids([draft])
+        [ev], _ = assign_evidence_ids([draft])
         assert ev.source_url is None
         assert ev.reference_url is None

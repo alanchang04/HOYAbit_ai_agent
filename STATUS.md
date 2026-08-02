@@ -1,6 +1,6 @@
 # 專案進度說明（HOYA BIT 2026 雲湧智生黑客松）
 
-> 最後更新：2026-07-24
+> 最後更新：2026-08-02（v1.2 final integration）
 
 ## 已完成
 
@@ -10,8 +10,10 @@
 - `agent/logging_utils.py`：`execution_log.jsonl` 逐行寫入
 - `main.py`：CLI 進入點（`--coin` / `--coin2` / `--question` / `--dry-run`）
 - `--dry-run` fixture 流程（不打任何真實 API/LLM，供賽前排練）
+- `agent/filters/validation.py`：逐筆統一 Validation Result；Evidence 建構失敗採單筆 quarantine
+- `agent/research/`：Validated Evidence → Structured Features → Knowledge Lite → Evidence Relationship Graph，輸出 `research_context.json`
 
-### Stage 2：五類真實 collector
+### Stage 2：六類真實 collector
 - `agent/collectors/base.py`：統一 timeout（預設 75 秒）＋ try/except 隔離，單一來源失敗不影響全流程
 - `price`：主辦方 OHLCV CSV ＋ 純 Python 技術指標（SMA7/14、RSI14、波動率、量能趨勢，零 LLM/API 成本）＋ CoinGecko（備援 CryptoCompare）
 - `onchain`：依鏈路由（BTC→Blockchair／ETH,BNB→EVM RPC／SOL→Solana RPC／XRP→XRPL RPC），皆為免 key 端點，有 Etherscan/BscScan key 時疊加補充證據
@@ -47,17 +49,19 @@
 ### Stage 4：報告生成
 - `agent/report/builder.py`：組裝 `report.md`（執行摘要／結論／關鍵依據／正反方多輪辯論與矛盾訊號／信心說明／後續觀察重點／信源分級附錄），強制檢查引用的 evidence id 必須存在
 - `agent/report/text_formatting.py`：LLM 長文（市場判斷／正反方論證）改用 markdown 渲染，處理內嵌括號編號與中文序數詞（首先/其次/第三...）兩種列點寫法，解決長篇論述變成一整面文字牆的問題
+- 額外輸出 `validation_results.json` 與 `research_context.json`；invalid/quarantined Evidence 若仍被推理引用會標示 gate violation 並降級揭露
 
 ### Stage 5：整合測試
 - 5 幣種（BTC/ETH/SOL/BNB/XRP）collector 皆重新驗證
 - **真實 Bedrock 端到端驗證**（2026-07-24，Claude Sonnet 4.5，region `ap-northeast-1`）：多源整合（BTC）、假設驗證（ETH）、比較分析（BTC vs SOL）三種題型皆完整跑完多輪辯論，report.md／四面板渲染正確
 - Degraded mode 與跨 5 幣種推理鏈離線測試（FakeLLMClient，不耗真實額度）
-- 256 個 pytest 全數通過
+- **834 個 pytest 全數通過**（2026-08-02 v1.2 final；含 deadline 邊界、Validation gate、claim mapping、research sidecar 與 Web 下載契約）
 
 ### Stage 6：Web UI 與 Docker
 - `webapp/app.py`：FastAPI Web UI，與 CLI 共用同一個 `run_pipeline()`
 - 四面板檢視（`/view/{run_id}`）：原始證據流／未過濾基準對照／信任提煉流水線（逐層 log、多輪辯論逐輪顯示，L5 層預設展開）／分析報告（含執行摘要卡片）
 - `report.md` 的「報告」分頁改為排版化 HTML 顯示（原本是把 markdown 原始碼塞進純文字框）
+- Web／HTML 索引可下載 `validation_results.json` 與 `research_context.json`
 - Dockerfile／`.dockerignore`：本機已驗證 build 成功、容器內完整跑過 dry-run 分析
 - **Docker image 已 push 到 ECR**（`hoyabit-agent:latest`，`ap-northeast-1`）
 - App Runner 所需 IAM role（ECR 存取角色＋Bedrock 呼叫用 instance role）已建立
@@ -102,8 +106,8 @@
 4. **跟 Ken 對齊兩件事**：(a) `agent/collectors/relative.py` 與已合併進來的 `pipeline/compute_relative_strength.py` 功能重疊，需決定用誰的；(b) `static/source_reputation.json` 裡兩個暫定值（dedup 分級曲線、min_sample 門檻）需要校準定案
 5. **news.py 命中則數改用去重後數量**：屬於 Kevin／Ken 的 collector 範圍，`origin/ken` 分支已合併，可以開始做
 6. **衍生品 collector 正式實作**：Ken 目前只有獨立 prototype 腳本＋範例資料（`pipeline/fetch_*.py`），還沒包成 `agent/collectors/` 底下的正式 Collector、沒接進 orchestrator
-7. **賽前完整排練**：用 Bedrock + 正式 App Runner 網址跑一次完整流程，確認時間與穩定性
-8. **向主辦方確認比賽當日執行環境**：包括是否會提供官方 AWS 帳號（目前只是 Alan 的假設，PDF 未提及）、網路出口 IP（影響 Reddit/交易所地理封鎖）、Bedrock 帳號是否已預先開通。若確定要換成主辦方帳號，務必提前（非當天）用該帳號實際跑過一次完整流程，避免重踩這次自己帳號遇過的 Bedrock/IAM/App Runner 各種帳號層級的坑
+7. **賽前完整排練**：用 Bedrock + 目前 EC2 公開網址跑一次完整流程，確認時間與穩定性
+8. **確認比賽當日執行環境是否延續目前 Workshop 帳號**：目前已用主辦方 Workshop 帳號完成 EC2＋Bedrock 全流程；賽前仍需確認帳號／Studio 是否持續有效，以及現場網路出口是否影響 Reddit／交易所 API。
 
    **另外要一併問的資料集問題（2026-07-25 新增，來自 `horizon-aware-confidence` spec）**：
    命題範例題型要求分析「過去兩週」，但共同基準資料集止於 **2026-05-31**，

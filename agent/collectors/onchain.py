@@ -105,6 +105,10 @@ class OnchainCollector(BaseCollector):
         try:
             resp = await client.get("https://api.blockchair.com/bitcoin/stats")
             resp.raise_for_status()
+            self.log_subsource(
+                "blockchair", coin, LogStatus.OK,
+                "endpoint=https://api.blockchair.com/bitcoin/stats",
+            )
             data = resp.json()["data"]
             evidences.append(
                 EvidenceDraft(
@@ -133,6 +137,11 @@ class OnchainCollector(BaseCollector):
             history_parts = []
             for label, (chart_name, unit) in BTC_HISTORY_CHARTS.items():
                 series = await _fetch_blockchain_info_chart(client, chart_name)
+                self.log_subsource(
+                    "blockchain_info_history", coin, LogStatus.OK,
+                    f"endpoint=https://api.blockchain.info/charts/{chart_name}, "
+                    f"params={{'timespan': '5years', 'format': 'json', 'cors': 'true'}}",
+                )
                 trend = _history_trend(series)
                 if trend:
                     _, latest_val, pct = trend
@@ -170,7 +179,15 @@ class OnchainCollector(BaseCollector):
         for rpc_url in rpc_urls:
             try:
                 block_hex = await _evm_rpc_call(client, rpc_url, "eth_blockNumber")
+                self.log_subsource(
+                    "evm_rpc", coin, LogStatus.OK,
+                    f"endpoint={rpc_url}, body={{'method': 'eth_blockNumber', 'params': []}}",
+                )
                 gas_hex = await _evm_rpc_call(client, rpc_url, "eth_gasPrice")
+                self.log_subsource(
+                    "evm_rpc", coin, LogStatus.OK,
+                    f"endpoint={rpc_url}, body={{'method': 'eth_gasPrice', 'params': []}}",
+                )
                 block_number = int(block_hex, 16)
                 gas_price_gwei = int(gas_hex, 16) / 1e9
                 evidences.append(
@@ -197,11 +214,18 @@ class OnchainCollector(BaseCollector):
 
         if api_key:
             try:
-                resp = await client.get(
-                    etherscan_url,
-                    params={"module": "stats", "action": "ethsupply" if "etherscan" in etherscan_url else "bnbsupply", "apikey": api_key},
-                )
+                scan_params = {
+                    "module": "stats",
+                    "action": "ethsupply" if "etherscan" in etherscan_url else "bnbsupply",
+                    "apikey": api_key,
+                }
+                resp = await client.get(etherscan_url, params=scan_params)
                 resp.raise_for_status()
+                scan_logged_params = {**scan_params, "apikey": "***"}
+                self.log_subsource(
+                    "scan_api", coin, LogStatus.OK,
+                    f"endpoint={etherscan_url}, params={scan_logged_params}",
+                )
                 data = resp.json()
                 evidences.append(
                     EvidenceDraft(
@@ -236,6 +260,10 @@ class OnchainCollector(BaseCollector):
                 headers={"User-Agent": "Mozilla/5.0"},
             )
             resp.raise_for_status()
+            self.log_subsource(
+                "etherscan_gas_history", coin, LogStatus.OK,
+                "endpoint=https://etherscan.io/chart/gasprice, params={'output': 'csv'}",
+            )
             series: list[tuple[str, float]] = sorted(
                 (
                     datetime.strptime(row["Date(UTC)"], "%m/%d/%Y").strftime("%Y-%m-%d"),
@@ -275,11 +303,13 @@ class OnchainCollector(BaseCollector):
 
     async def _fetch_solana(self, client: httpx.AsyncClient, coin: str) -> list[EvidenceDraft]:
         try:
-            resp = await client.post(
-                "https://api.mainnet-beta.solana.com",
-                json={"jsonrpc": "2.0", "id": 1, "method": "getRecentPerformanceSamples", "params": [5]},
-            )
+            solana_body = {"jsonrpc": "2.0", "id": 1, "method": "getRecentPerformanceSamples", "params": [5]}
+            resp = await client.post("https://api.mainnet-beta.solana.com", json=solana_body)
             resp.raise_for_status()
+            self.log_subsource(
+                "solana_rpc", coin, LogStatus.OK,
+                f"endpoint=https://api.mainnet-beta.solana.com, body={solana_body}",
+            )
             samples = resp.json()["result"]
             avg_tps = sum(s["numTransactions"] / s["samplePeriodSecs"] for s in samples) / len(samples) if samples else 0
             return [
@@ -305,8 +335,13 @@ class OnchainCollector(BaseCollector):
         last_exc: Exception | None = None
         for rpc_url in rpc_urls:
             try:
-                resp = await client.post(rpc_url, json={"method": "server_info", "params": [{}]})
+                xrpl_body = {"method": "server_info", "params": [{}]}
+                resp = await client.post(rpc_url, json=xrpl_body)
                 resp.raise_for_status()
+                self.log_subsource(
+                    "xrpl_rpc", coin, LogStatus.OK,
+                    f"endpoint={rpc_url}, body={xrpl_body}",
+                )
                 info = resp.json()["result"]["info"]
                 validated = info.get("validated_ledger", {})
                 return [

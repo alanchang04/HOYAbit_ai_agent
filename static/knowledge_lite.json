@@ -1,0 +1,83 @@
+{
+  "basis_pct": {
+    "category": "derivatives",
+    "definition": "永續合約 mark price 相對 index price 的百分比差。",
+    "interpretation": ["正值表示 mark price 高於 index price；負值表示低於 index price。", "它描述衍生品定價位置，不等同未來價格預測。"],
+    "limitations": ["單一交易所不代表全市場。", "短時間基差可能受流動性與結算機制影響。"],
+    "evidence_scope": ["derivatives pricing", "spot-perpetual dislocation"],
+    "references": [{"kind": "method", "citation": "HOYA BIT deterministic method: (markPrice-indexPrice)/indexPrice"}]
+  },
+  "fear_greed_index": {
+    "category": "market",
+    "definition": "把多個市場情緒代理變數彙整為 0 到 100 的指數。",
+    "interpretation": ["數值用來描述當期情緒位置，適合與價格、鏈上與衍生品訊號交叉閱讀。"],
+    "limitations": ["組成與權重由資料供應者定義。", "情緒極值不能單獨建立因果或時點判斷。"],
+    "evidence_scope": ["market sentiment"],
+    "references": [{"kind": "industry", "citation": "Alternative.me Crypto Fear & Greed Index methodology"}]
+  },
+  "funding_rate_pct": {
+    "category": "derivatives",
+    "definition": "永續合約多空雙方定期交換的費率；正值通常代表多方支付空方。",
+    "interpretation": ["應同時觀察費率相對歷史位置、持續時間與不同交易場地差異。"],
+    "limitations": ["正費率在許多市場狀態下是常態。", "單一時點或單一交易所不足以判定擁擠。"],
+    "evidence_scope": ["perpetual positioning", "leverage crowding"],
+    "references": [{"kind": "official", "citation": "Binance USD-M Futures fundingRate endpoint and exchange funding mechanism"}]
+  },
+  "funding_rate_percentile": {
+    "category": "statistical",
+    "definition": "當前資金費率在指定歷史樣本窗中的百分位位置。",
+    "interpretation": ["百分位只表示相對位置；解讀前必須保留樣本數與觀察窗。"],
+    "limitations": ["不同樣本窗的百分位不可直接比較。", "百分位不描述費率絕對大小或未來路徑。"],
+    "evidence_scope": ["relative derivatives positioning"],
+    "references": [{"kind": "method", "citation": "Empirical percentile rank over the observed funding-rate window"}]
+  },
+  "open_interest": {
+    "category": "derivatives",
+    "definition": "尚未平倉的衍生品合約總量。",
+    "interpretation": ["需要與價格變化、交易量及時間窗共同判讀。"],
+    "limitations": ["OI 增減本身不揭露多空淨方向。", "不同交易所的合約單位與涵蓋率可能不同。"],
+    "evidence_scope": ["derivatives participation", "leverage activity"],
+    "references": [{"kind": "official", "citation": "Binance Futures openInterest and openInterestHist endpoints"}]
+  },
+  "price_change_24h_pct": {
+    "category": "market",
+    "definition": "資料供應者定義之最近 24 小時價格百分比變化。",
+    "interpretation": ["用於描述短期價格移動，應與取樣時間與報價市場一併揭露。"],
+    "limitations": ["滾動 24 小時窗會隨抓取時間改變。", "不同供應者的成交市場涵蓋可能不同。"],
+    "evidence_scope": ["spot price movement"],
+    "references": [{"kind": "industry", "citation": "CoinGecko /simple/price or declared fallback provider"}]
+  },
+  "rsi_14": {
+    "category": "statistical",
+    "definition": "以 14 期平均上漲與下跌幅度計算的相對強弱指標，範圍為 0 到 100。",
+    "interpretation": ["它描述觀察窗內動能位置，需與趨勢、波動與價格結構共同閱讀。"],
+    "limitations": ["固定門檻在不同資產與 regime 下不一定等效。", "指標可能在強趨勢期間長時間停留於極端區。"],
+    "evidence_scope": ["short-term momentum"],
+    "references": [{"kind": "academic", "citation": "J. Welles Wilder Jr., New Concepts in Technical Trading Systems (1978)"}]
+  },
+  "volatility_14d_pct": {
+    "category": "statistical",
+    "definition": "最近 14 個日報酬的離散程度；本系統保留原始百分比尺度，不自動改寫成年化數值。",
+    "interpretation": ["用於比較同一計算方法與相近時間窗下的波動狀態。"],
+    "limitations": ["未年化數值不可標成年度波動率。", "短樣本對單日極端值敏感。"],
+    "evidence_scope": ["realized volatility"],
+    "references": [{"kind": "method", "citation": "HOYA BIT standard deviation of daily returns over 14 observations"}]
+  },
+  "volatility_percentile_alltime": {
+    "category": "statistical",
+    "definition": "當前波動度相對共同基準資料全歷史分佈的百分位。",
+    "interpretation": ["描述長期結構位置，不應直接與短窗方向訊號視為矛盾。"],
+    "limitations": ["結果依賴共同基準資料起訖與完整性。", "歷史分佈可能隨新增資料改變。"],
+    "evidence_scope": ["structural volatility position"],
+    "references": [{"kind": "method", "citation": "HOYA BIT empirical percentile over official baseline OHLCV history"}]
+  },
+  "volume_change_7d_pct": {
+    "category": "market",
+    "definition": "最近 7 日成交量合計相對前 7 日合計的百分比變化。",
+    "interpretation": ["描述近期參與度變化，需與價格與資料場地涵蓋一起閱讀。"],
+    "limitations": ["交易所涵蓋差異會影響可比性。", "成交量增加本身不提供方向。"],
+    "evidence_scope": ["market participation"],
+    "references": [{"kind": "method", "citation": "HOYA BIT 7-day volume sum versus previous 7-day sum"}]
+  }
+}
+

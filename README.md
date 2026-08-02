@@ -3,9 +3,9 @@
 多源資訊信任提煉系統：針對指定幣種與題目，在時限內蒐集價格／鏈上／新聞／社群／總經資料，
 產出具備分層推理（事實 → 交叉驗證 → 推論 → 結論）與可回溯證據的市場分析報告。
 
-> **目前進度：Stage 1-6 骨幹完成**（五類真實 collector、含正反方辯論的四步推理鏈、整合測試、
-> Web UI、Docker）。Bedrock 尚待帳號開通驗證，開發階段可先用 `LLM_BACKEND=gemini`（見下方 LLM backend 說明），
-> 正式執行/繳交前務必切回 `LLM_BACKEND=bedrock`。
+> **目前版本：v1.1（可回退的正式展示版）**。六類真實 collector、信源權重／去重、
+> 正反方多輪辯論、可解釋信心、Web UI、Docker、AWS Bedrock 與 EC2 公開部署均已實測。
+> v2 將依 `11流程圖模板.md` 另行開發；本 README 描述的是目前可用的 v1.1。
 
 ## 安裝
 
@@ -28,11 +28,32 @@ cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 .venv/Scripts/python.exe main.py --coin BTC --question "比較 BTC 與 ETH 在流動性與風險敞口上的差異..."
 ```
 
-輸出於 `output/` 目錄：
+未指定 `--output-dir` 時，每次 CLI 執行會輸出於獨立的 `output/cli_runs/<run-id>/`：
 
 - `report.md`：分析報告
 - `evidence.json`：證據清單
 - `execution_log.jsonl`：執行紀錄
+- `report_view.json`：四面板機器可讀資料
+- `validation_results.json`：逐筆 Evidence Validation 稽核結果
+- `research_context.json`：Structured Features、Knowledge Lite 與 Evidence Relationship Graph
+- `report.html`：Final Report 的 standalone 離線閱讀版
+- `evidence.html`：Evidence List 的 standalone 離線閱讀版
+- `execution_log.html`：Execution Log 的 standalone 離線閱讀版
+- `deliverables.html`：評審交付物索引與原始檔／HTML 對照
+
+前三份原始檔仍是命題要求的權威正式交付物；`report_view.json` 與兩份 validation/research sidecar 提供額外稽核與展示能力，HTML 則是方便評審直接用瀏覽器閱讀的補充。
+Source / Config 則以 GitHub repository、`README.md`、`.env.example` 與原始碼樹交付，不以 HTML 取代。
+
+### 決賽提交檢查
+
+依命題文件，最終提交不能只交單次分析輸出，應包含以下四項：
+
+1. 提案簡報：以 `PITCH_REFERENCE.md` 為內容底稿，正式提交投影片或 PDF；須涵蓋解題方向、AI 技術應用、數據資料應用與 AWS 架構圖。
+2. Live Demo 部署網址及現場執行錄製影片連結。
+3. GitHub 連結：完整原始碼、設定檔與執行說明。
+4. 數據與資源文件：每次正式執行產生的 Final Report、Evidence List、Execution Log；`deliverables.html` 會列出原檔與 HTML 閱讀版對照。
+
+其中第 4 項可附 HTML 閱讀版；第 1 項仍以投影片／PDF 交付，第 2 項是網址與影片，第 3 項必須保留可執行的 GitHub repository，不能只轉成 HTML。
 
 ## LLM backend
 
@@ -60,8 +81,15 @@ cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 ```
 
 開啟 http://localhost:8000 ，填入幣種／題目（比較分析可留空第二幣種讓系統自動偵測）、
-可勾選 dry-run。執行完成後頁面會顯示完整 `report.md` 內容，並提供三個檔案的下載連結。
-`GET /healthz` 供健康檢查用（App Runner 部署會用到）。
+可勾選 dry-run。執行完成後頁面會顯示完整 `report.md` 內容，並提供原始交付檔及 standalone HTML 閱讀版的下載連結。
+`GET /healthz` 供 EC2 服務與外部監控做健康檢查。
+
+首頁提供「一鍵觀看信任提煉 Demo」：使用明確標記的 dry-run 假資料注入重複轉載與
+拉盤話術，約 1 秒完成，可直接對照 Baseline、去重與降權結果，不消耗 Bedrock 額度。
+分析頁預設先顯示投資者一頁摘要；完整四面板、逐輪辯論與 Evidence 可再展開。
+
+完整性分成三種狀態：`INTACT`（六類齊全）、`PARTIAL`（流程完成但缺整類資料）、
+`DEGRADED`（deadline、推理或管線層失敗）。
 
 ## Docker
 
@@ -83,7 +111,7 @@ docker run --rm --env-file .env hoyabit-agent \
 .venv/Scripts/python.exe scripts/test_collectors.py --coin BTC
 ```
 
-會平行執行五類真實 collector 並印出各自取得的證據與總耗時，方便賽前確認各資料來源是否可連線。
+會平行執行六類真實 collector 並印出各自取得的證據與總耗時，方便賽前確認各資料來源是否可連線。
 
 ### 各 collector 資料來源與已知限制
 
@@ -121,6 +149,7 @@ docker run --rm --env-file .env hoyabit-agent \
         │ Phase 2：證據化                            │
         │ assign_evidence_ids()                     │
         │ → 統一分配 ev-001, ev-002... → evidence.json│
+        │ → Validation Result → validation_results.json│
         └────────────────────────┬───────────────────┘
                                   │ list[Evidence]
                                   ▼
@@ -144,9 +173,11 @@ docker run --rm --env-file .env hoyabit-agent \
         │ Phase 4：報告生成（agent/report/builder.py）│
         │ 組裝 report.md，強制檢查引用的 evidence id   │
         │ 必須存在於 evidence.json（否則 fail fast）   │
+        │ 輸出 Structured Feature／Knowledge／Graph     │
+        │ → research_context.json                     │
         └────────────────────────┬───────────────────┘
                                   ▼
-              report.md ／ evidence.json ／ execution_log.jsonl
+ report.md ／ evidence.json ／ execution_log.jsonl ／ validation_results.json ／ research_context.json
 ```
 
 **設計重點：**
@@ -173,6 +204,8 @@ agent/
     gemini_client.py         # Gemini 實作（開發階段暫代後端）
     prompts.py               # 四步推理 prompt 模板、題型分支、正反方 framing
     pipeline.py               # 四步推理鏈組裝（含辯論與 fallback）
+  filters/validation.py     # 統一 Evidence Validation Result
+  research/                # Structured Features／Knowledge Lite／Evidence Graph sidecar
   report/                 # report.md 組裝與 evidence 對應檢查
   fixtures/               # --dry-run 用假資料
 webapp/
@@ -181,7 +214,7 @@ webapp/
   static/style.css
 data/                      # 主辦方提供之 5 幣種 Daily OHLCV 共同基準資料
 scripts/
-  test_collectors.py       # 獨立驗證腳本：單獨執行五類真實 collector
+  test_collectors.py       # 獨立驗證腳本：單獨執行六類真實 collector
   check_llm.py              # 驗證目前 LLM_BACKEND 是否能連線
 tests/                     # pytest：schema、collector 失敗隔離、report-evidence 對應、
                             # OHLCV/技術指標邏輯、推理鏈辯論與 fallback、comparison 雙幣種
@@ -196,43 +229,37 @@ Dockerfile / .dockerignore  # Web UI 與 CLI 共用同一個 image
 - 每個 collector 皆有獨立 timeout 與例外隔離，單一來源失敗不影響全流程（見 `agent/collectors/base.py`）。
 - 推理鏈任一步驟（含辯論）失敗都會被捕捉並退化為誠實揭露失敗原因的報告，不會讓整個流程崩潰。
 
-## AWS 部署（App Runner）
+## AWS 部署（EC2，已上線）
 
 ```
-使用者瀏覽器 ──HTTPS──▶ App Runner（跑 Dockerfile 這個 image，含 Web UI）
+使用者瀏覽器 ──HTTP:80──▶ EC2 t3.small（FastAPI Web UI）
                               │
-                              ├──InvokeModel──▶ Bedrock（同 region，走 App Runner instance role）
-                              └──HTTPS──▶ CoinGecko / Blockchair / RSS / Reddit / Fear&Greed / Frankfurter 等公開 API
-                              
-ECR（存放 image） ◀──docker push── 本機/CI build
+                              ├──InvokeModel / Converse──▶ Bedrock global inference profile
+                              │                            （Claude Opus 4.6）
+                              └──HTTPS──▶ Coinbase / CoinGecko / 公開 RPC / RSS /
+                                           Reddit / Fear&Greed / 衍生品 API
+
+管理者 ──SSM Run Command──▶ EC2（安全群組不開 SSH 22）
 ```
 
-選 App Runner 而非 EC2：不用管理 VM、免自架反向代理與憑證，`docker push` 後幾分鐘就有公開 HTTPS 網址，符合比賽時間有限的情境。
+公開網址：<http://52.33.16.251/>；健康檢查：<http://52.33.16.251/healthz>。
 
-### 部署步驟
+主辦方 Workshop 帳號的 App Runner 受 SCP 限制，因此正式 v1 改用 `us-west-2`
+EC2。程式透過執行個體角色呼叫 Bedrock，主機不保存 AWS access key；安全群組只開
+HTTP 80，管理操作走 SSM，不開 SSH。
+
+### 更新方式
+
+正式環境由 EC2 從 GitHub 的 v1 分支／標籤更新，安裝相依套件後重啟既有服務。
+部署前後至少驗證：
 
 ```bash
-# 1. 設定 AWS CLI（需要 IAM user/role 有 ecr:*、apprunner:* 權限）
-aws configure
-
-# 2. 建立 ECR repository（僅需一次）
-aws ecr create-repository --repository-name hoyabit-agent --region us-east-1
-
-# 3. 登入 ECR、build、tag、push
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
-
-docker build -t hoyabit-agent .
-docker tag hoyabit-agent:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hoyabit-agent:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hoyabit-agent:latest
-
-# 4. 建立 App Runner service（Console 操作較直覺：
-#    App Runner → Create service → Container registry → 選剛 push 的 image
-#    → Port 設 8000 → Health check path 設 /healthz）
+python -m pytest -q
+python main.py --coin BTC --question "分析 BTC 過去兩週市場狀況" --dry-run
+curl http://52.33.16.251/healthz
 ```
 
-**環境變數**：在 App Runner service 的環境變數設定裡填 `LLM_BACKEND=bedrock`、`AWS_REGION`、`BEDROCK_MODEL_ID` 等（對照 `.env.example`）。**不要**把 AWS access key 寫進環境變數——改用 App Runner 的 **instance role**，掛一個只有 `bedrock:InvokeModel` 權限的 IAM role，SDK（boto3）會自動用該 role 認證，比賽現場也不用管理任何金鑰外洩風險。
+實際 AWS 資源、IAM 最小權限、SSM 管理方式與驗收紀錄見 `STATUS.md`。不要在文件、
+EC2 或環境變數中保存 Workshop 的 STS 臨時憑證。
 
-### 實際部署
-
-以上是本機已驗證過的 build/run 流程（Docker image 確認可正常建置與執行，見上方「Docker」章節），但**尚未實際部署到 AWS**——這需要你的 AWS 帳號與 CLI 存取設定好之後才能執行 `aws ecr` / `aws apprunner` 指令。
+> 目前公開入口為 HTTP；若轉為正式長期產品，應在前方加 CloudFront／ALB 與 HTTPS。

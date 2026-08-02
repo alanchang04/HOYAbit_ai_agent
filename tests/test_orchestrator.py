@@ -34,9 +34,10 @@ def test_assign_ids_warns_on_spot_with_long_window():
     logger = _RecordingLogger()
     drafts = [_draft(window_start="2021-06-01", window_end="2026-05-31")]  # horizon_class 預設 spot
 
-    evidences = assign_evidence_ids(drafts, logger=logger)
+    evidences, quarantined = assign_evidence_ids(drafts, logger=logger)
 
     assert len(evidences) == 1  # 證據保留，未被過濾
+    assert quarantined == []
     warnings = [e for e in logger.entries if e.get("action") == "horizon_annotation_warning"]
     assert len(warnings) == 1
     assert warnings[0]["status"] == LogStatus.SKIPPED
@@ -90,9 +91,16 @@ def test_degraded_mode_triggers_and_skips_collection(monkeypatch, tmp_path):
     assert (tmp_path / "report.md").exists()
     assert (tmp_path / "evidence.json").exists()
     assert (tmp_path / "execution_log.jsonl").exists()
+    assert (tmp_path / "validation_results.json").exists()
+    assert (tmp_path / "research_context.json").exists()
+    assert (tmp_path / "report.html").exists()
+    assert (tmp_path / "evidence.html").exists()
+    assert (tmp_path / "execution_log.html").exists()
+    assert (tmp_path / "deliverables.html").exists()
 
     log_text = (tmp_path / "execution_log.jsonl").read_text(encoding="utf-8")
     assert "degraded_mode" in log_text
+    assert "research_context_written" in log_text
 
 
 def test_normal_mode_does_not_trigger_degraded_when_deadline_is_generous(monkeypatch, tmp_path):

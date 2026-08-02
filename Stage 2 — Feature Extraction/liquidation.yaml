@@ -1,0 +1,56 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（liquidation）
+# 對應 13_流程圖迭代定案v2.md Stage 2：window 由 LLM 依 Horizon 決定——但這個
+# factor 的「window」語意跟 active_address／cpi 不一樣，見下方說明。
+#
+# 端點（免 key，公開，即時推送，非查歷史）：
+#   WSS wss://fstream.binance.com/ws/!forceOrder@arr
+#   （Binance USDⓈ-M 合約 All Market Liquidation Order Streams）
+#   跟 pipeline/fetch_liquidation_flow.py 同一支腳本。
+#
+# ⚠️ 根本限制，不是本檔懶得填：Binance 舊版 REST `/fapi/v1/allForceOrders`
+# （查歷史清算單）已停用，只剩即時推送頻道。這代表 LLM 依 Horizon 決定的
+# `window` 在這裡**不能拿來當「回看過去 window 天」使用**——沒有歷史可查，
+# 只能開 WebSocket 監聽固定時間長度、把窗口內剛好發生的清算單當樣本。
+# 所以這裡的 `window` 語意改成「listen_seconds：監聽多久」，跟 active_address／
+# cpi 的「回看過去多久」是不同種參數，LLM 換算 Horizon → window 時，這個
+# factor 要走獨立的换算邏輯（例如 Horizon 越長，不代表要聽越久，可能反而是
+# 「多聽幾次取樣本」而非「一次聽更久」，這個换算規則還沒定案）。
+
+feature:
+  factor: liquidation
+  endpoint: wss://fstream.binance.com/ws/!forceOrder@arr
+  params:
+    listen_seconds: "{window}"   # 語意＝監聽時長，非回看窗口；跟 Horizon 的换算規則待定
+
+  # Raw（唯一能真的填出數字的區塊）
+  window_start: observed_window.start
+  window_end: observed_window.end
+  observed_count: len(events_in_window)   # 0 不代表沒發生，只代表這段觀察窗沒觀測到
+  observed_notional: sum(event.qty * event.avg_px for event in events_in_window)
+
+  # Relative
+  percentile: null   # 結構性限制：無歷史序列，無母體可比
+
+  # Trend / Momentum / Statistics
+  # 結構性限制：這個 factor 沒有「同一 factor 的歷史時間序列」可用，
+  # slope／roc／rolling_* 這類需要跨時間點比較的欄位一律留 null，
+  # 不編造假的歷史推算值——每次監聽窗口彼此獨立，不構成時間序列。
+  slope: null
+  slope_7d: null
+  slope_30d: null
+  roc_1d: null
+  roc_7d: null
+  rolling_mean: null
+  rolling_std: null
+  rolling_max: null
+  rolling_min: null
+  z_score: null
+
+  # Quality
+  missing_ratio: null   # 「缺漏」這個概念不適用單次即時監聽窗口
+  sample_size: 1        # 每次執行只有一個觀察窗，不是多筆歷史樣本
+
+  # 降級處理（對應 pipeline/fetch_liquidation_flow.py 檔頭建議）：
+  # 這個 factor 拿不到穩定量化訊號時，Stage 3 Knowledge 不該把它當成跟
+  # funding_rate 同等級的統計特徵使用，應退回用 OI＋價格四象限做間接推論，
+  # 或在 Evidence Card 的 traceability／備註裡明講「單次觀察窗，非統計訊號」。

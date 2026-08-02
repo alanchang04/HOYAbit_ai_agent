@@ -260,6 +260,7 @@ class NewsCollector(BaseCollector):
                 try:
                     resp = await client.get(source["url"])
                     resp.raise_for_status()
+                    self.log_subsource(sub_name, coin, LogStatus.OK, f"endpoint={source['url']}")
 
                     if source["kind"] == "rss":
                         parsed = feedparser.parse(resp.text)
@@ -295,6 +296,9 @@ class NewsCollector(BaseCollector):
                             summary = ""
                             try:
                                 summary = await _fetch_meta_description(client, item["url"])
+                                self.log_subsource(
+                                    f"{sub_name}_summary", coin, LogStatus.OK, f"endpoint={item['url']}"
+                                )
                             except Exception as exc:  # noqa: BLE001
                                 self.log_subsource(f"{sub_name}_summary", coin, LogStatus.SKIPPED, f"error={_exc_text(exc)}")
                             topics = tag_narrative_topics(coin, item["title"], summary)
