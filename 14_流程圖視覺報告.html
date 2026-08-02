@@ -267,7 +267,7 @@
   .type-table th { color: var(--muted); font-weight: 600; white-space: nowrap; background: var(--surface-2); }
   .type-table td:first-child { white-space: nowrap; font-weight: 600; color: var(--ink); }
   .type-table code { font-size: 11.5px; }
-  details.type-box { margin: 0 0 14px 36px; }
+  details.type-box { margin: 14px 0 0; }
   details.type-box > summary {
     cursor: pointer; font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-bottom: 8px;
   }
@@ -586,6 +586,8 @@
           <span class="stage-title">Stage 2 — Feature Extraction</span>
           <span class="stage-tag">4 factors live</span>
         </div>
+        <div class="stage-lead"><b>去抓資料，只記事實。</b>每個 factor 各自打自己的資料源，算出「現在的值、相對歷史的什麼位置、近期往哪個方向走」。抓多長由 LLM 依上一層的 Horizon 現場判斷。這層不解讀好壞、不給方向結論。<br>每張卡片下方可展開的 <b>Knowledge Layer</b> 是配套的背景知識——「這個 factor 本身是什麼、擅長什麼尺度、跟誰互相印證」，純查表不推理。</div>
+        <div class="factor-row" id="stage2-factors"></div>
         <details class="type-box">
           <summary>三型資料在這層的差異——抓法與算得出來的欄位都不同（點開）</summary>
           <table class="type-table">
@@ -616,8 +618,6 @@
             </tr>
           </table>
         </details>
-        <div class="stage-lead"><b>去抓資料，只記事實。</b>每個 factor 各自打自己的資料源，算出「現在的值、相對歷史的什麼位置、近期往哪個方向走」。抓多長由 LLM 依上一層的 Horizon 現場判斷。這層不解讀好壞、不給方向結論。<br>每張卡片下方可展開的 <b>Knowledge Layer</b> 是配套的背景知識——「這個 factor 本身是什麼、擅長什麼尺度、跟誰互相印證」，純查表不推理。</div>
-        <div class="factor-row" id="stage2-factors"></div>
         <div class="todo-note"><span class="dot"></span><span>五個 factor 各自真的去抓真實資料，不是同一套邏輯換名字——funding_rate／active_address 窗口＝天、由 LLM 依 Horizon 現場判斷（不是查表），而且各自有專屬的背景知識 prompt；cpi 窗口＝月，換算後才抓；liquidation 沒有「回看窗口」這個概念，是真的開 WebSocket 監聽固定秒數，percentile／trend 等需要歷史序列的欄位這個 factor 結構性沒有，一律不產生；panews_sentiment 的窗口只決定「往回翻多深」而不是過濾邊界（超出窗口的文章標記為非近期但照樣計入），翻不到窗口底時會標 <code>window_covered=false</code> 並說明只翻到哪天，情緒分數是簡化版關鍵字計分、不是 NLP 模型（<code>nonzero_ratio</code> 就是這套方法的覆蓋率）。active_address 目前只支援 BTC（資料源限制），查其他幣種會顯示原因。每張卡片下方「查看 Knowledge Layer」點開才是原本獨立一個 Stage 3 區塊的內容——Knowledge 本來就是查表用的背景知識，不是每次都要看的即時數字，跟 Stage 2 的即時抓取結果放在一起、預設收合比較合理。五份內容分別讀自 <code>Stage 3 — Knowledge Layer/{factor}.md</code>——Ken 手動研究、附真實學術／產業出處的正式版本，欄位對照 11流程圖模板.md 的 Statistical／Event／Sentiment Knowledge schema（三型不同骨架，不是同一份欄位表）。刻意不對齊結論：funding_rate 產業文獻偏肯定短期訊號，active_address 近期研究反而在講預測力減弱，cpi 學界對通膨關係沒有共識、liquidation 只能即時監聽沒有歷史可驗證、panews_sentiment 的預測力是狀態依存（極端情緒下才顯著）——每份都根據各自的資料現實寫，不是同一套模板換名字。單一事實來源是這些 .md，這支 demo 只是讀檔解析，刻意不打 LLM（Knowledge Layer 本身是 library，不是推理層）。</span></div>
       </div>
 
@@ -627,6 +627,8 @@
           <span class="stage-title">Stage 3 — Dynamic Evidence Weight Engine</span>
           <span class="stage-tag" id="weight-live-pill">計算中…</span>
         </div>
+        <div class="stage-lead"><b>決定「今天這筆證據有多重要」。</b>兩層相乘：<b>Prior Weight</b> 是這個 factor 本質上準不準／重不重要（跟今天無關），<b>Context Modifier</b> 是今天的情境該把它調高還是調低（跟今天有關）。這層只評估份量，不評估多空方向。</div>
+        <div class="factor-row" id="stage4-factors"></div>
         <details class="type-box">
           <summary>三型資料在這層的差異——Prior 用哪種算法、Modifier 讀哪些欄位（點開）</summary>
           <table class="type-table">
@@ -649,8 +651,6 @@
           </table>
           <div class="lr-note" style="margin-top:6px;">三種 Prior Weight 來源最後都收斂成同一個 <code>evidence_weight</code> 概念，不是三套互不相容的系統——所以下一層可以直接照它排序。</div>
         </details>
-        <div class="stage-lead"><b>決定「今天這筆證據有多重要」。</b>兩層相乘：<b>Prior Weight</b> 是這個 factor 本質上準不準／重不重要（跟今天無關），<b>Context Modifier</b> 是今天的情境該把它調高還是調低（跟今天有關）。這層只評估份量，不評估多空方向。</div>
-        <div class="factor-row" id="stage4-factors"></div>
         <div class="mini-error" id="weight-live-error"></div>
         <div class="todo-note"><span class="dot"></span><span>Prior Weight 有三種來源（13 文件 2026-08-02 拍板，同一個 <code>evidence_weight</code> 概念下的不同填法）：<b>Statistical Factor</b>（funding_rate／active_address）現場真的算 <code>rolling_spearman_ic</code>；<b>Event Factor</b>（cpi）不算 ic——離散事件沒有「每天的值」可跟每天的 forward_return 配對，改讀 Knowledge Layer 的 <code>impact_level</code> 分級；<b>資料源結構性缺歷史序列</b>（liquidation）ic 也算不出來，改用 Domain Knowledge 給有理由的低分。後兩種的數值與理由都寫在 <code>Stage 4 — Dynamic Evidence Weight Engine/{factor}.md</code> 裡（資料夾名稱沿用原編號，內容沒動），程式只負責讀，不自己訂數字。Dynamic Modifier 一律真的打一次 LLM；market_regime／cross_source_consensus 兩條線索還沒接上真實資料源，LLM 會老實當「未知」處理。</span></div>
       </div>
@@ -664,7 +664,7 @@
         <div class="stage-lead"><b>包成統一格式，排出優先順序。</b>把前面幾層的事實／知識／權重裝進同一種卡片，再依訊號強度排出「哪幾筆最值得討論」。這層<b>不重新運算任何數字</b>，只做組裝與排序，而且只排序、不刪除。</div>
         <div class="factor-row" id="stage5-cards"></div>
         <div class="mini-error" id="card-live-error"></div>
-        <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——實測 BTC funding_rate 的 <code>final=-0.55</code> 是五張卡裡強度最高的，照帶號值排卻掉到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——照帶號值排會把強度最高的反向訊號排到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
       </div>
 
       <div class="stage-card s6">
