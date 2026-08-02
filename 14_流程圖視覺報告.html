@@ -41,6 +41,10 @@
     --accent-4-bg: #e3edf5;
     --accent-5: #7a5230;   /* Stage 5 — 已可互動 */
     --accent-5-bg: #f2e9df;
+    --accent-6: #1f5f7a;   /* Stage 6 Evidence Graph — 已可互動 */
+    --accent-6-bg: #e0eef3;
+    --accent-log: #4a4740;  /* Execution Log — 中性灰，不跟任何 stage 搶色 */
+    --accent-log-bg: #eeece4;
     --danger: #a13f2f;
     --danger-bg: #f6e6e2;
     --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
@@ -66,6 +70,10 @@
       --accent-4-bg: #1c2a33;
       --accent-5: #d3a878;
       --accent-5-bg: #2e2519;
+      --accent-6: #6cbcd6;
+      --accent-6-bg: #172a31;
+      --accent-log: #b8b4a6;
+      --accent-log-bg: #24231d;
       --danger: #e08a78;
       --danger-bg: #3a2420;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
@@ -215,6 +223,54 @@
   .s5 .stage-badge { background: var(--accent-5); color: var(--accent-5-bg); }
   .s5 .stage-title { color: var(--accent-5); }
   .s5 .stage-tag { background: var(--accent-5); color: var(--accent-5-bg); }
+
+  .s6 { background: var(--accent-6-bg); }
+  .s6 .stage-badge { background: var(--accent-6); color: var(--accent-6-bg); }
+  .s6 .stage-title { color: var(--accent-6); }
+  .s6 .stage-tag { background: var(--accent-6); color: var(--accent-6-bg); }
+
+  .slog { background: var(--accent-log-bg); }
+  .slog .stage-badge { background: var(--accent-log); color: var(--accent-log-bg); }
+  .slog .stage-title { color: var(--accent-log); }
+  .slog .stage-tag { background: var(--accent-log); color: var(--accent-log-bg); }
+
+  /* ---- Stage 6 Evidence Graph ---- */
+  .graph-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; font-size: 11.5px; color: var(--ink-2); }
+  .graph-legend b { font-weight: 700; }
+  .edge-list { display: flex; flex-direction: column; gap: 6px; }
+  .edge-item {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font-size: 12.5px;
+  }
+  .edge-node { font-weight: 600; }
+  .edge-rel {
+    font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 700; letter-spacing: .02em;
+  }
+  .rel-supports { background: var(--accent-1-bg); color: var(--accent-1); border: 1px solid var(--accent-1); }
+  .rel-conflicts { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+  .rel-independent { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--line-strong); }
+  .node-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .node-chip {
+    font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line-strong); font-weight: 600;
+  }
+  .node-chip.isolated { border-style: dashed; color: var(--muted); }
+  .dangling-list { font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+
+  /* ---- Execution Log ---- */
+  .log-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.log-table th, table.log-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.log-table th { position: sticky; top: 0; background: var(--surface-2); font-size: 11px; color: var(--muted); z-index: 1; }
+  table.log-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .log-status { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; font-weight: 700; }
+  .log-ok { background: var(--accent-1-bg); color: var(--accent-1); }
+  .log-error { background: var(--danger-bg); color: var(--danger); }
+  .log-skipped { background: var(--accent-2-bg); color: var(--accent-2); }
+  .log-layer { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .log-ms { text-align: right; font-variant-numeric: tabular-nums; }
 
   .field-row { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 10px; }
   .field { min-width: 140px; }
@@ -396,6 +452,52 @@
         <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——實測 BTC funding_rate 的 <code>final=-0.55</code> 是五張卡裡強度最高的，照帶號值排卻掉到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
       </div>
 
+      <div class="stage-card s6">
+        <div class="stage-head">
+          <span class="stage-badge">5</span>
+          <span class="stage-title">Stage 5 — Evidence Graph</span>
+          <span class="stage-tag" id="graph-live-pill">建圖中…</span>
+        </div>
+        <div class="graph-legend">
+          <span><b>節點</b>＝這批 Evidence Card</span>
+          <span><span class="edge-rel rel-supports">supports</span> 互相印證</span>
+          <span><span class="edge-rel rel-conflicts">conflicts</span> 互相矛盾</span>
+          <span><span class="edge-rel rel-independent">independent</span> 彼此獨立</span>
+          <span>虛線節點＝孤立（這批沒有任何邊連到它）</span>
+        </div>
+        <div class="node-chips" id="graph-nodes"></div>
+        <div class="edge-list" id="graph-edges"></div>
+        <div id="graph-dangling-wrap" style="display:none; margin-top:12px;">
+          <div class="k" style="font-size:11.5px; color:var(--muted); margin-bottom:6px;">
+            關係指向這次沒有分析的 factor（不畫成邊，但如實列出）
+          </div>
+          <div class="dangling-list" id="graph-dangling"></div>
+        </div>
+        <div class="mini-error" id="graph-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>這一層<b>不重新判斷任何關係</b>，只是把 Stage 3 Knowledge 已經寫好的 <code>confirms</code>／<code>conflicts</code>／<code>independent</code> 組裝成圖（跟 Stage 4 卡片同樣是「組裝層」精神）。設計與三個已知缺口見 <code>Stage 6 — Evidence Graph/design.md</code>：①<b>關係指向沒有卡片的 factor</b>（例如 funding_rate 的 Knowledge 寫 <code>confirms: open_interest</code>，但這批只分析五個 factor）——關係是真的，只是這次沒一起分析，所以列在下方而不畫邊、也不假造節點；②<b>cpi 這類 Event Factor 結構性不會主動發出邊</b>，因為 Event Knowledge 的關係欄位（<code>usually_affects</code>／<code>related_events</code>）跟 Statistical／Sentiment 的三個 key 名稱不同，Stage 4 組裝時讀不到——這裡誠實維持不對稱，不硬湊一條邊；③但 cpi <b>不一定是孤立節點</b>，別的卡片（例如 liquidation 的 <code>independent</code>）可能反過來指向它。<b>圖不完整不是資料錯，是這次只分析了這幾個 factor。</b></span></div>
+      </div>
+
+      <div class="stage-card slog">
+        <div class="stage-head">
+          <span class="stage-badge">📋</span>
+          <span class="stage-title">Execution Log</span>
+          <span class="stage-tag" id="log-pill">紀錄中…</span>
+        </div>
+        <div class="log-toolbar">
+          <button class="ghost" id="log-download-btn" type="button">下載 execution_log.jsonl</button>
+          <span class="k" id="log-summary" style="font-size:11.5px; color:var(--muted);"></span>
+        </div>
+        <div class="log-table-wrap">
+          <table class="log-table">
+            <thead>
+              <tr><th>時間 (UTC)</th><th>階段</th><th>動作</th><th>說明</th><th>狀態</th><th style="text-align:right;">耗時</th></tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。</span></div>
+      </div>
+
       <div class="back-row">
         <button class="ghost" id="back-btn" type="button">← 回上一頁</button>
       </div>
@@ -447,6 +549,9 @@
         throw new Error(detail);
       }
       renderResult(data);
+      // 每次送出新問題都從頭累積，不要把上一題的紀錄混進來
+      executionLog = [];
+      appendExecutionLog(data.execution_log);
       page1.classList.add("hidden");
       page2.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -454,7 +559,8 @@
       const firstAsset = Array.isArray(data.asset) ? data.asset[0] : data.asset;
       // Stage 3 是純查表（讀檔），立刻就能顯示，不用等 Stage 2/4/5 的 API。
       fetchAllStage3(firstAsset, data.horizon);
-      // Stage 2/4/5 由同一次 /api/stage5 驅動，確保三個區塊的數字一致。
+      // Stage 2/3/4/5 由同一次 /api/stage6 驅動（它內部呼叫 Stage 5 實作），
+      // 確保各區塊的數字與 Evidence Graph 來自同一批卡片、不會前後不一致。
       if (firstAsset) fetchPipeline(firstAsset, data.horizon);
     } catch (err) {
       const msg = String(err.message || err);
@@ -738,6 +844,112 @@
   const cardLivePill = document.getElementById("card-live-pill");
   const cardLiveError = document.getElementById("card-live-error");
   const stage5Cards = document.getElementById("stage5-cards");
+  const graphLivePill = document.getElementById("graph-live-pill");
+  const graphLiveError = document.getElementById("graph-live-error");
+  const graphNodes = document.getElementById("graph-nodes");
+  const graphEdges = document.getElementById("graph-edges");
+  const graphDangling = document.getElementById("graph-dangling");
+  const graphDanglingWrap = document.getElementById("graph-dangling-wrap");
+  const logPill = document.getElementById("log-pill");
+  const logTbody = document.getElementById("log-tbody");
+  const logSummary = document.getElementById("log-summary");
+  const logDownloadBtn = document.getElementById("log-download-btn");
+
+  // 跨 stage 累積的執行紀錄（Stage 1 一份、Stage 2-5 一份），下載時合併成一個
+  // .jsonl —— 格式跟正式 pipeline 的 execution_log.jsonl 一致（一行一個 JSON）。
+  let executionLog = [];
+
+  function renderExecutionLog() {
+    if (!executionLog.length) {
+      logTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">尚無紀錄</td></tr>';
+      logSummary.textContent = "";
+      return;
+    }
+    const esc = (t) => String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    logTbody.innerHTML = executionLog.map(e => {
+      const ms = (e.metrics && e.metrics.elapsed_ms != null) ? e.metrics.elapsed_ms : null;
+      const statusClass = e.status === "error" ? "log-error"
+        : (e.status === "skipped" ? "log-skipped" : "log-ok");
+      return `<tr>
+        <td class="mono">${esc((e.ts || "").replace("T", " ").replace("Z", ""))}</td>
+        <td class="mono">${esc(e.phase)}${e.layer ? `<div class="log-layer">${esc(e.layer)}</div>` : ""}</td>
+        <td class="mono">${esc(e.action)}</td>
+        <td>${esc(e.detail)}</td>
+        <td><span class="log-status ${statusClass}">${esc(e.status)}</span></td>
+        <td class="log-ms mono">${ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms")}</td>
+      </tr>`;
+    }).join("");
+
+    const errs = executionLog.filter(e => e.status === "error").length;
+    const totalMs = executionLog.reduce(
+      (a, e) => a + ((e.metrics && e.metrics.elapsed_ms) || 0), 0);
+    // 各層是併發跑的，逐項相加會超過真實牆鐘時間——講明是「累計」而不是「總耗時」，
+    // 免得被當成整跑時間誤讀。
+    logSummary.textContent =
+      `${executionLog.length} 筆紀錄・累計工作時間 ${(totalMs / 1000).toFixed(1)}s（各層併發，非牆鐘總時長）`
+      + (errs ? `・${errs} 筆錯誤` : "");
+    logPill.textContent = `${executionLog.length} 筆` + (errs ? `・${errs} 錯誤` : "");
+    logPill.classList.toggle("err", errs > 0);
+  }
+
+  function appendExecutionLog(entries) {
+    if (!Array.isArray(entries) || !entries.length) return;
+    executionLog = executionLog.concat(entries);
+    renderExecutionLog();
+  }
+
+  logDownloadBtn.addEventListener("click", () => {
+    if (!executionLog.length) return;
+    // 一行一個 JSON 物件（JSON Lines），跟正式 pipeline 的 execution_log.jsonl 同格式
+    const blob = new Blob(
+      [executionLog.map(e => JSON.stringify(e)).join("
+") + "
+"],
+      { type: "application/x-ndjson" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "execution_log.jsonl";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  function renderGraph(graph) {
+    const esc = (t) => String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const nodes = graph.nodes || [];
+    const edges = graph.edges || [];
+    const dangling = graph.referenced_but_no_card || [];
+
+    graphNodes.innerHTML = nodes.map(n =>
+      `<span class="node-chip${n.isolated ? " isolated" : ""}" title="${esc(n.evidence_id)}${n.isolated ? "（孤立節點）" : ""}">
+         ${esc(n.factor)}${n.isolated ? " ·孤立" : ""}
+       </span>`).join("");
+
+    graphEdges.innerHTML = edges.length
+      ? edges.map(e => `<div class="edge-item">
+           <span class="edge-node">${esc(e.from_factor || e.from)}</span>
+           <span class="edge-rel rel-${esc(e.relation)}">${esc(e.relation)}</span>
+           <span class="edge-node">${esc(e.to_factor || e.to)}</span>
+         </div>`).join("")
+      : '<div style="color:var(--muted); font-size:12.5px;">這批卡片之間沒有可連的邊——不是關係不存在，是兩端都要有卡片才畫得出來（見下方與說明）。</div>';
+
+    if (dangling.length) {
+      graphDanglingWrap.style.display = "block";
+      graphDangling.innerHTML = dangling.map(d =>
+        `<div>· <b>${esc(d.from_factor || d.from)}</b> —${esc(d.relation)}→ <code>${esc(d.referenced_factor)}</code>（這次沒分析這個 factor）</div>`
+      ).join("");
+    } else {
+      graphDanglingWrap.style.display = "none";
+    }
+
+    const isolated = nodes.filter(n => n.isolated).length;
+    graphLivePill.textContent =
+      `live · ${nodes.length} 節點 / ${edges.length} 邊` + (isolated ? ` / ${isolated} 孤立` : "");
+    graphLivePill.classList.remove("err");
+  }
 
   function stage2Html(factorId, f) {
     if (!f) return "<div class=\"lr-note\">（無資料）</div>";
@@ -896,7 +1108,10 @@
     stage5Cards.innerHTML = "";
 
     try {
-      const res = await fetch(`${API_BASE}/api/stage5`, {
+      // 打 /api/stage6：它內部直接呼叫 Stage 5 的實作（同一個 process，不重抓資料），
+      // 一次拿回 evidence_cards ＋ graph ＋ 兩層合併後的 execution_log，
+      // 避免前端打兩次造成兩次獨立的 LLM 窗口判斷、數字對不起來。
+      const res = await fetch(`${API_BASE}/api/stage6`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coin, horizon }),
@@ -924,9 +1139,11 @@
       });
 
       weightLivePill.textContent = `${Object.keys(byFactor).length} factors live`;
-      cardLivePill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
+      cardLivePill.textContent = `live · ${(data.evidence_cards || []).length} 張卡（依 evidence_weight 排序）`;
       stage5Cards.innerHTML = (data.evidence_cards || [])
         .map((c, i) => stage5CardHtml(c, i + 1)).join("");
+      if (data.graph) renderGraph(data.graph);
+      appendExecutionLog(data.execution_log);
       if ((data.failed_factors || []).length) {
         cardLiveError.textContent = "以下 factor 組裝失敗，未列入排序：\n" +
           data.failed_factors.map(f => `· ${f.factor}：${f.error}`).join("\n");
@@ -944,6 +1161,17 @@
       cardLivePill.classList.add("err");
       cardLiveError.textContent = msg;
       cardLiveError.style.display = "block";
+      graphLivePill.textContent = "建圖失敗";
+      graphLivePill.classList.add("err");
+      graphLiveError.textContent = "上游 Stage 2-4 失敗，沒有卡片可以建圖：" + msg;
+      graphLiveError.style.display = "block";
+      // 失敗本身也是執行紀錄的一部分——這裡補一筆前端可見的紀錄，
+      // 免得 log 面板停在「只有 Stage 1」而看不出後面發生什麼事。
+      appendExecutionLog([{
+        ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+        phase: "collect", action: "stage2_5_request_failed", detail: msg,
+        status: "error", layer: null, metrics: {},
+      }]);
     }
   }
   submitBtn.addEventListener("click", submitQuery);
