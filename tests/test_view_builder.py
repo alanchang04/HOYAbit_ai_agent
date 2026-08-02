@@ -222,6 +222,15 @@ def test_build_report_view_produces_valid_json(
     # 驗證 panel3
     panel3 = result["panel3_refinement"]
     assert "noise_removal_rate" in panel3
+    assert panel3["refinement_impact"] == {
+        "raw_count": 3,
+        "retained_count": 2,
+        "removed_count": 1,
+        "downweighted_count": 1,
+        "low_trust_count": 0,
+        "affected_count": 1,
+        "affected_rate": 0.3333,
+    }
     assert len(panel3["layers"]) == 5
     assert panel3["layers"][0]["layer"] == "L1_source"
     assert panel3["layers"][1]["layer"] == "L2_content"
@@ -251,6 +260,10 @@ def test_build_report_view_produces_valid_json(
     # panel4 執行摘要（summary）：與 report.md 的執行摘要同資料來源
     summary = panel4["summary"]
     assert summary["confidence_label"] == "中"
+    assert summary["decision_brief"] == "BTC 目前處於偏強格局"
+    assert len(summary["top_facts"]) == 2
+    assert summary["top_risks"] == ["社群/總經資料缺失"]
+    assert summary["top_watchpoints"] == ["若出現大量拋售訊號"]
     assert summary["has_debate"] is True
     assert summary["bull_argument"] == "算力新高加上 ETF 資金流入支持偏強格局"
     assert summary["bull_evidence_ids"] == ["ev-001", "ev-002"]

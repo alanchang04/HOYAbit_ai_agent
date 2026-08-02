@@ -22,14 +22,28 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from agent.collectors.coin_map import SUPPORTED_COINS
+from agent.integrity import assess_integrity
 from agent.orchestrator import run_pipeline
+from agent.reasoning.consistency import normalize_nested_consistency
 from agent.report.text_formatting import normalize_embedded_lists
+from agent.schemas import Evidence
 
 BASE_DIR = Path(__file__).resolve().parent
 RUNS_DIR = Path("output") / "webapp_runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_DOWNLOAD_FILENAMES = {"report.md", "evidence.json", "execution_log.jsonl", "report_view.json"}
+ALLOWED_DOWNLOAD_FILENAMES = {
+    "report.md",
+    "evidence.json",
+    "execution_log.jsonl",
+    "report_view.json",
+    "validation_results.json",
+    "research_context.json",
+    "report.html",
+    "evidence.html",
+    "execution_log.html",
+    "deliverables.html",
+}
 
 # --- 公開部署的濫用防護（2026-08-01）------------------------------------
 # 這個服務架在**主辦方的 AWS 帳號**上、無認證對外開放，而每次真實執行約
@@ -208,6 +222,7 @@ def analyze(
     # Read execution log entries and view metrics for template tabs
     log_entries: list[dict] = []
     view_metrics: dict = {}
+    view_data: dict = {}
     raw_log: str = ""
 
     log_path = out_dir / "execution_log.jsonl"
@@ -238,6 +253,7 @@ def analyze(
             "error": error,
             "log_entries": log_entries,
             "view_metrics": view_metrics,
+            "view_data": view_data,
             "raw_log": raw_log,
         },
     )
@@ -250,6 +266,28 @@ def view_panel(request: Request, run_id: str):
     if not view_path.exists():
         return HTMLResponse("Report view not found", status_code=404)
     view_data = json.loads(view_path.read_text(encoding="utf-8"))
+
+    # v1.1 向後相容：既有四份真實 Demo 產於一致性／PARTIAL 護欄之前。
+    # 歷史檔案保持原樣，但顯示時用同一份 evidence 重新判定，避免舊畫面繼續
+    # 顯示「缺整類資料卻 INTACT」或已知的事件月份換算矛盾。
+    evidence_path = RUNS_DIR / safe_run_id / "evidence.json"
+    if evidence_path.exists():
+        evidences = [
+            Evidence.model_validate(item)
+            for item in json.loads(evidence_path.read_text(encoding="utf-8"))
+        ]
+        view_data, _ = normalize_nested_consistency(view_data, evidences)
+        coins = [view_data.get("meta", {}).get("coin", "")]
+        coin2 = view_data.get("meta", {}).get("coin2")
+        if coin2:
+            coins.append(coin2)
+        assessment = assess_integrity(evidences, [coin for coin in coins if coin])
+        current_status = view_data.get("meta", {}).get("metrics", {}).get("integrity_status")
+        if current_status != "DEGRADED" and assessment.status != "INTACT":
+            view_data["meta"]["metrics"]["integrity_status"] = assessment.status
+            view_data["meta"]["metrics"]["degraded_reasons"] = assessment.reasons
+            view_data["panel4_report"]["integrity_status"] = assessment.status
+            view_data["panel4_report"]["degraded_reasons"] = assessment.reasons
     return templates.TemplateResponse(request, "view.html", {"run_id": run_id, "view": view_data})
 
 

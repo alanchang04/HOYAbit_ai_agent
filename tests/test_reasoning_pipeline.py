@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from agent.reasoning.pipeline import run_reasoning
+from agent.reasoning.pipeline import _build_related_claims, run_reasoning
 from agent.schemas import Evidence, now_iso
 
 
@@ -205,9 +205,30 @@ def test_has_new_points_unparseable_value_keeps_debating():
     assert result.debate["round_count"] == 2
 
 
-def test_deadline_stops_the_debate_before_starting_another_round():
-    """剩餘時間不足時要收在當輪，把時間留給裁判。"""
-    client = FakeLLMClient(
+def test_deadline_stops_the_debate_before_starting_another_round(monkeypatch):
+    """剩餘時間不足時要收在當輪，把時間留給裁判。
+
+    2026-08-01 契約變更：本測試原本用「已經超時」的 deadline，並期望裁判仍然跑完。
+    那與 15 分鐘硬性上限不相容——超時之後再發 LLM 呼叫只會讓整跑更晚結束，
+    而超時後的產出主辦方可以不採計。現在超時就完全不發呼叫（見
+    `test_expired_deadline_makes_no_llm_call`），所以這裡改用「還有一輪份的預算、
+    但不夠再開一輪」的情境來測輪與輪之間的 gate。
+    """
+    from agent.reasoning import pipeline as _pipeline
+
+    # 「整段跳過辯論」的門檻另有專門測試，這裡壓到極小以免兩者互相干擾。
+    monkeypatch.setattr(_pipeline, "STEP_D_RESERVE_SECONDS", 0.01)
+    monkeypatch.setattr(_pipeline, "MIN_LLM_STEP_SECONDS", 0.01)
+
+    class SlowFakeClient(FakeLLMClient):
+        """每次呼叫睡一下。gate 的 needed 是「上一輪實測秒數 × 係數」，
+        瞬間回應的假 client 會讓 needed≈0、gate 永遠不觸發，測不到東西。"""
+
+        def converse(self, system_prompt, user_prompt, max_tokens=2048):
+            time.sleep(0.05)
+            return super().converse(system_prompt, user_prompt, max_tokens)
+
+    client = SlowFakeClient(
         [
             STEP_A_RESPONSE,
             STEP_B_RESPONSE,
@@ -218,19 +239,39 @@ def test_deadline_stops_the_debate_before_starting_another_round():
         ]
     )
 
+    # 預算：A+B+第1輪約 0.2s，剩約 0.1s；再開一輪需要 0.1×2.2=0.22s → gate 觸發，
+    # 但仍夠讓裁判跑完（MIN 已壓到 0.01）。
     result = run_reasoning(
         "BTC",
         "分析 BTC 市場狀態",
         _evidences(),
         dry_run=False,
         llm_client=client,
-        deadline=time.monotonic() - 1,  # 已經超時
+        deadline=time.monotonic() + 0.3,
     )
 
     assert result.debate["round_count"] == 1
     assert result.debate["stopped_reason"] == "deadline"
     assert result.conclusion["market_judgment"] == "mj"  # 裁判仍然跑完
     assert client.call_count == 5  # 沒有進第二輪
+
+
+def test_expired_deadline_makes_no_llm_call():
+    """deadline 已過時一次 LLM 呼叫都不發，讓 orchestrator 走降級報告。
+
+    15 分鐘是硬性上限（命題文件執行限制第 1 條），超時後的產出主辦方可停止執行
+    或不採計——「有產出但超時」比「誠實降級但準時」還糟。
+    """
+    from agent.reasoning.pipeline import ReasoningStepError
+
+    client = FakeLLMClient([STEP_A_RESPONSE])
+    with pytest.raises(ReasoningStepError) as exc:
+        run_reasoning(
+            "BTC", "分析 BTC 市場狀態", _evidences(),
+            dry_run=False, llm_client=client, deadline=time.monotonic() - 1,
+        )
+    assert "時間預算不足" in str(exc.value)
+    assert client.call_count == 0
 
 
 def test_no_deadline_means_unlimited():
@@ -429,20 +470,26 @@ class TestSanitizeDebateSummary:
         return _sanitize_debate_summary(raw, set(known_ids))
 
     def test_valid_items_pass_through(self):
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "bear_valid"}
+        ]
 
     def test_hallucinated_evidence_id_is_stripped_not_whole_item(self):
         """幻覺 id 只濾掉那個 id，這個攻防重點本身仍保留（有 point 就有價值）。"""
-        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"]}]
-        assert self._sanitize(raw) == [{"point": "重點一", "evidence_ids": ["ev-001"]}]
+        raw = [{"point": "重點一", "evidence_ids": ["ev-001", "ev-999"], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "重點一", "evidence_ids": ["ev-001"], "verdict": "draw"}
+        ]
 
     def test_missing_point_drops_only_that_item(self):
         raw = [
             {"evidence_ids": ["ev-001"]},  # 缺 point，整條丟棄
-            {"point": "重點二", "evidence_ids": ["ev-002"]},
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"},
         ]
-        assert self._sanitize(raw) == [{"point": "重點二", "evidence_ids": ["ev-002"]}]
+        assert self._sanitize(raw) == [
+            {"point": "重點二", "evidence_ids": ["ev-002"], "verdict": "bull_defended"}
+        ]
 
     def test_empty_point_string_is_dropped(self):
         raw = [{"point": "   ", "evidence_ids": []}]
@@ -453,9 +500,160 @@ class TestSanitizeDebateSummary:
         assert self._sanitize(None) == []
 
     def test_non_dict_item_is_skipped(self):
-        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": []}]
-        assert self._sanitize(raw) == [{"point": "有效重點", "evidence_ids": []}]
+        raw = ["純字串條目", {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}]
+        assert self._sanitize(raw) == [
+            {"point": "有效重點", "evidence_ids": [], "verdict": "draw"}
+        ]
 
     def test_missing_evidence_ids_defaults_to_empty_list(self):
         raw = [{"point": "沒引用證據的重點"}]
-        assert self._sanitize(raw) == [{"point": "沒引用證據的重點", "evidence_ids": []}]
+        assert self._sanitize(raw) == [
+            {"point": "沒引用證據的重點", "evidence_ids": [], "verdict": "draw"}
+        ]
+
+    def test_unreadable_verdict_falls_back_to_draw(self):
+        """verdict 判讀不出來時計為 draw（0 分），不丟棄整點——降級優先（R6-1）。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "很嚴重"}]
+        assert self._sanitize(raw)[0]["verdict"] == "draw"
+
+    def test_chinese_verdict_alias_is_accepted(self):
+        """模型不保證回 ASCII enum，中文同義詞一併認。"""
+        raw = [{"point": "重點", "evidence_ids": [], "verdict": "反方成立"}]
+        assert self._sanitize(raw)[0]["verdict"] == "bear_valid"
+
+
+class TestStepAGroundingRetry:
+    """Step A 的 fact 若沒通過 grounding 稽核（見 agent/reasoning/grounding.py），
+    要重試一次；重試乾淨就採用，重試後仍違規就直接捨棄，不讓它流進 Step B/C。
+    """
+
+    def _evidence_without_rsi(self) -> list[Evidence]:
+        return [
+            Evidence(
+                id="ev-001",
+                coin="BTC",
+                source="test-source",
+                fetched_at=now_iso(),
+                content_reference="近 14 日收盤價與成交量摘要",
+                related_claim="claim",
+                source_type="price",
+            )
+        ]
+
+    def test_violating_fact_is_dropped_and_retry_replaces_it(self):
+        violating_step_a = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 指標顯示動能減弱", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        clean_retry = (
+            '{"facts": [{"source_type": "price", "summary": "收盤價與成交量已提供", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        client = FakeLLMClient(
+            [
+                violating_step_a,
+                clean_retry,
+                STEP_B_RESPONSE,
+                BULL_RESPONSE,
+                BEAR_CONVERGED_RESPONSE,
+                STEP_D_RESPONSE,
+            ]
+        )
+
+        result = run_reasoning(
+            "BTC", "分析 BTC 市場狀態", self._evidence_without_rsi(), dry_run=False, llm_client=client
+        )
+
+        assert len(result.facts) == 1
+        assert result.facts[0]["summary"] == "收盤價與成交量已提供"
+        assert client.call_count == 6  # 5 個既有步驟 + 1 次 grounding 重試
+
+    def test_fact_still_violating_after_retry_is_dropped_not_propagated(self):
+        violating_step_a = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 指標顯示動能減弱", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        still_violating_retry = (
+            '{"facts": [{"source_type": "price", "summary": "RSI 已降至超賣區", '
+            '"evidence_ids": ["ev-001"]}]}'
+        )
+        client = FakeLLMClient(
+            [
+                violating_step_a,
+                still_violating_retry,
+                STEP_B_RESPONSE,
+                BULL_RESPONSE,
+                BEAR_CONVERGED_RESPONSE,
+                STEP_D_RESPONSE,
+            ]
+        )
+
+        result = run_reasoning(
+            "BTC", "分析 BTC 市場狀態", self._evidence_without_rsi(), dry_run=False, llm_client=client
+        )
+
+        assert result.facts == []
+        assert client.call_count == 6
+
+    def test_clean_facts_do_not_trigger_a_retry_call(self):
+        """既有測試的 STEP_A_RESPONSE（summary="s"）不含任何違規，不該多花一次呼叫——
+        這條測試確保驗證器接入後沒有改變既有 happy path 的呼叫次數。"""
+        client = FakeLLMClient(
+            [STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, BEAR_CONVERGED_RESPONSE, STEP_D_RESPONSE]
+        )
+
+        result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+        assert len(result.facts) == 1
+        assert client.call_count == 5
+
+
+class TestBuildRelatedClaims:
+    """v1.2 新增：把 facts 依 (coin, source_type) 分組成 topic → claims 附加結構，
+    不動 `Evidence.related_claim`，也不呼叫新的 LLM（見 pipeline.py 的說明）。"""
+
+    def test_groups_by_coin_and_source_type(self):
+        facts = [
+            {"source_type": "onchain", "coin": "BTC", "summary": "鏈上活躍地址數上升", "evidence_ids": ["ev-001"]},
+            {"source_type": "onchain", "coin": "BTC", "summary": "交易量近兩週下降", "evidence_ids": ["ev-002"]},
+            {"source_type": "price", "coin": "BTC", "summary": "收盤價持穩", "evidence_ids": ["ev-003"]},
+        ]
+        result = _build_related_claims(facts)
+
+        by_topic = {item["topic"]: item["related_claims"] for item in result}
+        assert by_topic["BTC 鏈上"] == ["鏈上活躍地址數上升", "交易量近兩週下降"]
+        assert by_topic["BTC 價格"] == ["收盤價持穩"]
+
+    def test_missing_coin_falls_back_to_label_only_topic(self):
+        facts = [{"source_type": "macro", "summary": "美元走強", "evidence_ids": ["ev-001"]}]
+        result = _build_related_claims(facts)
+        assert result == [{"topic": "總經", "related_claims": ["美元走強"]}]
+
+    def test_empty_or_blank_summary_is_skipped(self):
+        facts = [
+            {"source_type": "price", "coin": "BTC", "summary": "", "evidence_ids": []},
+            {"source_type": "price", "coin": "BTC", "summary": "   ", "evidence_ids": []},
+        ]
+        assert _build_related_claims(facts) == []
+
+    def test_unknown_source_type_falls_back_to_raw_value(self):
+        facts = [{"source_type": "weird_type", "coin": "BTC", "summary": "x", "evidence_ids": []}]
+        result = _build_related_claims(facts)
+        assert result[0]["topic"] == "BTC weird_type"
+
+
+def test_run_reasoning_populates_related_claims():
+    """STEP_A_RESPONSE 沒有 coin 欄位（`_sanitize_facts` 只在模型有回傳時才保留），
+    topic 落回純標籤——這正是 `_build_related_claims` 對缺 coin 的降級行為。"""
+    client = FakeLLMClient([STEP_A_RESPONSE, STEP_B_RESPONSE, BULL_RESPONSE, BEAR_CONVERGED_RESPONSE, STEP_D_RESPONSE])
+
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(), dry_run=False, llm_client=client)
+
+    assert result.related_claims == [{"topic": "價格", "related_claims": ["s"]}]
+
+
+def test_dry_run_also_populates_related_claims():
+    result = run_reasoning("BTC", "分析 BTC 市場狀態", _evidences(2), dry_run=True)
+
+    assert len(result.related_claims) == 1
+    assert result.related_claims[0]["topic"] == "價格"  # dry-run facts 沒有 coin 欄位

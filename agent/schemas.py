@@ -154,7 +154,7 @@ class RunMetrics(BaseModel):
     confidence: int = 0
     noise_removal_rate: float = 0.0
     total_tokens: int = 0
-    integrity_status: str = "INTACT"  # INTACT | DEGRADED
+    integrity_status: str = "INTACT"  # INTACT | PARTIAL | DEGRADED
     raw_evidence_count: int = 0
     kept_fact_count: int = 0
     degraded_reasons: list[str] = Field(default_factory=list)
@@ -191,6 +191,13 @@ class EvidenceDraft(BaseModel):
     dedup_deduped_count: int | None = None
     dedup_rate: float | None = None
     duplicate_of: str | None = None  # 被去重剔除時，指向保留的那筆證據 id
+
+    # 資安：prompt injection 偵測（agent/filters/injection.py）。
+    # "high" = 隔離（不送進任何 LLM prompt，但證據本身完整保留可回溯）；
+    # "medium" = 僅標記，照常送進 LLM。None = 未命中。
+    # 有預設值以維持向後相容：舊 evidence.json 無此欄位仍可載入（R2-9）。
+    injection_flag: str | None = None
+    injection_reason: str = ""
 
     # horizon-aware R2: 時間尺度標註（由 collector 決定性填入，見 .kiro/steering/horizon-annotation.md）
     # window_end ≠ fetched_at：前者是「觀察涵蓋到哪一天」，後者是「何時抓的」。

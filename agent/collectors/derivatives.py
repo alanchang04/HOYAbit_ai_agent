@@ -205,8 +205,13 @@ class DerivativesCollector(BaseCollector):
     async def _fetch_funding_rate_percentile(
         self, client: httpx.AsyncClient, coin: str, symbol: str
     ) -> EvidenceDraft | None:
-        resp = await client.get(f"{FAPI_BASE}/fundingRate", params={"symbol": symbol, "limit": FUNDING_LIMIT})
+        params = {"symbol": symbol, "limit": FUNDING_LIMIT}
+        resp = await client.get(f"{FAPI_BASE}/fundingRate", params=params)
         resp.raise_for_status()
+        self.log_subsource(
+            "funding_rate_percentile", coin, LogStatus.OK,
+            f"endpoint={FAPI_BASE}/fundingRate, params={params}",
+        )
         rows = resp.json()
         if not rows:
             raise RuntimeError("fundingRate 回傳空序列")
@@ -244,22 +249,35 @@ class DerivativesCollector(BaseCollector):
     async def _fetch_oi_price_quadrant(
         self, client: httpx.AsyncClient, coin: str, symbol: str
     ) -> EvidenceDraft | None:
-        current_resp = await client.get(f"{FAPI_BASE}/openInterest", params={"symbol": symbol})
+        current_params = {"symbol": symbol}
+        current_resp = await client.get(f"{FAPI_BASE}/openInterest", params=current_params)
         current_resp.raise_for_status()
+        self.log_subsource(
+            "oi_price_quadrant", coin, LogStatus.OK,
+            f"endpoint={FAPI_BASE}/openInterest, params={current_params}",
+        )
 
+        oi_params = {"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT}
         oi_resp = await client.get(
             f"{FUTURES_DATA_BASE}/openInterestHist",
-            params={"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT},
+            params=oi_params,
         )
         oi_resp.raise_for_status()
+        self.log_subsource(
+            "oi_price_quadrant", coin, LogStatus.OK,
+            f"endpoint={FUTURES_DATA_BASE}/openInterestHist, params={oi_params}",
+        )
         oi_rows = oi_resp.json()
         if not oi_rows:
             raise RuntimeError("openInterestHist 回傳空序列")
 
-        kline_resp = await client.get(
-            f"{FAPI_BASE}/klines", params={"symbol": symbol, "interval": "1h", "limit": HOURLY_TREND_LIMIT}
-        )
+        kline_params = {"symbol": symbol, "interval": "1h", "limit": HOURLY_TREND_LIMIT}
+        kline_resp = await client.get(f"{FAPI_BASE}/klines", params=kline_params)
         kline_resp.raise_for_status()
+        self.log_subsource(
+            "oi_price_quadrant", coin, LogStatus.OK,
+            f"endpoint={FAPI_BASE}/klines, params={kline_params}",
+        )
         kline_rows = kline_resp.json()
         if not kline_rows:
             raise RuntimeError("klines 回傳空序列")
@@ -300,20 +318,30 @@ class DerivativesCollector(BaseCollector):
     async def _fetch_long_short_ratio(
         self, client: httpx.AsyncClient, coin: str, symbol: str
     ) -> EvidenceDraft | None:
+        retail_params = {"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT}
         retail_resp = await client.get(
             f"{FUTURES_DATA_BASE}/globalLongShortAccountRatio",
-            params={"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT},
+            params=retail_params,
         )
         retail_resp.raise_for_status()
+        self.log_subsource(
+            "long_short_ratio", coin, LogStatus.OK,
+            f"endpoint={FUTURES_DATA_BASE}/globalLongShortAccountRatio, params={retail_params}",
+        )
         retail_rows = retail_resp.json()
         if not retail_rows:
             raise RuntimeError("globalLongShortAccountRatio 回傳空序列")
 
+        smart_params = {"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT}
         smart_resp = await client.get(
             f"{FUTURES_DATA_BASE}/topLongShortPositionRatio",
-            params={"symbol": symbol, "period": "1h", "limit": HOURLY_TREND_LIMIT},
+            params=smart_params,
         )
         smart_resp.raise_for_status()
+        self.log_subsource(
+            "long_short_ratio", coin, LogStatus.OK,
+            f"endpoint={FUTURES_DATA_BASE}/topLongShortPositionRatio, params={smart_params}",
+        )
         smart_rows = smart_resp.json()
         if not smart_rows:
             raise RuntimeError("topLongShortPositionRatio 回傳空序列")
@@ -351,6 +379,10 @@ class DerivativesCollector(BaseCollector):
         pair = f"{coin}USD"
         exchange_resp = await client.get(f"{DAPI_BASE}/dapi/v1/exchangeInfo")
         exchange_resp.raise_for_status()
+        self.log_subsource(
+            "futures_term_structure", coin, LogStatus.OK,
+            f"endpoint={DAPI_BASE}/dapi/v1/exchangeInfo",
+        )
         quarterly: dict[str, dict] = {}
         for s in exchange_resp.json()["symbols"]:
             if (
@@ -366,8 +398,13 @@ class DerivativesCollector(BaseCollector):
             return None
 
         async def premium_index(sym: str) -> dict:
-            r = await client.get(f"{DAPI_BASE}/dapi/v1/premiumIndex", params={"symbol": sym})
+            params = {"symbol": sym}
+            r = await client.get(f"{DAPI_BASE}/dapi/v1/premiumIndex", params=params)
             r.raise_for_status()
+            self.log_subsource(
+                "futures_term_structure", coin, LogStatus.OK,
+                f"endpoint={DAPI_BASE}/dapi/v1/premiumIndex, params={params}",
+            )
             rows = r.json()
             if not rows:
                 raise RuntimeError(f"premiumIndex 查無資料：symbol={sym}")
@@ -422,16 +459,18 @@ class DerivativesCollector(BaseCollector):
             self.log_subsource("cme_cot", coin, LogStatus.SKIPPED, "BNB 沒有 CME 期貨，CFTC 週報查不到")
             return None
 
-        resp = await client.get(
-            COT_API_URL,
-            params={
-                "$where": f"market_and_exchange_names = '{market_name}'",
-                "$order": "report_date_as_yyyy_mm_dd DESC",
-                "$limit": str(CME_COT_TREND_WEEKS),
-                "$select": ",".join(CME_COT_SELECT_FIELDS),
-            },
-        )
+        params = {
+            "$where": f"market_and_exchange_names = '{market_name}'",
+            "$order": "report_date_as_yyyy_mm_dd DESC",
+            "$limit": str(CME_COT_TREND_WEEKS),
+            "$select": ",".join(CME_COT_SELECT_FIELDS),
+        }
+        resp = await client.get(COT_API_URL, params=params)
         resp.raise_for_status()
+        self.log_subsource(
+            "cme_cot", coin, LogStatus.OK,
+            f"endpoint={COT_API_URL}, params={params}",
+        )
         rows = resp.json()
         if not rows:
             raise RuntimeError(f"查無資料：market_and_exchange_names = '{market_name}'")
@@ -472,6 +511,10 @@ class DerivativesCollector(BaseCollector):
     ) -> EvidenceDraft | None:
         mark_resp = await client.get(f"{EAPI_BASE}/mark")
         mark_resp.raise_for_status()
+        self.log_subsource(
+            "options_iv_skew", coin, LogStatus.OK,
+            f"endpoint={EAPI_BASE}/mark",
+        )
         coin_rows = [r for r in mark_resp.json() if r["symbol"].startswith(f"{coin}-")]
         if len(coin_rows) < OPTIONS_MIN_CONTRACTS:
             self.log_subsource(
@@ -519,10 +562,13 @@ class DerivativesCollector(BaseCollector):
         put_oi_total = 0.0
         call_oi_total = 0.0
         for expiry in expiry_to_days:
-            oi_resp = await client.get(
-                f"{EAPI_BASE}/openInterest", params={"underlyingAsset": coin, "expiration": expiry}
-            )
+            oi_params = {"underlyingAsset": coin, "expiration": expiry}
+            oi_resp = await client.get(f"{EAPI_BASE}/openInterest", params=oi_params)
             oi_resp.raise_for_status()
+            self.log_subsource(
+                "options_iv_skew", coin, LogStatus.OK,
+                f"endpoint={EAPI_BASE}/openInterest, params={oi_params}",
+            )
             for oi_row in oi_resp.json():
                 amount = float(oi_row["sumOpenInterest"])
                 if oi_row["symbol"].endswith("-P"):
@@ -559,12 +605,22 @@ class DerivativesCollector(BaseCollector):
     async def _fetch_cex_dex_funding_diff(
         self, client: httpx.AsyncClient, coin: str, symbol: str
     ) -> EvidenceDraft | None:
-        cex_resp = await client.get(f"{FAPI_BASE}/premiumIndex", params={"symbol": symbol})
+        cex_params = {"symbol": symbol}
+        cex_resp = await client.get(f"{FAPI_BASE}/premiumIndex", params=cex_params)
         cex_resp.raise_for_status()
+        self.log_subsource(
+            "cex_dex_funding_diff", coin, LogStatus.OK,
+            f"endpoint={FAPI_BASE}/premiumIndex, params={cex_params}",
+        )
         cex_rate = float(cex_resp.json()["lastFundingRate"])
 
-        hl_resp = await client.post(HYPERLIQUID_URL, json={"type": "metaAndAssetCtxs"})
+        hl_body = {"type": "metaAndAssetCtxs"}
+        hl_resp = await client.post(HYPERLIQUID_URL, json=hl_body)
         hl_resp.raise_for_status()
+        self.log_subsource(
+            "cex_dex_funding_diff", coin, LogStatus.OK,
+            f"endpoint={HYPERLIQUID_URL}, body={hl_body}",
+        )
         meta, asset_ctxs = hl_resp.json()
         universe = meta["universe"]
         idx = next((i for i, u in enumerate(universe) if u["name"] == coin), None)
@@ -605,10 +661,19 @@ class DerivativesCollector(BaseCollector):
     ) -> EvidenceDraft | None:
         cb_resp = await client.get(COINBASE_URL.format(coin=coin))
         cb_resp.raise_for_status()
+        self.log_subsource(
+            "coinbase_premium", coin, LogStatus.OK,
+            f"endpoint={COINBASE_URL.format(coin=coin)}",
+        )
         coinbase_price = float(cb_resp.json()["price"])
 
-        binance_resp = await client.get(BINANCE_SPOT_URL, params={"symbol": symbol})
+        binance_params = {"symbol": symbol}
+        binance_resp = await client.get(BINANCE_SPOT_URL, params=binance_params)
         binance_resp.raise_for_status()
+        self.log_subsource(
+            "coinbase_premium", coin, LogStatus.OK,
+            f"endpoint={BINANCE_SPOT_URL}, params={binance_params}",
+        )
         binance_price = float(binance_resp.json()["price"])
 
         premium_pct = (coinbase_price - binance_price) / binance_price * 100 if binance_price else 0.0

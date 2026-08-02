@@ -31,13 +31,25 @@ from agent.reasoning.llm_client import build_llm_client
 from agent.reasoning.pipeline import ReasoningResult, ReasoningStepError, run_reasoning
 from agent.reasoning.prompts import classify_question_type
 from agent.report.builder import build_report_markdown
+from agent.report.html_export import export_html_bundle
 from agent.report.view_builder import build_report_view
 from agent.filters.content import apply_content_filters, scan_pr_terms
 from agent.filters.dedup import apply_dedup
+from agent.filters.injection import apply_injection_filter
 from agent.filters.source_weights import apply_source_weights
+from agent.filters.validation import build_validation_results
+from agent.integrity import assess_integrity
+from agent.reasoning.consistency import enforce_reasoning_consistency
+from agent.research.context import write_research_context
 from agent.schemas import Evidence, EvidenceDraft, FilterDecision, HorizonClass, LogPhase, LogStatus, PipelineLayer, RunMetrics
 
 SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
+
+# 從硬性上限扣掉、留給「推理結束後的收尾」的時間：報告組裝、evidence.json 與
+# report_view.json 寫檔、引用檢查。這些都是本機運算沒有網路，實測都在 1 秒內，
+# 但 15 分鐘是硬性上限（命題文件執行限制第 1 條：超時主辦方可停止執行或不採計
+# 產出），所以推理層拿到的 deadline 要比真正的截止早一點，不能剛好用滿。
+REPORT_RESERVE_SECONDS = 20
 
 
 @dataclass
@@ -140,8 +152,19 @@ def _resolve_chain(coin: str) -> str | None:
         return None
 
 
-def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Evidence]:
-    evidences = []
+def assign_evidence_ids(
+    drafts: list[EvidenceDraft], logger=None
+) -> tuple[list[Evidence], list[dict]]:
+    """把 collector 產出的草稿建構成正式 `Evidence`，並分配全域唯一 id。
+
+    回傳 `(evidences, quarantined)`——`quarantined` 是建構失敗（缺欄位、型別
+    錯誤）的草稿紀錄。**這是真正的「Invalid Evidence quarantine」，不是只有
+    dedup 降權**：以前 `Evidence(id=..., **payload)` 沒有任何防護，單一一筆
+    壞資料的 collector 輸出會讓 pydantic ValidationError 直接炸穿整條
+    pipeline。一筆證據建構失敗不該賠上其餘所有正常證據（R6-1 降級優先）。
+    """
+    evidences: list[Evidence] = []
+    quarantined: list[dict] = []
     for i, draft in enumerate(drafts, start=1):
         payload = draft.model_dump()
         # 補上「人看的頁面」。集中在這裡推導而非散在 7 個 collector 的 32 個
@@ -152,7 +175,26 @@ def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Eviden
             payload["reference_url"] = resolve_reference_url(
                 payload.get("source_url"), draft.coin, _resolve_chain(draft.coin)
             )
-        ev = Evidence(id=f"ev-{i:03d}", **payload)
+        try:
+            ev = Evidence(id=f"ev-{i:03d}", **payload)
+        except Exception as exc:  # noqa: BLE001 - 任何一筆壞資料都不該中斷整條 pipeline
+            quarantined.append(
+                {
+                    "index": i,
+                    "source": draft.source,
+                    "coin": draft.coin,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            if logger is not None:
+                logger.log(
+                    phase=LogPhase.COLLECT,
+                    action="evidence_quarantined",
+                    detail=f"draft#{i}（{draft.source}）建構失敗已隔離: {type(exc).__name__}: {exc}",
+                    status=LogStatus.SKIPPED,
+                    layer=PipelineLayer.SOURCE,
+                )
+            continue
         # horizon-aware R2-3：標註缺漏／矛盾只記警示 log，絕不拋錯或過濾掉證據（R6-1 降級優先）。
         issue = _horizon_annotation_issue(ev) if logger is not None else None
         if issue:
@@ -164,7 +206,7 @@ def assign_evidence_ids(drafts: list[EvidenceDraft], logger=None) -> list[Eviden
                 layer=PipelineLayer.SOURCE,
             )
         evidences.append(ev)
-    return evidences
+    return evidences, quarantined
 
 
 def run_pipeline(
@@ -239,7 +281,9 @@ def run_pipeline(
 
     elapsed = time.monotonic() - start_time
     remaining_before_collect = settings.hard_deadline_seconds - elapsed
-    degraded_mode = elapsed > settings.degraded_mode_trigger_seconds
+    # 邊界值也代表預算已用完。使用 `>` 會在 Windows 的第一個 monotonic tick
+    # 剛好仍為 0 時讓 trigger=0 的執行漏過 gate，形成平台相依的 flaky 行為。
+    degraded_mode = elapsed >= settings.degraded_mode_trigger_seconds
 
     # 追蹤 degraded 原因，任一項非空時最終 integrity_status="DEGRADED"
     degraded_reasons: list[str] = []
@@ -258,7 +302,9 @@ def run_pipeline(
             collect_all(collectors, coins, remaining_before_collect, primary_horizon=primary_horizon)
         )
 
-    evidences = assign_evidence_ids(drafts, logger=logger)
+    evidences, quarantined_drafts = assign_evidence_ids(drafts, logger=logger)
+    if quarantined_drafts:
+        degraded_reasons.append(f"{len(quarantined_drafts)} 筆證據建構失敗已隔離（缺欄位或型別錯誤）")
 
     # Phase 2（R12，Ken 設計）：去重先行 → 話術掃描 → 四因子權重 → L2 決策紀錄
     dedup_result = None
@@ -331,6 +377,24 @@ def run_pipeline(
                 status=LogStatus.ERROR,
             )
 
+    # L2 資安層：prompt injection 偵測。放在最後一個「會新增證據」的步驟之後、
+    # 寫檔之前，確保比較題型補進來的相對指標證據也一起掃到。
+    # high 命中者標記 injection_flag="high"，由 prompts 層排除出 LLM 清單；
+    # 證據本身仍完整寫進 evidence.json（比照 dedup 的可回溯慣例）。
+    try:
+        filter_decisions += apply_injection_filter(evidences, logger)
+    except Exception as exc:
+        # 這層失效等於「本次沒有注入防護」，必須進 degraded 理由讓報告誠實揭露，
+        # 不能像其他 L2 check 一樣默默跳過。
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="l2_injection_failed",
+            detail=f"注入偵測失敗，本次證據未經注入過濾: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONTENT,
+        )
+        degraded_reasons.append("L2 prompt injection filter skipped（本次證據未經注入過濾）")
+
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
         json.dumps([e.model_dump() for e in evidences], ensure_ascii=False, indent=2),
@@ -343,6 +407,28 @@ def run_pipeline(
         status=LogStatus.OK,
     )
 
+    # 統一 Validation Result（v1.2 新增，ValidatedEvidence gate 的稽核輸出）：
+    # 把 source_weight／injection_flag／dedup verdict 這些已經算好的既有檢查結果
+    # 彙總成一筆 per-evidence 紀錄，寫成獨立檔案——刻意不塞進 evidence.json，
+    # 那份檔案的頂層是 list（webapp／report 已經假設這個形狀），改成 dict 會
+    # 動到既有讀取邏輯。
+    validation_results = build_validation_results(evidences, breakdowns, filter_decisions)
+    validation_path = out_dir / "validation_results.json"
+    validation_path.write_text(
+        json.dumps([vars(r) for r in validation_results], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.log(
+        phase=LogPhase.COLLECT,
+        action="validation_results_written",
+        detail=(
+            f"count={len(validation_results)}, quarantined={len(quarantined_drafts)}, "
+            f"path={validation_path}"
+        ),
+        status=LogStatus.OK,
+        layer=PipelineLayer.SOURCE,
+    )
+
     def log_step(step: str, status: str, detail: str = "") -> None:
         logger.log(phase=LogPhase.REASON, action=step, detail=detail, status=LogStatus(status))
 
@@ -350,21 +436,35 @@ def run_pipeline(
         reasoning_result = run_reasoning(coin, question, evidences, dry_run=True, coin2=coin2, logger=logger)
     else:
         llm_client = build_llm_client(settings)
+        reasoning_deadline = start_time + settings.hard_deadline_seconds - REPORT_RESERVE_SECONDS
         logger.log(
             phase=LogPhase.REASON,
             action="llm_backend",
             detail=f"backend={settings.llm_backend}",
             status=LogStatus.OK,
         )
+        # 把同一個硬性 deadline 也交給 LLM client：辯論輪之間的 gate 只擋得住第 2 輪，
+        # Step A/B 在它之前、Step D 在它之後，都可能因為單次呼叫卡住而把整跑拖過 15 分鐘
+        # （2026-08-01 實測 step_a_facts 卡了 1020s）。重試也要留下紀錄，否則下次一樣難查。
+        if hasattr(llm_client, "deadline"):
+            llm_client.deadline = reasoning_deadline
+        if hasattr(llm_client, "on_retry"):
+            llm_client.on_retry = lambda detail: logger.log(
+                phase=LogPhase.REASON,
+                action="llm_retry",
+                detail=detail,
+                status=LogStatus.SKIPPED,
+            )
         try:
             reasoning_result = run_reasoning(
                 coin, question, evidences, dry_run=False, llm_client=llm_client, log_step=log_step, coin2=coin2, logger=logger,
-                deadline=start_time + settings.hard_deadline_seconds,
+                deadline=reasoning_deadline,
             )
         except ReasoningStepError as exc:
             # 推理鏈任一步驟失敗都不可讓整個 pipeline 中斷：退化為誠實揭露失敗原因的結論，
             # 讓 report.md / evidence.json / execution_log.jsonl 仍能完整產出。
             logger.log(phase=LogPhase.REASON, action="reasoning_failed", detail=str(exc), status=LogStatus.ERROR)
+            degraded_reasons.append("推理鏈失敗，已輸出降級報告")
             reasoning_result = ReasoningResult(
                 question_type=classify_question_type(question),
                 facts=[],
@@ -390,6 +490,91 @@ def run_pipeline(
                 status=LogStatus.OK,
                 metrics=usage,
             )
+
+    # v1 報告一致性護欄：可由 Evidence 日期確定重算的事件時間，不再完全信任
+    # LLM 在不同段落的自由換算。校正會同時套用 facts／辯論／結論，避免只修畫面
+    # 而下載的 report.md 仍互相矛盾。
+    try:
+        consistency_corrections = enforce_reasoning_consistency(reasoning_result, evidences)
+        if consistency_corrections:
+            logger.log(
+                phase=LogPhase.REASON,
+                action="consistency_guard_corrected",
+                detail=(
+                    f"count={len(consistency_corrections)}, "
+                    f"events={sorted({c.event for c in consistency_corrections})}"
+                ),
+                status=LogStatus.OK,
+                layer=PipelineLayer.CONCLUSION,
+                metrics={
+                    "count": len(consistency_corrections),
+                    "corrections": [c.__dict__ for c in consistency_corrections],
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 - 護欄失敗不可吃掉整份報告，但必須降級揭露
+        degraded_reasons.append("跨段落一致性檢查失敗")
+        logger.log(
+            phase=LogPhase.REASON,
+            action="consistency_guard_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            status=LogStatus.ERROR,
+            layer=PipelineLayer.CONCLUSION,
+        )
+
+    # v2-reference sidecar：只把既有 Evidence／Reasoning 關係結構化，不回寫結論、
+    # 不重算 confidence，也不進入 LLM。失敗隔離以維持 v1.2 正式交付；但若 graph
+    # 發現 invalid/quarantined Evidence 仍被推理引用，代表 ValidatedEvidence gate
+    # 真正漏水，必須降級揭露，不能只把異常藏在 sidecar。
+    try:
+        research_path, research_context = write_research_context(
+            out_dir,
+            evidences,
+            reasoning_result,
+            question=question,
+            question_type=reasoning_result.question_type,
+            validation_results=validation_results,
+            quarantined_drafts=quarantined_drafts,
+        )
+        graph = research_context.evidence_graph
+        violations = graph.stats.get("validation_violations", 0)
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="research_context_written",
+            detail=f"path={research_path}, validation_violations={violations}",
+            status=LogStatus.ERROR if violations else LogStatus.OK,
+            metrics={
+                "features": len(research_context.structured_features),
+                "knowledge_cards": len(research_context.knowledge_cards),
+                "graph_nodes": len(graph.nodes),
+                "graph_edges": len(graph.edges),
+                **graph.stats,
+            },
+        )
+        if violations:
+            degraded_reasons.append(
+                f"ValidatedEvidence gate 發現 {violations} 條無效／隔離證據引用"
+            )
+    except Exception as exc:  # noqa: BLE001 - 額外 sidecar 不可阻止命題正式交付
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="research_context_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            status=LogStatus.ERROR,
+        )
+
+    integrity = assess_integrity(evidences, coins, degraded_reasons)
+    if integrity.status != "INTACT":
+        integrity_note = f"資料完整性 {integrity.status}：{'；'.join(integrity.reasons)}"
+        limitations = reasoning_result.conclusion.setdefault("limitations", [])
+        if integrity_note not in limitations:
+            limitations.append(integrity_note)
+        logger.log(
+            phase=LogPhase.COLLECT,
+            action="integrity_assessment",
+            detail=integrity_note,
+            status=LogStatus.ERROR if integrity.status == "DEGRADED" else LogStatus.SKIPPED,
+            metrics={"integrity_status": integrity.status, "reasons": integrity.reasons},
+        )
 
     logger.log(
         phase=LogPhase.REASON,
@@ -442,12 +627,14 @@ def run_pipeline(
             confidence=reasoning_result.confidence_score,
             noise_removal_rate=noise_rate,
             total_tokens=total_tokens,
-            integrity_status="DEGRADED" if degraded_reasons else "INTACT",
+            integrity_status=integrity.status,
             raw_evidence_count=len(evidences),
             kept_fact_count=sum(
                 len(f.get("evidence_ids", [])) for f in reasoning_result.facts
             ),
-            degraded_reasons=degraded_reasons,
+            # 欄位名稱為了 report_view.json v1 相容仍保留 degraded_reasons；在
+            # PARTIAL 時同樣承載具體缺失原因，前端會依 status 使用中性警示。
+            degraded_reasons=integrity.reasons,
         )
 
         view = build_report_view(
@@ -490,6 +677,30 @@ def run_pipeline(
         detail=f"elapsed_seconds={total_elapsed:.2f}",
         status=LogStatus.OK,
     )
+
+    # 三份命題原始交付檔仍是權威來源；HTML 僅是可離線開啟的評審閱讀副本。
+    # 放在 pipeline_end 後才匯出，確保 execution_log.html 包含完整流程終點。
+    # 匯出失敗採隔離處理，不得反過來阻止正式交付檔產出。
+    try:
+        export_html_bundle(
+            out_dir=out_dir,
+            report_markdown=report_md,
+            evidences=evidences,
+            log_entries=logger.read_all(),
+            metadata={
+                "coin": coin,
+                "coin2": coin2,
+                "question": question,
+                "integrity_status": integrity.status,
+            },
+        )
+    except Exception as exc:
+        logger.log(
+            phase=LogPhase.REPORT,
+            action="html_export_failed",
+            detail=str(exc),
+            status=LogStatus.ERROR,
+        )
 
     return RunResult(
         report_markdown=report_md,

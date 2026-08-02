@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from agent.filters.injection import escape_for_markdown
 from agent.filters.source_weights import reputation_appendix_lines
+from agent.reasoning.confidence import confidence_label
 from agent.reasoning.pipeline import ReasoningResult
 from agent.reasoning.prompts import STOP_REASON_LABEL
 from agent.report.text_formatting import normalize_embedded_lists
@@ -50,20 +52,20 @@ def _build_executive_summary_lines(result: ReasoningResult) -> list[str]:
     lines.append("## 執行摘要")
     lines.append("")
 
-    confidence_label = conclusion.get("confidence", "未知")
+    label = _confidence_label_of(result)
     breakdown = result.confidence_breakdown or {}
     if breakdown:
         # 執行摘要就把「基底 vs 辯論調整」拆開，讀者第一眼就知道這個分數有沒有
         # 因為辯論而被下修，不用翻到第 2 節（R3-12）。
         adjustment = breakdown.get("debate_adjustment", 0)
         lines.append(
-            f"> 信心：{result.confidence_score}%（{confidence_label}）"
+            f"> 信心：{result.confidence_score}%（{label}）"
             f"＝ 基底 {breakdown.get('base', 0):.0f} {adjustment:+d} 辯論調整"
             " ── 分項計算方式見「2. 信心說明」"
         )
     else:
         lines.append(
-            f"> 信心：{result.confidence_score}%（{confidence_label}）"
+            f"> 信心：{result.confidence_score}%（{label}）"
             "── 分項計算方式見「2. 信心說明」"
         )
     lines.append("")
@@ -150,7 +152,10 @@ def _build_debate_summary_lines(result: ReasoningResult) -> list[str]:
     for item in points:
         point = item.get("point", "")
         ids = item.get("evidence_ids", [])
-        suffix = f"（{', '.join(ids)}）" if ids else ""
+        # 無 id 的點必須看得出來。`_sanitize_debate_summary()` 只濾掉不存在的 evidence id，
+        # 濾完變成空陣列時該點照樣保留——若這裡也不加註記，一條完全沒有證據支撐的
+        # 「攻防結果」會跟有據可查的長得一模一樣，讀者無從分辨。
+        suffix = f"（{', '.join(ids)}）" if ids else "（⚠ 未附可回溯的 evidence id）"
         lines.append(f"- {point}{suffix}")
     lines.append("")
     return lines
@@ -212,6 +217,30 @@ def _primary_horizon_gap_note(result: ReasoningResult, evidences: list[Evidence]
     )
 
 
+def _confidence_label_of(result: ReasoningResult) -> str:
+    """報告顯示用的信心等級，一律由決定性分數推得（`confidence.confidence_label()`）。
+
+    2026-08-01 前這裡讀的是 `conclusion["confidence"]`——LLM 在 Step D 自報的高/中/低。
+    那個欄位與分數是兩套獨立系統、沒有任何一致性檢查，理論上可以印出「信心：92%（低）」；
+    實測也證明兩者脫鉤（辯論調整從 −3 翻到 +3 時，自報等級一動也沒動）。
+    LLM 的欄位仍保留在 JSON 裡，只是不再作為顯示來源，分歧時由
+    `_confidence_divergence_note()` 揭露而非隱藏。
+    """
+    return confidence_label(result.confidence_score)
+
+
+def _confidence_divergence_note(result: ReasoningResult) -> str:
+    """決定性等級與 LLM 自報等級不一致時的揭露文字；一致或無自報值時回空字串。"""
+    llm_label = (result.conclusion or {}).get("confidence", "")
+    derived = _confidence_label_of(result)
+    if llm_label in ("高", "中", "低") and llm_label != derived:
+        return (
+            f"> ℹ️ 裁判自報的信心等級為「{llm_label}」，與分數推得的「{derived}」不一致。"
+            f"報告採用分數推得的等級（可複現）；此處揭露差異供對帳。"
+        )
+    return ""
+
+
 def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     """信心分項表＋「這個分數怎麼來的」（R3-12/R3-13）。
 
@@ -224,7 +253,7 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
 
     if not breakdown:
         # 舊格式結果（或 fallback 路徑）沒有分項，誠實標示而不是假裝有。
-        lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
+        lines.append(f"### 信心等級：{_confidence_label_of(result)}")
         lines.append("")
         lines.append(f"本次信心分數：{result.confidence_score}%（未產出分項計算明細）")
         lines.append("")
@@ -250,11 +279,16 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
     # 實測有回過 700+ 字的評析把表格整個撐爆，所以呈現層也要防守：
     # 表格放摘要，完整理由改列在表格下方。
     cell_reason = _table_safe(full_reason) if full_reason else "（本次未調整）"
+    # 逐點判定加總時，儲存格優先放「怎麼算出來的」——讀者可以自己驗算，
+    # 比裁判的散文理由更有稽核價值（散文理由仍完整列在表格下方）。
+    verdict_detail = breakdown.get("debate_verdict_detail", "")
+    if verdict_detail:
+        cell_reason = _table_safe(verdict_detail)
     lines.append(f"| 辯論後調整 | {adjustment:+d} | | {cell_reason} |")
     lines.append(f"| **最終信心** | **{breakdown.get('final', result.confidence_score)}** | | |")
     lines.append("")
 
-    if full_reason and len(full_reason) > TABLE_CELL_MAX_CHARS:
+    if full_reason and (verdict_detail or len(full_reason) > TABLE_CELL_MAX_CHARS):
         lines.append("**辯論調整的完整理由：**")
         lines.append("")
         lines.append(normalize_embedded_lists(full_reason))
@@ -273,8 +307,12 @@ def _build_confidence_breakdown_lines(result: ReasoningResult) -> list[str]:
             lines.append(f"- {line}")
         lines.append("")
 
-    lines.append(f"### 信心等級：{result.conclusion.get('confidence', '未知')}")
+    lines.append(f"### 信心等級：{_confidence_label_of(result)}")
     lines.append("")
+    divergence = _confidence_divergence_note(result)
+    if divergence:
+        lines.append(divergence)
+        lines.append("")
     return lines
 
 
@@ -321,8 +359,13 @@ def _build_key_evidence_lines(result: ReasoningResult, evidences: list[Evidence]
         for eid in ids:
             ev = ev_lookup.get(eid)
             if ev:
+                # 這一列是 ` | ` 分欄，且 report.md 會被 Web UI 以 markdown 渲染後
+                # `| safe` 輸出——外部來源的內文必須跳脫，否則一個 Reddit 標題就能
+                # 拆掉欄位或在頁面上執行 JS（見 agent/filters/injection.py）。
+                flag = "⚠️[疑似注入內容] " if ev.injection_flag else ""
                 lines.append(
-                    f"  - `{eid}` | {_source_link(ev)} | {ev.fetched_at} | {ev.content_reference}"
+                    f"  - `{eid}` | {_source_link(ev)} | {ev.fetched_at} | "
+                    f"{flag}{escape_for_markdown(ev.content_reference)}"
                 )
     lines.append("")
     return lines

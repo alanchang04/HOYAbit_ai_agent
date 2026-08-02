@@ -206,10 +206,13 @@ class MacroCollector(BaseCollector):
 
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
             try:
-                resp = await client.get(
-                    "https://api.alternative.me/fng/", params={"limit": FNG_WINDOW}
-                )
+                fng_params = {"limit": FNG_WINDOW}
+                resp = await client.get("https://api.alternative.me/fng/", params=fng_params)
                 resp.raise_for_status()
+                self.log_subsource(
+                    "fear_greed", coin, LogStatus.OK,
+                    f"endpoint=https://api.alternative.me/fng/, params={fng_params}",
+                )
                 data = resp.json()["data"]
                 item = data[0]
                 values = [int(d["value"]) for d in data]
@@ -243,10 +246,13 @@ class MacroCollector(BaseCollector):
             try:
                 # stooq 已加上瀏覽器 JS 驗證機制，無法穩定免 key 存取；改用 Frankfurter（歐洲央行公開匯率
                 # API，免 key、穩定）以 USD/EUR 匯率變化作為美元強弱的簡易總經代理指標。
-                resp = await client.get(
-                    "https://api.frankfurter.app/latest", params={"from": "USD", "to": "EUR,JPY,GBP"}
-                )
+                fx_params = {"from": "USD", "to": "EUR,JPY,GBP"}
+                resp = await client.get("https://api.frankfurter.app/latest", params=fx_params)
                 resp.raise_for_status()
+                self.log_subsource(
+                    "frankfurter_fx", coin, LogStatus.OK,
+                    f"endpoint=https://api.frankfurter.app/latest, params={fx_params}",
+                )
                 data = resp.json()
                 rates = data.get("rates", {})
                 evidences.append(
@@ -268,17 +274,23 @@ class MacroCollector(BaseCollector):
 
             if self.settings and getattr(self.settings, "fred_api_key", None):
                 try:
+                    fred_params = {
+                        "series_id": "DGS10",
+                        "api_key": self.settings.fred_api_key,
+                        "file_type": "json",
+                        "sort_order": "desc",
+                        "limit": 1,
+                    }
                     resp = await client.get(
                         "https://api.stlouisfed.org/fred/series/observations",
-                        params={
-                            "series_id": "DGS10",
-                            "api_key": self.settings.fred_api_key,
-                            "file_type": "json",
-                            "sort_order": "desc",
-                            "limit": 1,
-                        },
+                        params=fred_params,
                     )
                     resp.raise_for_status()
+                    fred_logged_params = {**fred_params, "api_key": "***"}
+                    self.log_subsource(
+                        "fred", coin, LogStatus.OK,
+                        f"endpoint=https://api.stlouisfed.org/fred/series/observations, params={fred_logged_params}",
+                    )
                     obs = resp.json()["observations"][0]
                     evidences.append(
                         EvidenceDraft(

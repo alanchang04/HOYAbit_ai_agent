@@ -75,7 +75,7 @@ class BaseCollector(ABC):
             self.logger.log(
                 phase=LogPhase.COLLECT,
                 action=self.name,
-                detail=f"coin={coin}, error={type(exc).__name__}: {exc}",
+                detail=f"coin={coin}, error={_exc_text(exc)}",
                 status=LogStatus.ERROR,
             )
             return []

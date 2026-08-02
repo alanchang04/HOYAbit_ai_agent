@@ -19,6 +19,19 @@
       <p class="subtitle">輸入幣種與題目，產出具備分層推理與可回溯證據的市場分析報告——每個結論都能回溯到原始證據。</p>
     </div>
 
+    <form method="post" action="/analyze" class="demo-card">
+      <input type="hidden" name="coin" value="BTC">
+      <input type="hidden" name="coin2" value="">
+      <input type="hidden" name="question" value="分析 BTC 過去兩週的市場狀況，並說明哪些低品質或重複資訊不應左右結論。">
+      <input type="hidden" name="dry_run" value="true">
+      <input type="hidden" name="with_baseline" value="true">
+      <div>
+        <strong>60 秒評審展示</strong>
+        <p>使用明確標記的假資料注入重複轉載與拉盤話術，直接對照未過濾 Baseline、去重與降權結果；不呼叫外部 API 或 Bedrock。</p>
+      </div>
+      <button type="submit">一鍵觀看信任提煉 Demo →</button>
+    </form>
+
     <form method="post" action="/analyze" class="card">
       <div class="form-row">
         <label>
@@ -45,7 +58,7 @@
       <div class="option-row">
         <label class="checkbox-row">
           <input type="checkbox" name="dry_run" value="true">
-          <span>Dry-run<small>不打真實 API/LLM，僅供流程排練</small></span>
+          <span>快速模式（Dry-run）<small>不打真實 API/LLM，約 1 秒完成流程排練</small></span>
         </label>
 
         <label class="checkbox-row">
