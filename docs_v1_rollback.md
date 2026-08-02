@@ -25,8 +25,9 @@
 
 | 項目 | 值 |
 |---|---|
-| 展示網址 | http://35.91.6.73/ |
+| 展示網址 | http://52.39.99.236/（**Elastic IP**，已釘住，重開機/停機都不會變；剛開機時的原始公網 IP 是 35.91.6.73，已棄用） |
 | Instance ID | `i-009224c9a0802fa4d`（Name tag: `hoyabit-v1.2-final-demo`） |
+| Elastic IP | `eipalloc-0e50f0b4e86ea0dbd`（Name tag: `hoyabit-v1.2-final-demo-eip`） |
 | Region | us-west-2 |
 | 部署內容 | 固定跑 `v1.2-final`（clone 時直接 `--branch v1.2-final`，不是共用機器那種可切換 ref 的部署方式） |
 | 管理方式 | 同樣走 SSM（沒開 22 port／無 key pair），跟共用機器共用同一個 IAM instance profile（`hoyabit-agent-instance-profile`）與 security group（`sg-049e054aa0dfa3723`，僅開 80 port） |
