@@ -42,6 +42,13 @@ weight:
   prior_weight:
     basis: rolling_spearman_ic       # Statistical Factor 沿用同一套填法（ic 原值，不套正規化——同 active_address／panews_sentiment，正規化公式仍是全域待拍板提案，非本文件決定）
     value: 0.0714                    # ＝ ic 原值
+    scale: raw_ic                    # 2026-08-02 拍板：這格宣告「上面那個 value 是哪把尺上的數字」。
+                                     # raw_ic ＝ 相關係數原值，**還沒**換算成排序用的共同尺度；
+                                     # demo 讀到 raw_ic 會自動跑三步換算（取絕對值 → 樣本收縮
+                                     # √n/(√n+√30) → 1-exp(-x/0.1)），把它變成 prior_strength ∈ [0,1]。
+                                     # 這裡刻意保留 ic 原值不預先換算：.md 記錄「測到什麼」，
+                                     # 換算規則是全域的（六個 factor 必須同一組參數），寫死在程式裡，
+                                     # 不讓每個 factor 各自帶一套尺。換算過程見輸出的 conversion_note
     confidence: very_low             # ⚠️ 這輪新增的第二個信賴度層級——比 panews_sentiment 的 low 更低，因為樣本數只有一半（8 vs 44）
     reason: |
       ic 算出來是 0.0714，但樣本數只有 8 天，是這輪目前算過 ic 的四個
@@ -62,10 +69,18 @@ weight:
   freshness:                     # bitbo.io 為每交易日更新，freshness 判斷門檻可比照 active_address（日頻）
 
   context_modifier:              # 由 LLM 根據上述線索解釋給出，range=[0.5, 2.0]，非公式計算
-  final_weight:                  # = prior_weight（0.0714，confidence=very_low）× context_modifier
+  final_weight:                  # = prior_strength × context_modifier
+                                  # prior_strength = 0.2158（由 ic 原值 0.0714、n=8 換算，見 scale 那格）
                                   # ⚠️ 這個 factor 的 final_weight 現階段最不該被拿來跟其他 factor 直接比大小——
                                   # 不是因為算法錯，是因為輸入樣本量結構性太小，這是資料源天花板問題，
-                                  # 不是這份文件或算法能單獨解決的
+                                  # 不是這份文件或算法能單獨解決的。
+                                  # 2026-08-02 換算拍板後，這個警告**有一部分被算進數值裡了**：
+                                  # 8 筆樣本的收縮係數只有 0.341（比 panews 的 0.548 更狠），
+                                  # 所以 ic 原值 0.0714 雖然比 panews 的 0.051 大四成，換算後
+                                  # 0.2158 反而略低於 panews 的 0.2437——「數字大但樣本更少」
+                                  # 這件事不再只寫在註解裡，它現在真的會影響名次。
+                                  # 但 confidence=very_low 這個標籤仍然要留：換算處理的是「打幾折」，
+                                  # 處理不了「8 筆樣本算出來的正負號本身可能是抽樣運氣」
 ```
 
 ### 這份把「confidence 分級」這件事又往前推了一步

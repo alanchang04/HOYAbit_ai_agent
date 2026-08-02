@@ -31,6 +31,14 @@ weight:
     basis: impact_level            # 沿用 Stage 3 event_class 分級，不套統計算法
     impact_level: Very High        # 沿用 [[Stage 3 — Knowledge Layer/cpi]] 的 event_class 分級，跟 FOMC 同級
     value: 0.8                     # 示範映射：Very High→0.8／Medium→0.5／Low→0.2（人工分級對照表，非回測值）
+    scale: relative_strength         # 2026-08-02 拍板：這格宣告「上面那個 value 是哪把尺上的數字」。
+                                     # relative_strength ＝ 已經是 [0,1] 的**IC 等價強度**，直接拿去排序，
+                                     # 不再換算、也不做樣本收縮（人工判斷沒有「樣本數」這個東西）。
+                                     # ⚠️ 語意重新定義（數字沒改）：這個分數從此讀作「相當於 |ic| 多強」，
+                                     # 不是一個抽象的重要性分點——這樣它才跟 ic 型的權重可比。
+                                     # ⚠️ 已知不對稱：ic 型會因樣本不足被打折，這型不會。不補一個折減係數
+                                     # 去「平衡」（那等於重新引入分組，跟排序拍板打架），改成把 basis
+                                     # 帶到卡片上讓人看得到來源，並記進 13 待處理
     reason: |
       CPI 是排定時程的總經系統性事件，公布當下對全市場（不限特定幣種）都有
       直接的流動性／風險偏好衝擊——這件事本身有高度學術與產業共識（見 Stage 3

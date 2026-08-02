@@ -75,7 +75,14 @@ from agent.collectors.derivatives import percentile_rank
 _ROOT = Path(__file__).resolve().parent.parent
 
 FEATURE_DIR = _ROOT / "Stage 2 — Feature Extraction"
+WEIGHT_DIR = _ROOT / "Stage 4 — Dynamic Evidence Weight Engine"
 CARD_DIR = _ROOT / "Stage 5 — Evidence Card ＋ Prioritization"
+
+# Stage 4 的 prior_weight 認得的兩種尺（2026-08-02 拍板）：
+#   raw_ic            → 值是相關係數原值，排序前要先換算（取絕對值→樣本收縮→映射）
+#   relative_strength → 值已經是 [0,1] 的 IC 等價強度，直接用
+# 換算完成後全部都是 relative_strength，這樣排序才是拿同一個量在比大小。
+KNOWN_PRIOR_SCALES = {"raw_ic", "relative_strength"}
 
 
 class SpecError(RuntimeError):
@@ -556,6 +563,41 @@ def ranking_keys() -> dict[str, str | None]:
     return keys
 
 
+def prior_weight_scales() -> dict[str, dict]:
+    """把 Stage 4 各份 .md 的 `prior_weight` 讀出來，檢查「值在哪把尺上」有沒有宣告。
+
+    為什麼要查：2026-08-02 之前踩過一次——有一份 .md 自己套了正規化公式把 ic 變成
+    0.755，還註明「沿用跟 cpi/liquidation 一致的公式」，但那兩份根本沒套公式。
+    當時沒有任何機制會發現「六個 factor 的 prior_weight 不在同一把尺上」，是人工
+    比對才抓到的。這支就是把那次的人工比對變成每次都會跑的檢查。
+
+    沒有 `prior_weight.value` 的 factor（例如 funding_rate／active_address，ic 每次
+    現場算）不算缺漏——它們的值不經過 .md，程式算完直接套全域換算，沒有「宣告錯尺」
+    的空間。"""
+    scales: dict[str, dict] = {}
+    if not WEIGHT_DIR.exists():
+        return scales
+    for path in sorted(WEIGHT_DIR.glob("*.md")):
+        factor_id = path.stem
+        match = _YAML_BLOCK.search(path.read_text(encoding="utf-8"))
+        if not match:
+            scales[factor_id] = {"declared": None, "has_value": False, "error": "找不到 ```yaml 區塊"}
+            continue
+        try:
+            parsed = _parse_yaml(match.group(1), path)
+        except SpecError as exc:
+            scales[factor_id] = {"declared": None, "has_value": False, "error": str(exc)}
+            continue
+        prior = ((parsed.get("weight") or {}).get("prior_weight")) or {}
+        scales[factor_id] = {
+            "declared": prior.get("scale"),
+            "has_value": prior.get("value") is not None,
+            "basis": prior.get("basis"),
+            "error": None,
+        }
+    return scales
+
+
 def ranking_transforms() -> dict[str, str | None]:
     """2026-08-02 Ken 補充拍板：排序鍵不變（evidence_weight），但比大小時取絕對值。
     這是「怎麼比」不是「比什麼」，所以獨立成 `ranking_transform` 一格，而不是把
@@ -695,6 +737,27 @@ def _selfcheck() -> int:
         # 同一次排序裡兩張卡用不同尺度比大小，名次就沒有意義了。
         problems.append(f"[排序] 卡片 .md 的 ranking_transform 跟 13 拍板不一致：{wrong_tf}")
         print(f"⚠ 不是 abs：{wrong_tf}")
+
+    print()
+    scales = prior_weight_scales()
+    shown = {f: v["declared"] for f, v in scales.items()}
+    print(f"Prior Weight 的尺（各 Stage 4 .md 的 prior_weight.scale）：{shown}")
+    for factor_id, info in scales.items():
+        if info.get("error"):
+            problems.append(f"[Stage 4] {factor_id}.md 讀不起來：{info['error']}")
+            print(f"⚠ {factor_id}: {info['error']}")
+            continue
+        if not info["has_value"]:
+            # 值不經過 .md（ic 每次現場算），沒有宣告錯尺的空間，不算缺漏
+            print(f"   {factor_id}: 無 prior_weight.value（現場計算），不需宣告 scale")
+            continue
+        declared = info["declared"]
+        if declared is None:
+            problems.append(f"[Stage 4] {factor_id}.md 的 prior_weight 沒宣告 scale（raw_ic / relative_strength）")
+            print(f"⚠ {factor_id}: 有 value 卻沒宣告 scale——排序層無從知道這個數字要不要換算")
+        elif declared not in KNOWN_PRIOR_SCALES:
+            problems.append(f"[Stage 4] {factor_id}.md 的 scale 不認得：{declared}")
+            print(f"⚠ {factor_id}: scale={declared} 不在 {sorted(KNOWN_PRIOR_SCALES)} 裡")
 
     print()
     if problems:

@@ -49,9 +49,16 @@ weight:
   freshness:                     # 資料時間戳距離現在多久，注意 Stage 2 已標記 blockchain.info 常有隔天補齊的 revision 現象，freshness 判斷要考慮這點
 
   context_modifier:              # 由 LLM 根據上述線索解釋給出，range=[0.5, 2.0]，非公式計算
-  final_weight:                  # = prior_weight（極低，因 ic≈0）× context_modifier（LLM 給的數字）
-                                  # ⚠️ prior_weight 本身趨近 0 時，不管 context_modifier 給多少，
-                                  # final_weight 都會很小——這是這個 factor 目前的真實狀態，不是算法錯誤
+  final_weight:                  # = prior_strength × context_modifier（LLM 給的數字）
+                                  # ⚠️ 2026-08-02 拍板後多一步換算：這個 factor 沒有 prior_weight.value
+                                  # 可讀（ic 每次現場算），所以 scale 也不用宣告——demo 算完 ic 直接套
+                                  # 同一組全域參數換算：|0.0041| × 0.886（n=1807 收縮）→ 1-exp(-x/0.1)
+                                  # = prior_strength 0.0357。
+                                  # 樣本數 1807 幾乎不被折減（0.886），所以這個 0.0357 是**扎實的低分**：
+                                  # 不是「測不準」，是「測得很準，而且就是沒有訊號」——這跟 etf（8 筆）
+                                  # 的低分性質完全不同，那種是「還不知道」。換算把這兩件事分開了。
+                                  # prior_strength 趨近 0 時 context_modifier 拉不動，這是這個 factor
+                                  # 目前的真實狀態，不是算法錯誤
 ```
 
 ### 這份的特殊之處

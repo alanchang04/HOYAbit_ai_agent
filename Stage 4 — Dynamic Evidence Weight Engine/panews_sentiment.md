@@ -48,6 +48,13 @@ weight:
                                      # 的 Prior Weight **就是 ic 原值**（程式註解原話），這份跟著同一套填法，
                                      # 才不會出現「一個 factor 用 ic 原值、一個用轉換後的分數」混在同一個排序鍵裡
     value: 0.051                     # ＝ ic 原值（見上方 example_run.computed_value），跟 active_address 那份同一套填法
+    scale: raw_ic                    # 2026-08-02 拍板：這格宣告「上面那個 value 是哪把尺上的數字」。
+                                     # raw_ic ＝ 相關係數原值，**還沒**換算成排序用的共同尺度；
+                                     # demo 讀到 raw_ic 會自動跑三步換算（取絕對值 → 樣本收縮
+                                     # √n/(√n+√30) → 1-exp(-x/0.1)），把它變成 prior_strength ∈ [0,1]。
+                                     # 這裡刻意保留 ic 原值不預先換算：.md 記錄「測到什麼」，
+                                     # 換算規則是全域的（六個 factor 必須同一組參數），寫死在程式裡，
+                                     # 不讓每個 factor 各自帶一套尺。換算過程見輸出的 conversion_note
     confidence: low                  # ⚠️ 這個欄位是這次新加的——樣本數不足時，即使算出一個數字，也要標注信賴度，不能讓下游把它當成跟 active_address／cpi 同等可信的數字直接拿去排序
     reason: |
       ic 算出來是 0.051，但樣本數只有 44 天，遠低於統計上可信的門檻。
@@ -59,11 +66,17 @@ weight:
       不因來源不同而分組）方向相反——`confidence` 要不要真的影響排序，是待拍板的
       新問題（見文末），在拍板前排序仍照權重單鍵走，不因 confidence=low 另眼相看。
 
-  # 正規化提案（原 `ic_normalized` 的構想保留在這裡，但明確標成「尚未拍板、demo 不會套用」）
+  # 正規化提案（原 `ic_normalized` 的構想）——⚠️ 2026-08-02 已被拍板取代，保留備查
   proposed_normalization:
     formula: "clip(0.5 + ic / (2 × ic_ref), 0, 1)，ic_ref=0.1"
     value_if_applied: 0.755          # 0.5 + 0.051/0.2
-    status: 提案；13 的 `normalization` 仍是註解狀態，demo 不套用，勿當定案引用
+    status: |
+      ❌ 未採用。2026-08-02 Ken 拍板的換算是另一條：
+          strength = 1 - exp(-(|ic| × √n/(√n+√30)) / 0.1)   → 這份算出來 0.2437
+      沒有採用這條公式的具體理由：它把 ic=0 映射到 0.5，等於「完全沒有訊號」拿到
+      中位分，還會贏過 liquidation 有理由的 0.3——方向反了。新公式的 ic=0 → 0，
+      而且多了一層樣本收縮，44 天樣本會被折到 0.548 倍，這正是這份文件一直在
+      提醒的事（「不能讓兩個都叫 ic 的數字看起來一樣可信」）終於被算進數值裡。
     why: |
       ic 的值域是 [-1, 1]（相關係數），cpi 的 0.8／liquidation 的 0.3 是 [0, 1] 的
       重要性分數——13 拍板讓三種來源共用同一個 evidence_weight 概念時，就已經接受了
@@ -83,10 +96,13 @@ weight:
   freshness:                     # PANews 更新頻率快（近乎即時），freshness 判斷門檻應該比月頻的 cpi、甚至日頻的 active_address 都嚴格
 
   context_modifier:              # 由 LLM 根據上述線索解釋給出，range=[0.5, 2.0]，非公式計算
-  final_weight:                  # = prior_weight（0.051 ic 原值，confidence=low）× context_modifier
-                                  # ⚠️ 跟 active_address 同一個狀況：prior 很小時 context_modifier 拉不動，
-                                  # 這張卡在純權重排序下會落在後段——這是 ic 原值填法的必然結果，
-                                  # 若之後拍板採用 proposed_normalization，這句要跟著改寫
+  final_weight:                  # = prior_strength × context_modifier
+                                  # prior_strength = 0.2437（由 ic 原值 0.051、n=44 換算，見 scale 那格）
+                                  # ⚠️ 換算後這張卡不再是「趨近 0」——0.2437 落在 liquidation(0.30) 附近，
+                                  # 但那不是它變強了，是換算把「弱訊號」跟「沒訊號」拉開了：
+                                  # active_address 的 ic=0.0041 換算後只有 0.0357，兩者差距從
+                                  # 0.051 vs 0.0041（看起來 12 倍）變成 0.2437 vs 0.0357（約 7 倍），
+                                  # 中間那層樣本收縮（44 筆只認 0.548）就是差距被壓縮的原因
 ```
 
 ### 這份新增的 `confidence` 欄位，是這輪才發現需要的

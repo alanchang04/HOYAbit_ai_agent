@@ -64,8 +64,9 @@ feature:
   missing_ratio: 0        # 資料源本身沒有缺值標記機制，交易日沒資料通常直接不出現在表格裡，不易區分「缺值」跟「非交易日」
   sample_size: len(series)  # ⚠️ 實測通常是 9-10，遠低於 active_address 的 1807，這個數字本身就是這個 factor 的重要特徵，不是次要細節
 
-# ⚠️ 這次示範的已知落差（2026-08-02 首次建立，尚未接進 demo server）：
-#   跟 active_address／cpi 不同，這份還沒寫進 webapp/stage1_demo_api.py，
-#   純粹是 Stage 2 骨架設計，還沒有 `/api/stage2/etf` 這支路由。
-#   HTML table 解析比 JSON API 脆弱（bitbo.io 改版面就會壞），這點也要記錄，
-#   之後真的接程式碼時要加解析失敗的錯誤處理，不能假設表格結構永遠不變。
+# ⚠️ 2026-08-02 已接進 demo server（`/api/stage2/etf`，見
+#   webapp/stage1_demo_api.py 的 `stage2_etf`／`_parse_etf_flow_table`）。
+#   HTML table 解析比 JSON API 脆弱（bitbo.io 改版面就會壞）——`_parse_etf_flow_table`
+#   對看不懂的列（表頭、統計列、格式跑掉的行）採跳過而非整批失敗，但如果
+#   `<table class="stats-table larger-table">` 這個 class 名稱本身改了，
+#   解析會直接拋錯（`RuntimeError`→502），不會靜靜回傳空結果假裝正常。

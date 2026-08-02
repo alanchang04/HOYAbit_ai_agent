@@ -25,6 +25,14 @@ weight:
   prior_weight:
     basis: domain_knowledge          # 跟 cpi 一樣不套統計算法，但依據不同——cpi 是「事件重要性分級」，這裡是「訊號本質定位」
     value: 0.3                       # 示範值，刻意偏低
+    scale: relative_strength         # 2026-08-02 拍板：這格宣告「上面那個 value 是哪把尺上的數字」。
+                                     # relative_strength ＝ 已經是 [0,1] 的**IC 等價強度**，直接拿去排序，
+                                     # 不再換算、也不做樣本收縮（人工判斷沒有「樣本數」這個東西）。
+                                     # ⚠️ 語意重新定義（數字沒改）：這個分數從此讀作「相當於 |ic| 多強」，
+                                     # 不是一個抽象的重要性分點——這樣它才跟 ic 型的權重可比。
+                                     # ⚠️ 已知不對稱：ic 型會因樣本不足被打折，這型不會。不補一個折減係數
+                                     # 去「平衡」（那等於重新引入分組，跟排序拍板打架），改成把 basis
+                                     # 帶到卡片上讓人看得到來源，並記進 13 待處理
     reason: |
       liquidation 拿不到 Prior Weight 有兩個獨立理由，缺一不可：
       ① 文獻定位（見 [[Stage 3 — Knowledge Layer/liquidation]] references）：
