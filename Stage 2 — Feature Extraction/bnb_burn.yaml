@@ -1,0 +1,59 @@
+# Stage 2 — Feature Extraction，Event Factor 骨架（bnb_burn）
+# 比照 cpi.yaml：Event 型沒有連續數值序列，抓的是「事件本身＋事件的數值」。
+# 2026-08-02 新增，Ken 拍板「一幣一個」，BNB 選季度銷毀。
+#
+# 來源（免 key，⚠️ HTML 解析不是 API）：
+#   GET https://www.bnbchain.org/en/blog/{N}th-bnb-burn      （N = 期數，例 35th）
+#   GET https://www.bnbchain.org/en/blog                      （列表頁，找最新一期的 slug）
+#   跟 pipeline/fetch_news.py 的 `_scrape_bnbchain_blog()` 打同一個站，
+#   但這裡要的不是新聞標題，是文章內文裡的兩個數字。
+#
+# ⚠️ 2026-08-02 實測結果（照實記，不美化）：
+#   ✅ 35th → Auto-Burn (Total BNB burned): 1,569,307.34 BNB
+#             Remaining total supply: 134,786,916.53 BNB（文中註明 2026-04-15 11:55 UTC）
+#             ~$1.02B（銷毀時的約當美元值）
+#   ✅ 34th → Auto-Burn: 1,371,803.77 BNB
+#   ❌ 30th／25th → **HTTP 200 但是空殼頁**（回傳 bytes 固定 340140，內文沒有
+#      Auto-Burn 字樣）。這站是 SPA，找不到的文章不回 404 而是回一個空框架，
+#      所以**不能用 status_code 判斷成功**，要用「內文有沒有 Auto-Burn 字樣」判斷。
+#   → 結論：只回溯得到最近兩期，拿不到完整 36 期歷史。
+#
+# ⚠️ 另一條路已排除：文章裡指的即時資料站 bnbburn.info 實測是 JS 渲染的 SPA，
+#    靜態請求只拿得到 28KB 空殼（數字全在 JS 裡），沒有瀏覽器抓不到。
+#    BscScan 供給量端點（Etherscan V2 chainid=56）2026-08-02 重測仍回
+#    "Free API access is not supported for this chain"，也不通。
+
+feature:
+  factor: bnb_burn
+  factor_type: event              # 比照 cpi，不是 statistical
+  endpoint: https://www.bnbchain.org/en/blog/{{burn_index}}th-bnb-burn
+  discovery_endpoint: https://www.bnbchain.org/en/blog   # 列表頁抓最新期數的 slug
+  window_policy: not_applicable   # 季頻事件，window 對它沒有意義
+
+  parse:
+    success_marker: "Auto-Burn"   # ⚠️ 必須用這個判斷成功，**不能用 HTTP 200**
+    burned_amount: 'regex: Auto-Burn \(Total BNB burned\):\s*([\d,\.]+)\s*BNB'
+    remaining_supply: 'regex: Remaining total supply:\s*([\d,\.]+)\s*BNB'
+    burn_date: 'regex: at time of writing\s+(.+?)\s+UTC'
+    usd_value: 'regex: Approximate value in USD[^~]*~\$([\d\.]+)B'
+
+  # Event 型欄位（比照 cpi.yaml，不是 statistical 的 percentile/z_score 那組）
+  latest_event:
+    burn_index:                   # 期數（例 35）
+    burned_amount_bnb:            # 實測 35th = 1569307.34
+    remaining_supply_bnb:         # 實測 35th = 134786916.53
+    burn_date:                    # 實測 35th = 15 April, 2026 11:55 UTC
+  previous_event:
+    burn_index:
+    burned_amount_bnb:            # 實測 34th = 1371803.77
+  delta_vs_previous: latest.burned_amount_bnb - previous.burned_amount_bnb
+                                  # 實測 = 1569307.34 - 1371803.77 = +197503.57（銷毀量季增）
+
+  # Quality
+  sample_size: 2                  # ⚠️ 只回溯得到兩期。不是抓法沒寫好，是站台限制
+  history_available: false        # 完整 36 期歷史拿不到（見上方實測）
+
+# ⚠️ 這個 factor 的時間性質跟其他都不同：**季頻**，一年只有 4 個資料點。
+# 就算完整 36 期都拿得到，也只有 36 筆、跨 9 年，不可能用來算 ic。
+# 這不是資料源限制造成的遺憾，是這件事本身的性質——所以 Stage 4 走 impact_level，
+# 跟 cpi 同一條路徑，不是「暫時用人工值等之後回測」。

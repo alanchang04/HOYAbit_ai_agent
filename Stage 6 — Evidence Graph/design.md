@@ -24,7 +24,8 @@ Stage 5 排序後的 Evidence Cards（`/api/stage5` 的 `evidence_cards`），�
 
 ## 這輪發現的三個已知缺口（2026-08-02，記在 13 正文，這裡具體化）
 
-1. **`related_evidence` 指向沒有對應卡片的 factor**：`funding_rate` 的 Stage 3 Knowledge 寫 `confirms: open_interest`，但這批 Stage 5 卡片裡沒有 `open_interest` 這張卡（只有 funding_rate／active_address／cpi／liquidation 四個 factor）。同樣情況：`active_address` 的 `confirms: hash-rate`、`conflicts: price`。這些關係**是真的**（Stage 3 Knowledge 裡有依據），只是「這次查詢沒有把那個 factor 也一起分析」，跟「這個關係不存在」是兩回事——所以不能略過不提，也不能編一個假節點。畫圖時分兩欄：`edges`（真的有兩張卡可以連的）跟 `referenced_but_no_card`（有關係但這次批次沒有對應卡片），讓看的人知道「圖不完整不是資料錯，是這次只分析了這幾個 factor」。
+1. **`related_evidence` 指向沒有對應卡片的 factor**：`funding_rate` 的 Stage 3 Knowledge 寫 `confirms: open_interest`，但這批 Stage 5 卡片裡沒有 `open_interest` 這張卡。同樣情況：`active_address` 的 `confirms: hash-rate`。這些關係**是真的**（Stage 3 Knowledge 裡有依據），只是「這次查詢沒有把那個 factor 也一起分析」，跟「這個關係不存在」是兩回事——所以不能略過不提，也不能編一個假節點。畫圖時分兩欄：`edges`（真的有兩張卡可以連的）跟 `referenced_but_no_card`（有關係但這次批次沒有對應卡片），讓看的人知道「圖不完整不是資料錯，是這次只分析了這幾個 factor」。
+   ⚠️ 2026-08-02 更新：`active_address` 的 `conflicts: price` **不再是這個缺口的範例**——新增 `price` 卡片之後這條關係已經有兩端可以連，變成一條真的 `edges`，不會再出現在 `referenced_but_no_card` 裡（下面第 47 行的範例 JSON 已同步更新）。`open_interest`／`hash-rate` 目前還沒有對應卡片，缺口仍然存在。
 
 2. **Event Factor（cpi）永遠不會主動連出任何邊**：Stage 3 的 Event Knowledge schema（`usually_affects`／`related_events`）跟 Statistical／Sentiment Knowledge 的 `confirms`／`conflicts`／`independent` 不是同一組欄位名，Stage 5 組裝 `related_evidence` 時三格對 cpi 誠實留 null（見 `Stage 5 — Evidence Card ＋ Prioritization/cpi.md`）。這代表 cpi**結構性不會是任何邊的起點**——`usually_affects: FOMC利率決議預期／DXY／美債殖利率` 這些關係是有記錄的，只是欄位名跟 Graph 讀的 key 對不上，讀不到。⚠️ 但這不代表 cpi 一定是孤立節點：實測發現 `liquidation` 的 `independent` 欄位反過來指到 `cpi`（見 liquidation.md），所以 cpi 有可能因為**別的卡片指向它**而出現在圖上，只是它自己永遠不會發出邊。這裡先誠實維持這個不對稱現狀，**不**臨時把 `usually_affects` 塞進 `confirms` 湊出對稱的邊——那是繞過問題，不是解決問題，正確做法是回頭讓 13 的 Event Knowledge schema 也定義對稱的 Graph 用關係欄位，這輪不動。
 
@@ -39,12 +40,12 @@ Stage 5 排序後的 Evidence Cards（`/api/stage5` 的 `evidence_cards`），�
     {"evidence_id": "CPI_BTC", "factor": "cpi", "category": "event", "isolated": true}
   ],
   "edges": [
-    {"from": "FUNDING_RATE_BTC", "to": "ACTIVE_ADDRESS_BTC", "relation": "independent"}
+    {"from": "FUNDING_RATE_BTC", "to": "ACTIVE_ADDRESS_BTC", "relation": "independent"},
+    {"from": "ACTIVE_ADDRESS_BTC", "to": "PRICE_BTC", "relation": "conflicts"}
   ],
   "referenced_but_no_card": [
     {"from": "FUNDING_RATE_BTC", "relation": "confirms", "referenced_factor": "open_interest"},
-    {"from": "ACTIVE_ADDRESS_BTC", "relation": "confirms", "referenced_factor": "hash-rate"},
-    {"from": "ACTIVE_ADDRESS_BTC", "relation": "conflicts", "referenced_factor": "price"}
+    {"from": "ACTIVE_ADDRESS_BTC", "relation": "confirms", "referenced_factor": "hash-rate"}
   ]
 }
 ```

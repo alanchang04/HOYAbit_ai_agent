@@ -14,6 +14,7 @@ from agent.schemas import (
     Evidence,
     HorizonClass,
     QuestionType,
+    SourceType,
     is_current_signal,
 )
 
@@ -1105,6 +1106,7 @@ def build_step_d_prompt(
     debate: dict | None = None,
     evidences: list[Evidence] | None = None,
     coins: list[str] | None = None,
+    applicable_categories: set[SourceType] | None = None,
 ) -> str:
     """結論層（裁判）prompt。
 
@@ -1112,8 +1114,23 @@ def build_step_d_prompt(
     但在補上這個參數之前，Step D 是四步裡唯一拿不到權重表的——`_sanitize_facts()`
     丟掉權重欄位，Step B 的 cross_validation 也不含權重（2026-08-01 實跑 dump 驗證）。
     裁判等於只能吃辯士自己在論證文字裡寫的 `（weight=0.80）`，而那正是它要裁決的兩造。
+
+    `applicable_categories`（2026-08-02 新增，選填）：某些呼叫端的證據來源類別
+    範圍是設計上就固定的（例：HOYA BIT demo 六個 factor 只映射到 derivatives/
+    onchain/macro/news，price/social 從未被抓取）。不傳時裁判不知道這件事，會把
+    「這次範圍本來就不涵蓋」誤判成「該補資料但沒補到」，在 limitations 寫出
+    「缺乏 price 類別資料」這種話——範圍外的類別本來就不會有資料，這不是缺口。
+    傳入時會明確告訴裁判本次範圍，不傳則沿用舊行為（不加這段提示）。
     """
     framing = _resolve_framing(question_type, coin, coin2, coins=coins)
+    scope_note = ""
+    if applicable_categories is not None:
+        labels = "、".join(sorted(t.value for t in applicable_categories))
+        scope_note = (
+            f"\n本次分析的證據來源類別範圍限定在：{labels}。這是本次分析設計上的範圍，"
+            "不是資料缺口——不要把範圍外的類別（例如未列出的 price／social 等）當成"
+            "「缺資料」寫進 limitations，那是「這次分析本來就不涵蓋」，不是「該補資料但沒補到」。\n"
+        )
     return f"""題目：{question}
 幣種：{_coin_header(coin, coin2, coins)}
 {framing}
@@ -1144,7 +1161,7 @@ invalidation_conditions 是「未來若觀察到什麼具體條件，這個結�
 invalidation_conditions 的門檻數字必須承接自事實層／交叉驗證層已出現的具體數字
 （例如已提到的支撐價、已提到的 OI 變化幅度），不可自創全新數字；
 若要設定百分比門檻，需在該條件文字中順帶說明依據哪筆證據的既有數字推算。
-
+{scope_note}
 另外輸出 debate_adjustment：你對「這份分析報告本身」的信心調整，範圍 -15 到 +5 的整數。
 **注意：有辯論時，實際採用的調整值由上面 debate_summary 各點的 verdict 加總得出，
 這個欄位只在沒有辯論可判定時才會被採用。**請仍然誠實填寫，並確保它與你的逐點判定

@@ -22,7 +22,7 @@ from webapp.stage_specs import (
     render_params,
 )
 
-DEMO_FACTORS = ["funding_rate", "active_address", "cpi", "liquidation"]
+DEMO_FACTORS = ["funding_rate", "active_address", "cpi"]
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +116,30 @@ def test_samples_per_day_scales_the_n_day_windows():
     assert features["roc_7d"] == pytest.approx((30.0 - 10.0) / 10.0 * 100)
 
 
+# liquidation 這個 factor 已於 2026-08-02 下線（Stage 2-5 規格檔整批刪除，
+# 單次 6 秒觀察窗不具統計代表性，不能當證據——Ken 拍板）。它曾經是「yaml 明寫
+# null／字面值」這兩條通用行為在產品裡唯一的真實案例，下面兩個測試改用 inline
+# spec dict 保留這條行為的覆蓋，不依賴已刪除的 liquidation.yaml
+# （`compute_series_features()` 只吃 dict，不會再去讀檔）。
+_STRUCTURALLY_NULL_SPEC = {
+    "factor": "single_snapshot_like",
+    "percentile": None,
+    "slope": None,
+    "slope_7d": None,
+    "roc_7d": None,
+    "rolling_mean": None,
+    "z_score": None,
+    "sample_size": 1,
+}
+
+
 def test_null_fields_are_not_emitted_at_all():
-    """liquidation 的 slope／roc／rolling_*／percentile 在 yaml 明寫 null＝結構性沒有
-    （查歷史清算單的 REST API 已停用）。整格不存在才傳達得出「這個概念對這個 factor
-    不成立」；放 None 會被讀成「這次剛好沒算出來，下次可能有」。"""
-    spec = load_feature_spec("liquidation")
-    features, report = compute_series_features("liquidation", spec, [1.0, 2.0, 3.0])
+    """某些 factor 的 slope／roc／rolling_*／percentile 結構性不存在（例：單次觀察窗、
+    無歷史序列可比），yaml 明寫 null 時整格不產生（不塞 None 假裝「這次剛好沒算出來，
+    下次可能有」）。"""
+    features, report = compute_series_features(
+        "single_snapshot_like", _STRUCTURALLY_NULL_SPEC, [1.0, 2.0, 3.0]
+    )
     for field in ("percentile", "slope", "roc_7d", "rolling_mean", "z_score"):
         assert field not in features
         assert field in report["fields_null_by_design"]
@@ -130,10 +148,11 @@ def test_null_fields_are_not_emitted_at_all():
 def test_spec_declared_value_beats_the_generic_algorithm():
     """同一個欄位名，規格檔宣告「值」還是「算法」決定行為：
     active_address.yaml 寫 `sample_size: len(series)`（算），
-    liquidation.yaml 寫 `sample_size: 1`（每次執行就是一個觀察窗，不是多筆樣本）。
+    單次觀察窗類 factor 宣告 `sample_size: 1`（每次執行就是一個觀察窗，不是多筆樣本）。
     通用算法不該蓋掉規格檔明講的數字。"""
-    liq_spec = load_feature_spec("liquidation")
-    features, report = compute_series_features("liquidation", liq_spec, [])
+    features, report = compute_series_features(
+        "single_snapshot_like", _STRUCTURALLY_NULL_SPEC, []
+    )
     assert features["sample_size"] == 1
     assert "sample_size" in report["fields_from_spec_literal"]
 
@@ -187,7 +206,7 @@ def test_cpi_value_source_is_readable():
     assert set(vs["fields"]) == {"current_value", "percentile", "mom_pct", "yoy_pct"}
 
 
-@pytest.mark.parametrize("factor_id", ["funding_rate", "active_address", "liquidation"])
+@pytest.mark.parametrize("factor_id", ["funding_rate", "active_address"])
 def test_statistical_factors_have_no_value_source(factor_id):
     """value_source 是 Event Factor 特有的形狀，Statistical 的端點就在 feature.endpoint。"""
     assert load_value_source(factor_id) is None
@@ -261,20 +280,6 @@ def _knowledge_stub(**overrides):
     return base
 
 
-def test_card_fact_keys_come_from_the_card_file():
-    card, _ = build_evidence_card(
-        "liquidation",
-        evidence_id="LIQUIDATION_BTC",
-        stage2=_stage2_stub(),
-        knowledge=_knowledge_stub(),
-        evidence_weight=0.3,
-    )
-    assert set(card["fact"]) == {"observed_count", "observed_notional", "listen_seconds"}
-    # 這張卡刻意沒有這兩格（不是放 null）——結構性沒有歷史序列
-    assert "percentile" not in card["fact"]
-    assert "trend" not in card["fact"]
-
-
 def test_funding_rate_fact_alias():
     """Stage 2 把最新費率放在 `funding`，卡片那格叫 current_value。"""
     card, _ = build_evidence_card(
@@ -309,24 +314,10 @@ def test_event_factor_field_mapping_is_read_from_the_card_file():
     }
 
 
-def test_liquidation_card_carries_the_downgrade_note_from_the_spec():
-    """Stage 2 liquidation.yaml 的「降級處理」條款指定這段話要寫在 Evidence Card 上，
-    Stage 5 liquidation.md 就是那個落實位置——內容來自規格檔，不是程式生成的字。"""
-    card, _ = build_evidence_card(
-        "liquidation",
-        evidence_id="LIQUIDATION_BTC",
-        stage2=_stage2_stub(),
-        knowledge=_knowledge_stub(),
-        evidence_weight=0.3,
-    )
-    assert card["traceability"]["source"] == "stub-source"
-    assert "單次觀察窗，非統計訊號" in card["traceability"]["note"]
-
-
 def test_unfillable_card_field_is_dropped_not_nulled():
     """2026-08-02 拍板：卡片 schema 有、但這次沒有來源填得出來的格子**整格不產生**。
-    留 null 會被下游讀成「這次剛好沒算出來，下次可能有」——跟 liquidation 的 fact
-    不放 percentile 是同一條原則。仍然要列進 report，不是靜靜消失。"""
+    留 null 會被下游讀成「這次剛好沒算出來，下次可能有」。仍然要列進 report，
+    不是靜靜消失。"""
     card, report = build_evidence_card(
         "active_address",
         evidence_id="ACTIVE_ADDRESS_BTC",

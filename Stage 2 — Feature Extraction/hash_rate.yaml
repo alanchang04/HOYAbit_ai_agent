@@ -1,0 +1,61 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（hash_rate）
+# 對應 13_流程圖迭代定案v2.md Stage 2：抓什麼欄位固定，抓多長的窗口由 LLM 依
+# Stage 1 的 Horizon 決定，這裡只記錄端點跟公式。
+#
+# 2026-08-02 新增。起因：Ken 拍板「一幣一個幣種專屬 factor」，BTC 選 hash_rate。
+# 除了資料本身厚（實測 1822 天），它還補掉一個既有缺口——`active_address` 卡片的
+# `confirms: hash-rate` 原本指向不存在的節點（見 Stage 6 design.md 缺口 1），
+# 補上這張卡之後那條邊接得上，是這輪唯一「補一張卡同時修一條邊」的 factor。
+#
+# 端點（免 key，公開）：
+#   GET https://api.blockchain.info/charts/hash-rate?timespan=5years&format=json&sampled=false
+#   跟 pipeline/fetch_onchain_history.py 打的是同一組 blockchain.info charts API
+#   （那支同時抓 hash-rate／n-transactions／mempool-count／mempool-size 四條）。
+#   回傳 {{"values": [{{"x": unix秒, "y": 值}}, ...]}}，日頻，一天一筆。
+#
+# ⚠️ 2026-08-02 實測：timespan=5years 回 1822 筆，涵蓋 2021-08-03 ~ 2026-08-01，
+#    最新值 1029100369.78。單位是 blockchain.info 圖表自己的尺度（數量級 10^9），
+#    **本層不做單位換算**——percentile／z_score／slope 都是同尺度內比較，換算不影響
+#    結果；要對外顯示成 EH/s 之類的人看單位是 Stage 5 卡片的事，不是這裡。
+
+feature:
+  factor: hash_rate
+  endpoint: https://api.blockchain.info/charts/hash-rate
+  samples_per_day: 1          # 日頻，跟 active_address 一樣；不是 funding_rate 的 3
+  params:
+    timespan: "{{window}}days"  # 由 LLM 依 Horizon 給；實測 5years 上限約 1822 筆
+    format: json
+    sampled: "false"          # 不讓端點自行抽樣，要每天都有值
+
+  # Raw
+  current_value: series[-1]
+  previous_value: series[-2]
+  delta: current_value - previous_value
+
+  # Relative
+  percentile: percentile_rank(current_value, series)
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])
+  slope_7d: least_squares_slope(series[-7:])
+  slope_30d: least_squares_slope(series)
+
+  # Momentum
+  roc_1d: (current_value - series[-2]) / series[-2] * 100
+  roc_7d: (current_value - series[-8]) / series[-8] * 100 if len(series) > 8 else null
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: 1 - len(series) / window
+  sample_size: len(series)
+
+# ⚠️ 已知資料特性：算力不是直接觀測值，是**從出塊速度回推的估計量**——短期會因為
+# 出塊運氣（variance）上下跳動，單日大幅變動不一定代表真的有礦機上下線。這跟
+# funding_rate「數字本身就是結算出來的事實」性質不同，下游解讀單日 delta 要保守，
+# 看 slope_7d／slope_30d 比看 roc_1d 有意義。

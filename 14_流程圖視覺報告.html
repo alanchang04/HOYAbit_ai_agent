@@ -713,10 +713,10 @@
                 <td><div class="t-lead">嚴格的 <code>percentile</code></div><div class="t-why">分數是簡化版關鍵字計分而非 NLP 模型，母體本身可信度有限</div></td>
               </tr>
               <tr>
-                <td><span class="t-chip gap">資料源缺歷史</span><div class="t-factors">liquidation</div></td>
-                <td><div class="t-lead">秒 — 沒有「回看窗口」</div><div class="t-why">只能開 WebSocket 監聽固定秒數</div></td>
-                <td><div class="t-lead">觀察窗內的清算筆數與金額</div></td>
-                <td><div class="t-lead"><code>percentile</code> · <code>trend</code> · <code>slope</code> 全部</div><div class="t-why">查歷史的 API 已停用，沒有母體可比</div></td>
+                <td><span class="t-chip gap">本質無窗口</span><div class="t-factors">price</div></td>
+                <td><div class="t-lead">無 — 沒有「回看窗口」這個概念</div><div class="t-why">即時報價快照，任何時刻查都是同一個問題（現在多少錢），不是換一個資料源就能解決</div></td>
+                <td><div class="t-lead">現值 · <code>change_24h_pct</code> · <code>volume_24h_usd</code></div><div class="t-why">24 小時漲跌幅與成交量是端點自帶的固定窗口，不是本專案算出來的</div></td>
+                <td><div class="t-lead"><code>percentile</code> · <code>trend</code> · <code>slope</code> 全部</div><div class="t-why">跟 orderbook_depth 同樣的空格，成因是快照定義上沒有母體，不是資料源限制</div></td>
               </tr>
             </tbody>
           </table>
@@ -747,17 +747,12 @@
                 <td><div class="t-lead">不算 ic，讀 <code>impact_level</code> 分級</div><div class="t-why">Very High → 0.8。離散事件沒有「每天的值」可跟每天的報酬配對，套 ic 的前提不成立</div></td>
                 <td><div class="t-lead">比對 <code>reaction_window</code> ＋ <code>expected_duration</code></div><div class="t-why">兩段不連續尺度的聯集；關聯訊號改讀 <code>usually_affects</code> ／ <code>related_events</code>（不是 confirms/conflicts）；freshness 語意是「距上次公布多久」——月頻資料本質上不可能「很新」</div></td>
               </tr>
-              <tr>
-                <td><span class="t-chip gap">資料源缺歷史</span><div class="t-factors">liquidation</div></td>
-                <td><div class="t-lead">ic 算不出來，改用 Domain Knowledge 給 0.3</div><div class="t-why">沒有歷史序列可配對。低分是因為它本質是<b>確認性訊號</b>，不是「沒算出來所以給 0」</div></td>
-                <td><div class="t-lead">時間尺度幾乎必然不合</div><div class="t-why">適用尺度是分鐘級；freshness 恆等於「當下」，因為沒有「查詢過去」這個選項</div></td>
-              </tr>
             </tbody>
           </table>
           <div class="lr-note" style="margin-top:6px;">三種 Prior Weight 來源最後都收斂成同一個 <code>evidence_weight</code> 概念，不是三套互不相容的系統——所以下一層可以直接照它排序。</div>
         </details>
         <div class="mini-error" id="weight-live-error"></div>
-        <div class="todo-note"><span class="dot"></span><span>Prior Weight 有三種來源（13 文件 2026-08-02 拍板，同一個 <code>evidence_weight</code> 概念下的不同填法）：<b>Statistical Factor</b>（funding_rate／active_address）現場真的算 <code>rolling_spearman_ic</code>；<b>Event Factor</b>（cpi）不算 ic——離散事件沒有「每天的值」可跟每天的 forward_return 配對，改讀 Knowledge Layer 的 <code>impact_level</code> 分級；<b>資料源結構性缺歷史序列</b>（liquidation）ic 也算不出來，改用 Domain Knowledge 給有理由的低分。後兩種的數值與理由都寫在 <code>Stage 4 — Dynamic Evidence Weight Engine/{factor}.md</code> 裡（資料夾名稱沿用原編號，內容沒動），程式只負責讀，不自己訂數字。Dynamic Modifier 一律真的打一次 LLM；market_regime／cross_source_consensus 兩條線索還沒接上真實資料源，LLM 會老實當「未知」處理。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>Prior Weight 有三種來源（13 文件 2026-08-02 拍板，同一個 <code>evidence_weight</code> 概念下的不同填法）：<b>Statistical Factor</b>（funding_rate／active_address）現場真的算 <code>rolling_spearman_ic</code>；<b>Event Factor</b>（cpi）不算 ic——離散事件沒有「每天的值」可跟每天的 forward_return 配對，改讀 Knowledge Layer 的 <code>impact_level</code> 分級；<b>結構性沒有歷史序列</b>（orderbook_depth／price）ic 也算不出來，改用 Domain Knowledge 給有理由的值。後兩種的數值與理由都寫在 <code>Stage 4 — Dynamic Evidence Weight Engine/{factor}.md</code> 裡（資料夾名稱沿用原編號，內容沒動），程式只負責讀，不自己訂數字。Dynamic Modifier 一律真的打一次 LLM；market_regime／cross_source_consensus 兩條線索還沒接上真實資料源，LLM 會老實當「未知」處理。</span></div>
       </div>
 
       <div class="stage-card s5">
@@ -781,7 +776,7 @@
         <div class="stage-lead"><b>看證據之間打不打架。</b>把卡片之間的關係畫成圖（互相印證／互相衝突／彼此獨立），回答「這些訊號是不是在講同一件事、有沒有互相矛盾」。排序只說哪個重要，這層說它們之間的關係——圖上不含任何市場方向。</div>
         <div id="graph-body"></div>
         <div class="mini-error" id="graph-live-error"></div>
-        <div class="todo-note"><span class="dot"></span><span>吃 Stage 5 已經抓到的卡片，把每張卡 Knowledge 的 <code>confirms／conflicts／independent</code> 畫成關係圖——這一層不重新判斷任何關係，也<b>不再打一次 API</b>（沿用 Stage 5 同一份回應，避免多等一次 LLM／多花一次 token，兩邊數字保證一致）。兩種誠實缺口：<b>①</b> <code>referenced_but_no_card</code>——Knowledge 提到的關聯 factor（例如 open_interest／hash-rate／price）這批查詢沒有對應卡片，不畫成邊但列出來，不是關係不存在，是這次沒有一起分析；<b>②</b> 孤立節點——例如 cpi／panews_sentiment 這類 Knowledge 骨架本身沒有對稱關係欄位（或欄位待驗證留空）的卡片，可能完全連不上任何邊，圖上用虛線淡化標示。設計文件見 <code>Stage 6 — Evidence Graph/design.md</code>，圖演算法必須跟 <code>webapp/stage1_demo_api.py</code> 的 <code>_build_evidence_graph</code> 保持一致（前端這份是移植版，見程式碼註解）。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>吃 Stage 5 已經抓到的卡片，把每張卡 Knowledge 的 <code>confirms／conflicts／independent</code> 畫成關係圖——這一層不重新判斷任何關係，也<b>不再打一次 API</b>（沿用 Stage 5 同一份回應，避免多等一次 LLM／多花一次 token，兩邊數字保證一致）。兩種誠實缺口：<b>①</b> <code>referenced_but_no_card</code>——Knowledge 提到的關聯 factor（例如 open_interest／hash-rate）這批查詢沒有對應卡片，不畫成邊但列出來，不是關係不存在，是這次沒有一起分析（2026-08-02 新增 price 卡片之後，active_address 的 conflicts=price 已經從這個清單畢業，變成一條真的邊，不再是這裡的範例）；<b>②</b> 孤立節點——例如 cpi／panews_sentiment 這類 Knowledge 骨架本身沒有對稱關係欄位（或欄位待驗證留空）的卡片，可能完全連不上任何邊，圖上用虛線淡化標示。設計文件見 <code>Stage 6 — Evidence Graph/design.md</code>，圖演算法必須跟 <code>webapp/stage1_demo_api.py</code> 的 <code>_build_evidence_graph</code> 保持一致（前端這份是移植版，見程式碼註解）。</span></div>
       </div>
 
       <div class="reason-trigger">
@@ -845,7 +840,7 @@
             <tbody id="log-tbody"></tbody>
           </table>
         </div>
-        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積（Stage 1／Stage 2-5／Stage 6-8 三段）後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。⚠ 累計工作時間會大於實際牆鐘時間，因為五個 factor 是併發跑的。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積（Stage 1／Stage 2-5／Stage 6-8 三段）後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。⚠ 累計工作時間會大於實際牆鐘時間，因為七個 factor 是併發跑的。</span></div>
       </div>
 
       <div class="back-row">
@@ -1025,14 +1020,15 @@
   // ---------- 六個 factor 共用的骨架（FACTOR_IDS 是單一事實來源，別處要顯示
   // factor 數量一律讀 FACTOR_IDS.length 或 Object.keys(byFactor).length，
   // 不要手寫數字——手寫數字就是這次 etf 加進來後被抓到的那種 bug）----------
-  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf"];
+  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "panews_sentiment", "etf", "price", "orderbook_depth"];
   const FACTOR_TYPE_LABEL = {
     funding_rate: "Statistical",
     active_address: "Statistical",
     cpi: "Event",
-    liquidation: "Statistical（資料源缺歷史）",
     panews_sentiment: "Sentiment（ic 離線算）",
     etf: "Statistical（樣本天花板，僅近9-10天）",
+    price: "Statistical（即時快照，無歷史序列）",
+    orderbook_depth: "Snapshot（當下狀態，無歷史）",
   };
 
   function blockSkeleton(prefix, waitingLabel) {
@@ -1348,11 +1344,16 @@
   function stage2BodyHtml(factorId, f) {
     if (!f) return "<div class=\"lr-note\">（無資料）</div>";
     const windowSourceLabel = f.window_source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗）";
-    if (factorId === "liquidation") {
+    if (factorId === "orderbook_depth") {
+      // 第四型（Snapshot）：沒有 window、沒有 percentile／trend，顯示的是當下盤口狀態
       return `
-        <div class="lr-row"><span class="lr-k">Listen Window</span><span class="lr-v">${f.listen_seconds} 秒（真的開 WebSocket 監聽）</span></div>
-        <div class="lr-row"><span class="lr-k">Observed Count</span><span class="lr-v">${f.observed_count}</span></div>
-        <div class="lr-row"><span class="lr-k">Observed Notional</span><span class="lr-v">${f.observed_notional}</span></div>
+        <div class="lr-row"><span class="lr-k">快照時間</span><span class="lr-v">${(f.snapshot_at || "").replace("T", " ").slice(0, 19)} UTC</span></div>
+        <div class="lr-row"><span class="lr-k">Mid Price</span><span class="lr-v">${f.mid_price}</span></div>
+        <div class="lr-row"><span class="lr-k">價差</span><span class="lr-v">${f.spread_bps} bps</span></div>
+        <div class="lr-row" style="margin-top:8px;"><span class="lr-k">±10bps 買方深度</span><span class="lr-v">${f.bid_depth_10bps}</span></div>
+        <div class="lr-row"><span class="lr-k">±10bps 賣方深度</span><span class="lr-v">${f.ask_depth_10bps}</span></div>
+        <div class="lr-row"><span class="lr-k">買賣失衡</span><span class="lr-v">${f.depth_imbalance_10bps || "（無）"}</span></div>
+        <div class="lr-row"><span class="lr-k">盤口涵蓋範圍</span><span class="lr-v">±${f.book_span_bps} bps（${f.levels_returned} 檔）</span></div>
         <div class="lr-note" style="margin-top:6px;">${f.note || ""}</div>
         <div class="lr-note">${f.source || ""}</div>
       `;
@@ -1381,6 +1382,17 @@
         ${rowIf("MoM", f.mom_pct)}
         ${rowIf("YoY", f.yoy_pct)}
         <div class="lr-note">${f.source} · ${f.sample_count} 筆樣本</div>
+      `;
+    }
+    if (factorId === "price") {
+      // 即時報價快照：跟 orderbook_depth 同一種「無 window」精神，但這裡快照的是
+      // 現貨報價本身（CoinGecko／CryptoCompare），不是盤口深度
+      return `
+        <div class="lr-row"><span class="lr-k">Current Value</span><span class="lr-v">$${f.current_value}</span></div>
+        <div class="lr-row"><span class="lr-k">24h Change</span><span class="lr-v">${f.change_24h_pct}</span></div>
+        <div class="lr-row"><span class="lr-k">24h Volume</span><span class="lr-v">$${f.volume_24h_usd}</span></div>
+        <div class="lr-note" style="margin-top:6px;">${f.note || ""}</div>
+        <div class="lr-note">${f.source || ""}</div>
       `;
     }
     const value = factorId === "funding_rate" ? f.funding : f.current_value;

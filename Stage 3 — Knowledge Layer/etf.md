@@ -52,7 +52,20 @@ knowledge:
   # Relationship
   confirms: price（現貨價格走勢）  # 文獻明確指出流量跟價格是雙向回饋，這裡定義成 confirms 而非「領先預測」，呼應上方警訊——這是同向確認關係，不是「這個訊號能告訴你價格接下來要漲跌」
   conflicts: active_address（鏈上活躍地址數）  # 呼應 [[Stage 3 — Knowledge Layer/active_address]] 已經記錄的發現：2024 年 ETF 通過機構化之後，價格走勢跟鏈上零售使用量出現結構性背離——etf 流量代表的正是這條「機構資金管道」，跟「鏈上零售使用」是兩個可能互相背離的資金/使用來源，這條關係在 active_address 那份就已經埋了伏筆，這裡是反過來從 ETF 這邊呼應
-  independent: liquidation（清算流／連鎖清算）  # 一個是現貨市場的機構申購贖回行為，一個是衍生品市場的槓桿倉位強平機制，資金管道與市場層次都不同，可視為獨立訊號並列
+  independent: null
+  # ⚠️ 2026-08-02 訂正：原本寫 `liquidation（清算流／連鎖清算）`，理由是「一個是現貨市場的
+  # 機構申購贖回行為，一個是衍生品市場的槓桿倉位強平機制，資金管道與市場層次都不同」。
+  # 同日 liquidation 這個 factor 被 momentum（RSI14）取代、卡片不再存在，這條關係的另一端
+  # 消失了，Stage 6 Graph 會畫出指向空節點的邊，所以改成 null。
+  #
+  # ⚠️ **不改指 momentum**（看起來最順手，但會錯）：momentum 是 RSI14，純粹是收盤價的函數，
+  # 而本份上方 confirms 那格與 references 引的 SSRN 6592830 明確記載 ETF 流量與價格報酬是
+  # **雙向回饋迴圈**（$100M 淨流入≈當日 53bp，returns 也反過來造成 flows）。宣稱 etf 與一個
+  # 純價格衍生指標「獨立」，會直接跟本份自己引的文獻矛盾。
+  #
+  # 可能的替代人選是 hash_rate（機構申購贖回 vs 礦工資本支出，行為主體、資金管道、時間尺度
+  # 都不同），但那是一條**新的關係宣稱**，本輪沒有查證出處，不憑順手填進去——依本專案
+  # 「誠實留 null、不硬塞」的慣例先空著，待查證後再補。
 
   # References（只存出處，不存評價）
   references:
