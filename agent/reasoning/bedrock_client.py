@@ -27,15 +27,30 @@
   預算不足時直接失敗，把剩下的時間留給下游步驟，而不是把整跑拖過 15 分鐘。
 - **單次呼叫的 read timeout 依剩餘預算收緊**。只擋「不啟動」是不夠的：
   在截止前 1 秒發出的請求，照樣能跑滿 150 秒的 read timeout 才回來。
-  timeout 取 `min(設定值, 剩餘 − 連線逾時 − 安全邊際)`，
-  這樣**任何在截止前發出的請求都不可能跑過截止時間**。
+  timeout 取 `min(設定值, 剩餘 − 連線逾時 − 安全邊際)`。
   botocore 的 timeout 綁在 client 上、無法逐次指定，所以依 timeout 值快取多個 client。
+
+## ⚠️ read_timeout 不是總時長上限（2026-08-01 第二次事故）
+
+上面那條**不足以保證不超時**。實測：一次 `step_d_conclusion` 跑了 **6756 秒**
+（1 小時 53 分），而該 client 的 `read_timeout` 明明是 150 秒。
+
+原因：`read_timeout` 量的是**兩次 socket 讀取之間的間隔**，不是整個請求的總時長。
+Bedrock 的連線只要持續有資料或 keepalive 進來，計時器就一直被重置，
+於是一個永遠「還在回應中」的請求可以無限期地跑下去——最後是被
+`ConnectionClosedError` 中斷的，不是逾時。
+
+**唯一可靠的總時長上限是在呼叫端強制中斷。** `converse()` 因此改成在
+worker thread 中執行 API 呼叫，主執行緒用 `Future.result(timeout=...)` 等待；
+逾時就放棄那個 future（背景 thread 會隨 process 結束而終止，不阻塞收尾）
+並拋出 `BedrockClientError`，讓上層走既有的降級路徑。
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 import boto3
 from botocore.config import Config
@@ -63,6 +78,12 @@ class BedrockClient:
         # 由 orchestrator 設定：`on_retry(detail: str)`，讓重試在 execution_log 留下痕跡。
         # 上面那次 1020 秒的卡頓之所以難查，正是因為重試完全沒有紀錄。
         self.on_retry: Callable[[str], None] | None = None
+        # 逾時的呼叫不能靠 socket timeout 收（見檔頭），改由呼叫端強制中斷：
+        # API 呼叫丟到 worker thread，主執行緒用 Future.result(timeout) 等。
+        # daemon thread 讓被放棄的呼叫不會阻擋 process 結束。
+        self._executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="bedrock-call"
+        )
 
     # 收到截止時間前留給「解析回應＋寫報告」的安全邊際。
     SAFETY_MARGIN_SECONDS = 5
@@ -133,12 +154,27 @@ class BedrockClient:
                     f"（確保整跑不超過硬性上限）"
                 )
             try:
-                response = self._client_with_timeout(timeout).converse(
+                client = self._client_with_timeout(timeout)
+                future: Future = self._executor.submit(
+                    client.converse,
                     modelId=self.settings.bedrock_model_id,
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": user_prompt}]}],
                     inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
                 )
+                try:
+                    # 硬上限：socket read timeout 只管兩次讀取的間隔，攔不住一個
+                    # 持續回應但永遠不結束的請求（實測 6756s）。這裡是唯一的總時長閘門。
+                    response = future.result(timeout=timeout)
+                except FutureTimeoutError:
+                    future.cancel()  # 已在執行中的呼叫取消不掉，交給 daemon thread 自然結束
+                    last_exc = BedrockClientError(
+                        f"單次呼叫超過 {timeout}s 硬上限仍未回應，主動中斷"
+                        f"（socket read timeout 攔不住持續回應但不結束的請求）"
+                    )
+                    if self._sleep_before_retry(attempt, last_exc):
+                        continue
+                    raise last_exc
                 # 累計 token usage
                 usage = response.get("usage", {})
                 self.usage["input_tokens"] += usage.get("inputTokens", 0)

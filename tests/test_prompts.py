@@ -70,6 +70,8 @@ class TestEvidenceListPrioritySorting:
     """R8-4：priority = source_weight × base_importance × horizon_match，高分排前面。"""
 
     def _ids_in_order(self, out: str) -> list[str]:
+        # 清單被 EVIDENCE_BLOCK_START/END 包住（注入防護的界線標記），
+        # 只取真正的證據列。
         return [
             line.split("id=")[1].split(" ")[0]
             for line in out.splitlines()
@@ -110,6 +112,7 @@ class TestEvidenceListPrioritySorting:
         assert self._ids_in_order(out) == ["ev-401", "ev-402"]
 
     def test_empty_list_unaffected(self):
+        # 界線標記照樣輸出——「本次無證據」也是要交代給模型的事實。
         out = _format_evidence_list([])
         assert "（本次無可用證據）" in out
         assert self._ids_in_order(out) == []

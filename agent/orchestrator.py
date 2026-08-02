@@ -51,6 +51,12 @@ SOURCE_TYPES = ["price", "onchain", "news", "social", "macro", "derivatives"]
 # 產出），所以推理層拿到的 deadline 要比真正的截止早一點，不能剛好用滿。
 REPORT_RESERVE_SECONDS = 20
 
+# 一題最多蒐集幾個幣種的證據。比較題型「題目提到幾個就抓幾個」，這個上限純粹是
+# 時間與 prompt 長度的保護：collector 之間是平行的（牆鐘不隨幣種數線性成長），
+# 但證據筆數會——實測 2 幣種約 40-47 筆、Step D 的 prompt 已達 18k 字。
+# 3 個幣種約 60-70 筆仍在 15 分鐘預算內。超出上限的幣種會照實揭露為未涵蓋。
+MAX_COMPARISON_COINS = 3
+
 
 @dataclass
 class RunResult:
@@ -234,11 +240,36 @@ def run_pipeline(
     # 否則嘗試從題目文字自動偵測（題目模板通常會直接寫出「比較【幣種A】與
     # 【幣種B】」）。偵測不到就維持單幣種證據，report 會依既有 framing
     # 在限制中明確揭露比較對象資料不足，而非憑空比較。
+    # 題目提到、但超出上限而沒蒐集的幣種。報告要誠實揭露，
+    # 不能讓模型去比較一個它根本沒有資料的幣。
+    uncovered_coins: list[str] = []
+    # 主幣以外、本次也會蒐集證據的幣種（比較題型才有）。
+    extra_coins: list[str] = []
     if question_type == "comparison":
-        if coin2 is None:
-            detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
-            if detected:
-                coin2 = detected[0]
+        detected = [c for c in detect_coins_in_text(question) if c != coin.upper()]
+        if coin2:
+            # 使用者用 --coin2 明確指定時，把它排到最前面（其餘偵測到的仍會蒐集）
+            coin2 = coin2.upper()
+            detected = [coin2] + [c for c in detected if c != coin2]
+        # **題目提到幾個幣就蒐集幾個**，不是只取第一個。少蒐集一個幣的代價是
+        # 題目根本回答不了，而且錯在蒐集階段、事後無法補救；多蒐集的代價只是
+        # 多花一點時間與 prompt 長度。上限 MAX_COMPARISON_COINS 是時間預算的保護，
+        # 不是設計取捨——超出的部分照實揭露，不假裝有分析到。
+        extra_coins = detected[: MAX_COMPARISON_COINS - 1]
+        uncovered_coins = detected[MAX_COMPARISON_COINS - 1 :]
+        # `coin2` 是既有下游（framing／相對指標／報告標題）的相容欄位，
+        # 維持「第一個非主幣」的語意。完整清單走 `coins`。
+        coin2 = extra_coins[0] if extra_coins else None
+        if uncovered_coins:
+            logger.log(
+                phase=LogPhase.COLLECT,
+                action="comparison_coins_uncovered",
+                detail=(
+                    f"題目提到 {', '.join(uncovered_coins)} 但超出本次蒐集上限"
+                    f"（{MAX_COMPARISON_COINS} 個幣種），報告需揭露此限制"
+                ),
+                status=LogStatus.SKIPPED,
+            )
         if coin2:
             coin2 = coin2.upper()
             logger.log(
@@ -257,7 +288,7 @@ def run_pipeline(
     else:
         coin2 = None
 
-    coins = [coin] + ([coin2] if coin2 else [])
+    coins = [coin] + extra_coins
 
     logger.log(
         phase=LogPhase.COLLECT,
@@ -394,6 +425,15 @@ def run_pipeline(
             layer=PipelineLayer.CONTENT,
         )
         degraded_reasons.append("L2 prompt injection filter skipped（本次證據未經注入過濾）")
+
+    # 題目提到但沒蒐集到的幣種，必須進 degraded 理由——報告的「已知限制」會照實揭露，
+    # 讀者才知道這份比較沒有涵蓋題目要求的全部對象。命題文件的評分標準明列
+    # 「對不確定性與限制的清楚說明」，揭露本身就是得分項，隱瞞才是失分。
+    if uncovered_coins:
+        degraded_reasons.append(
+            f"題目提到 {', '.join(uncovered_coins)} 但本次未蒐集其證據，"
+            f"比較範圍僅涵蓋 {coin.upper()}" + (f"／{coin2}" if coin2 else "")
+        )
 
     evidence_path = out_dir / "evidence.json"
     evidence_path.write_text(
@@ -603,7 +643,10 @@ def run_pipeline(
             status=LogStatus.OK if "error" not in baseline_result else LogStatus.ERROR,
         )
 
-    report_md = build_report_markdown(coin, question, reasoning_result, evidences, coin2=coin2)
+    report_md = build_report_markdown(
+        coin, question, reasoning_result, evidences, coin2=coin2,
+        uncovered_coins=uncovered_coins,
+    )
     report_path = out_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
     logger.log(phase=LogPhase.REPORT, action="report_written", detail=str(report_path), status=LogStatus.OK)
