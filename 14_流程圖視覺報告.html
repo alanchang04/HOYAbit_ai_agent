@@ -44,6 +44,45 @@
     Evidence Card 則顯示卡片 schema 出處、對應欄位（如 cpi 的
     primary_horizon → reaction_window）與「schema 有、這次填不出來」的格子。
     panews_sentiment 另外顯示爬蟲文字的注入防護結果（隔離／標記篇數）。
+  ⑤比較題支援多幣種並排——Stage 1 的 asset 本來就是陣列（後端 prompt 明說「幣種
+    代號陣列」），但前端原本只取 `data.asset[0]`，後面每一層都只跑第一個幣：
+    問「BTC 跟 ETH 哪個比較強」畫面上只出現 BTC 那一套，比較題等於只答一半。
+    現在**每一層都逐幣各跑一次**，同一個 factor 的多個幣左右並排對照：
+      Stage 2/4/5（畫面 2/3/4）每個幣各打一次 /api/stage5（併發），各自獨立成功／失敗
+      Stage 6（畫面 5）每個幣各畫一張 Evidence Graph——關係是「同一個幣這批卡片
+        之間」的關係，兩個幣混在同一張圖會畫出不存在的跨幣邊
+      Stage 7-9（畫面 6-8）每個幣各跑一條完整推理鏈（不是把兩個幣的證據丟進
+        同一條鏈混算成一份結論），成本＝7 × 幣數 次 LLM，按鈕上會標出來
+      Knowledge Layer 一個 factor 只打一次（純查表跟幣種無關），逐幣渲染差在
+        Scope 那格會依當次幣種判斷適不適用
+    版面：比較題把頁寬從 880px 放寬到 1240px，欄數用 CSS auto-fit 自動決定；
+    單幣查詢走完全同一條路徑（只是一欄），不另外養一套「比較模式」渲染邏輯。
+    Execution Log 逐列標幣種（`_coin`，畫面用），下載的 .jsonl 會剝掉這個欄位，
+    維持跟 agent/schemas.LogEntry 對齊。
+  ⑥比較裁決層——⑤只是把各幣結論**並排**，沒有人真的做比較（Ken 從畫面上抓到：
+    SOL 那條鏈自己在 limitations 寫「缺乏 BTC 相關數據，無法完成比較走勢分析」，
+    因為每條鏈都只看得到自己的幣）。兩個修正：
+      a. 各幣鏈的問題**限定範圍**（前端 scopedQuery）——明講「這是比較題拆出來的
+         單幣分析，比較留給後面的比較層」，各幣鏈就不會把「缺別的幣資料」當成
+         自己的主要限制。實際送出的全文顯示在該欄可展開的區塊裡，不藏。
+      b. 全部跑完後**再跑一條合併鏈**：把所有幣的卡片一次餵進同一條推理鏈並傳
+         coin2。這不是新寫的比較邏輯——既有推理鏈本來就有 comparison 模式：
+         classify_question_type() 判題型、辯論框架換成「正方挺 coin／反方挺 coin2」
+         （prompts.py 的 BULL/BEAR_FRAMING_COMPARISON_WITH_COIN2）、Step A/B/D
+         的 prompt 會要求分幣種摘要與比對、coins_with_evidence 從 Evidence.coin 推。
+         正式 pipeline 的 agent/orchestrator.py 處理比較題就是這條路。
+    後端配合改兩處（webapp/stage1_demo_api.py）：`/api/stage789` 新增 `cards_by_coin`
+    （{幣種: 卡片}）並自動推 coin2；`_cards_to_evidences()` 改吃逐幣分組——每筆
+    Evidence 帶自己的 coin，關係圖**逐幣各建一張再合併**（`_build_evidence_graph`
+    內部用 {factor: card} 索引，兩幣混在一起會讓同名 factor 互相覆蓋，畫出
+    FUNDING_RATE_SOL --supports--> ACTIVE_ADDRESS_BTC 這種不存在的跨幣邊）。
+    測試見 tests/test_demo_api_comparison.py。
+    比較層畫面：上半是前端純算的對照表（信心分數／三維度／Base／辯論調整／
+    各幣最高權重證據，不打 LLM，合併鏈還在跑就先看得到），下半是合併鏈的比較結論。
+    ⚠ 兩個誠實缺口寫在畫面上：①這支 demo 的 factor 集合沒有任何跨幣指標
+    （relative.py 那組 collector 正式 pipeline 才有），比較完全建立在各幣自己的
+    證據上；②對照表比的是**分析可信度**不是幣的強弱——信心分數高只代表那一邊的
+    判斷比較站得住腳。成本：7 ×（幣數 ＋ 1）次 LLM，按鈕上會標出來。
   全部為真實可互動 demo，呼叫 HOYAbit_ai_agent/webapp/stage1_demo_api.py：
     Stage 1 打 Bedrock 判斷 Asset/Horizon/Research Goal（單一 LLM call）
     Stage 2/3/4/5（設計編號，畫面 2/3/4）由同一次 /api/stage5 呼叫驅動（避免多次 LLM 窗口判斷不一致）
@@ -87,6 +126,8 @@
     --accent-8-bg: #f5e2e8;
     --accent-9: #2f3f8f;   /* Stage 9（畫面編號 8）— 結論層＋信心分數，已可互動 */
     --accent-9-bg: #e2e5f5;
+    --accent-10: #7a2f8f;  /* 比較裁決層 — 只有比較題會出現 */
+    --accent-10-bg: #f3e4f7;
     --accent-log: #4a4740;  /* Execution Log — 中性灰，不跟任何 stage 搶色 */
     --accent-log-bg: #eeece4;
     --danger: #a13f2f;
@@ -122,6 +163,8 @@
       --accent-8-bg: #331c26;
       --accent-9: #8a97e0;
       --accent-9-bg: #1c1f33;
+      --accent-10: #d08ae0;
+      --accent-10-bg: #2e1c33;
       --accent-log: #b8b4a6;
       --accent-log-bg: #24231d;
       --danger: #e08a78;
@@ -142,6 +185,7 @@
     --accent-7: #d9b95c; --accent-7-bg: #332c18;
     --accent-8: #e08aa8; --accent-8-bg: #331c26;
     --accent-9: #8a97e0; --accent-9-bg: #1c1f33;
+    --accent-10: #d08ae0; --accent-10-bg: #2e1c33;
     --danger: #e08a78; --danger-bg: #3a2420;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
   }
@@ -158,6 +202,7 @@
     --accent-7: #8a6d1f; --accent-7-bg: #f3ecd7;
     --accent-8: #8f2f4f; --accent-8-bg: #f5e2e8;
     --accent-9: #2f3f8f; --accent-9-bg: #e2e5f5;
+    --accent-10: #7a2f8f; --accent-10-bg: #f3e4f7;
     --danger: #a13f2f; --danger-bg: #f6e6e2;
     --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
   }
@@ -409,6 +454,30 @@
   .s9 .stage-title { color: var(--accent-9); }
   .s9 .stage-tag { background: var(--accent-9); color: var(--accent-9-bg); }
 
+  /* ---- 比較裁決層（只有比較題會出現） ---- */
+  .s10 { background: var(--accent-10-bg); }
+  .s10 .stage-badge { background: var(--accent-10); color: var(--accent-10-bg); }
+  .s10 .stage-title { color: var(--accent-10); }
+  .s10 .stage-tag { background: var(--accent-10); color: var(--accent-10-bg); }
+  .cmp-table {
+    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  .cmp-table th, .cmp-table td { padding: 9px 12px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .cmp-table thead th {
+    font-size: 11.5px; font-weight: 700; color: var(--muted);
+    background: var(--surface-2); border-bottom: 1px solid var(--line-strong);
+  }
+  .cmp-table tbody tr + tr td { border-top: 1px solid var(--line); }
+  .cmp-table td.num { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .cmp-table td.k { color: var(--ink-2); }
+  .cmp-table .cmp-hi { color: var(--accent-10); font-weight: 700; }
+  .cmp-verdict {
+    margin-top: 16px; padding: 16px 18px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line-strong);
+  }
+  .cmp-verdict h4 { margin: 0 0 10px; font-size: 13px; color: var(--accent-10); }
+
   /* Stage 6-8（辯論鏈）觸發按鈕：這段很貴（最多 7 次 LLM），不像前面自動打，
      要 Ken 自己按才會跑。 */
   .reason-trigger {
@@ -446,6 +515,14 @@
   .debate-turn .dt-evidence { margin-top: 8px; }
   .debate-turn p { margin: 0 0 9px; }
   .debate-turn p:last-of-type { margin-bottom: 0; }
+  /* 【小標】：自己一行、加粗，跟內文分開——這幾段常常是「回應批評一/二/三」這種平行結構 */
+  .seg { margin: 0 0 10px; }
+  .seg:last-of-type { margin-bottom: 0; }
+  .seg-h {
+    /* 用 em 不用 px：同一支 paragraphize 也給結論層（14.5px）用，寫死 px 會讓小標比內文還小 */
+    display: block; font-weight: 700; font-size: .95em; letter-spacing: .01em;
+    margin-bottom: 3px; opacity: .92;
+  }
   .debate-turn .dt-critique p:last-of-type { margin-bottom: 0; }
 
   .fact-item { padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -516,6 +593,42 @@
   /* 一個 factor 佔滿一整列、由上往下堆疊——每個 factor 的欄位在寬版面裡
      左右對齊比較好讀，不會被擠成窄欄折行。 */
   .factor-row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+  /* ---- 比較題：多幣種並排（2026-08-02 新增） ----
+     Stage 1 的 asset 本來就是陣列，問「BTC 跟 ETH 哪個…」會回多個幣，
+     但前端原本只取 data.asset[0]，後面每一層都只跑第一個幣——比較題等於
+     只答了一半。現在每一層都逐幣各跑一次，同一個 factor 的多個幣**左右並排**
+     直接對照（不是上下堆疊，比較題最需要看的就是同一格數字兩邊差多少）。
+     單幣查詢走完全同一條路徑，只是欄數 1、不套 .multi——不另外寫一套
+     「比較模式」的渲染邏輯，避免兩條路各自長歪。 */
+  body.compare .wrap { max-width: 1240px; }
+  .asset-cols { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  /* auto-fit：兩個幣各佔一半，三四個幣自動排成三四欄，欄寬不足 300px 就換行——
+     不用把幣數寫進 CSS 變數，也不會出現五個幣擠成 240px 的慘況。 */
+  .asset-cols.multi { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+  .asset-col { min-width: 0; }   /* 不加這行，長字串／JSON 會把欄位撐爆整個 grid */
+  .asset-col-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+  }
+  .asset-chip {
+    padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: .02em;
+  }
+  /* 幣種色票：同一個幣在每一層都是同一個顏色，跨層掃視時對得起來 */
+  .asset-chip.a0 { background: var(--accent-1); color: var(--accent-1-bg); }
+  .asset-chip.a1 { background: var(--accent-8); color: var(--accent-8-bg); }
+  .asset-chip.a2 { background: var(--accent-4); color: var(--accent-4-bg); }
+  .asset-chip.a3 { background: var(--accent-2); color: var(--accent-2-bg); }
+  .asset-chip.a4 { background: var(--accent-7); color: var(--accent-7-bg); }
+  .compare-note {
+    margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px;
+    background: var(--surface); border: 1px dashed var(--line-strong); color: var(--ink-2);
+  }
+  .log-coin {
+    display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; background: var(--surface-2);
+    border: 1px solid var(--line-strong); color: var(--ink-2);
+  }
 
   /* 出處清單：預設收合，避免一長串網址把卡片撐爛 */
   .ref-box {
@@ -611,6 +724,7 @@
       <p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">
         設計文件：<code>13_流程圖迭代定案v2.md</code>（Stage 1-9 這輪異動）／完整迭代脈絡見 <code>07_流程圖迭代定案.md</code>。
         本頁 Stage 1-9（設計文件編號，非畫面 badge 編號）全部接上真實資料與真實 LLM 呼叫，Statistical／Event／Sentiment 三型都有；Stage 6 Evidence Graph 吃 Stage 5 同一份回應在前端畫圖，不再打一次 API；Stage 7-9（交叉驗證／辯論／結論＋信心分數）直接呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈（不重寫一套新的），手動按鈕觸發，不像前面自動打——最多 7 次 LLM 呼叫，太貴不能每次查詢自動跑。
+        <br><b>比較題（2026-08-02 新增）</b>：Stage 1 判斷出多個幣種時，下面每一層都會針對<b>每個幣各跑一次</b>並左右並排對照——包含各自的資料抓取、權重、Evidence Card 排序、關係圖，以及各自一條完整推理辯論鏈。各幣鏈跑完後，<b>再跑一條合併鏈做比較裁決</b>：把所有幣的證據餵進同一條推理鏈並指定對打方，辯論框架自動變成「正方挺 A／反方挺 B」，最後才會有真正的比較結論——不是兩份獨立結論擺在一起就算比較過了。成本＝7 ×（幣數＋1）次 LLM。
       </p>
       <table>
         <tr><th>項目</th><th>11 原設計</th><th>13 這輪改動</th></tr>
@@ -677,6 +791,7 @@
             <div class="v" id="r-goal"></div>
           </div>
         </div>
+        <div class="compare-note" id="compare-note" style="display:none;"></div>
         <div class="reasoning" id="r-reasoning"></div>
       </div>
 
@@ -695,9 +810,9 @@
             <thead><tr><th>型別</th><th>窗口的單位與意義</th><th>算得出來的欄位</th><th>算不出來（結構性，不是漏做）</th></tr></thead>
             <tbody>
               <tr>
-                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf</div></td>
+                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf · momentum</div></td>
                 <td><div class="t-lead">天 — 回看多久</div><div class="t-why">由 LLM 依 Horizon 現場判斷</div></td>
-                <td><div class="t-lead">現值 · <code>percentile</code> · <code>trend</code></div><div class="t-why">percentile 是相對這段窗口的位置；trend 是窗口內前後半段比較</div></td>
+                <td><div class="t-lead">現值 · <code>percentile</code> · <code>trend</code></div><div class="t-why">percentile 是相對這段窗口的位置；trend 是窗口內前後半段比較。momentum（RSI14）純本地計算，不打外部 API</div></td>
                 <td><div class="t-why">—</div></td>
               </tr>
               <tr>
@@ -738,8 +853,8 @@
             <thead><tr><th>型別</th><th>Prior Weight 怎麼來</th><th>Modifier 的線索差在哪</th></tr></thead>
             <tbody>
               <tr>
-                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf · panews_sentiment</div></td>
-                <td><div class="t-lead"><code>rolling_spearman_ic</code> 現場真的算</div><div class="t-why">它們每天都有連續數值，可以跟未來報酬配對算相關係數</div></td>
+                <td><span class="t-chip stat">Statistical</span><div class="t-factors">funding_rate · active_address · etf · panews_sentiment · momentum</div></td>
+                <td><div class="t-lead"><code>rolling_spearman_ic</code> 現場真的算</div><div class="t-why">它們每天都有連續數值，可以跟未來報酬配對算相關係數。momentum 用本地 RSI14 序列配本地價格 forward return，實測 BTC／14天 ic≈0.032</div></td>
                 <td><div class="t-lead">比對 <code>applicable_days</code></div><div class="t-why">關聯訊號讀 <code>confirms</code> ／ <code>conflicts</code></div></td>
               </tr>
               <tr>
@@ -780,7 +895,7 @@
       </div>
 
       <div class="reason-trigger">
-        <span class="rt-note">下面三層（交叉驗證／辯論／結論）呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈，最多 7 次 LLM 呼叫、實測數十秒——不像前面自動打，按下去才會跑。</span>
+        <span class="rt-note" id="rt-note">下面三層（交叉驗證／辯論／結論）呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈，最多 7 次 LLM 呼叫、實測數十秒——不像前面自動打，按下去才會跑。</span>
         <span class="spinner" id="reason-spinner"></span>
         <button class="primary" id="reason-btn" type="button">開始推理辯論 →</button>
       </div>
@@ -820,6 +935,18 @@
         <div class="conclusion-box" id="conclusion-body"></div>
         <div class="mini-error" id="conclusion-live-error"></div>
         <div class="todo-note"><span class="dot"></span><span>對應 Step D＋L5 三維信心分數。<code>limitations</code>／<code>invalidation_conditions</code> 是報告本來就該有的自我修正機制——寫清楚「什麼情況下這個結論會被推翻」，不是自信滿滿講死。</span></div>
+      </div>
+
+      <div class="stage-card s10 hidden" id="compare-card">
+        <div class="stage-head">
+          <span class="stage-badge">⚖</span>
+          <span class="stage-title">比較裁決層 — 回答「哪個比較強」</span>
+          <span class="stage-tag" id="compare-live-pill">待執行…</span>
+        </div>
+        <div class="stage-lead"><b>把上面各幣各自的結論，收斂成一個比較判斷。</b>上面每一欄都只看得到自己那個幣，誰都沒有回答題目真正問的「兩個相比哪個如何」。這一層把<b>所有幣的證據餵進同一條推理鏈</b>，並告訴它誰對打誰——辯論框架自動變成「正方挺 A／反方挺 B」，結論才會是比較結論而不是兩份獨立結論。</div>
+        <div id="compare-body"></div>
+        <div class="mini-error" id="compare-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span><b>不是新寫的一套比較邏輯</b>——呼叫的還是同一支 <code>agent/reasoning/pipeline.py</code>，只是這次餵多幣證據（每筆 Evidence 帶自己的 <code>coin</code>）並傳 <code>coin2</code>：<code>classify_question_type()</code> 判出 <code>comparison</code>、辯論框架換成「正方挺 <code>coin</code>／反方挺 <code>coin2</code>」（見 <code>prompts.py</code> 的 <code>BULL_FRAMING_COMPARISON_WITH_COIN2</code>），Step A/B/D 的 prompt 也會要求分幣種摘要與比對。正式 pipeline 的 <code>agent/orchestrator.py</code> 處理比較題就是這個路徑。⚠ 兩個誠實缺口：<b>①</b> 這支 demo 的 factor 集合<b>沒有任何跨幣指標</b>（相對強弱、跨幣費率差那組 collector 在 <code>agent/collectors/relative.py</code>，正式 pipeline 才有），所以比較完全建立在各幣自己的證據上；<b>②</b> 上方對照表是<b>分析可信度</b>的對照，不是幣本身的強弱——信心分數高只代表那一邊的判斷比較站得住腳，不代表那個幣比較看好。</span></div>
       </div>
 
       <div class="stage-card slog">
@@ -881,7 +1008,7 @@
       const cls = e.status === "error" ? "log-error" : (e.status === "skipped" ? "log-skipped" : "log-ok");
       return `<tr>
         <td class="mono">${escLog((e.ts || "").replace("T", " ").replace("Z", ""))}</td>
-        <td class="mono">${escLog(e.phase)}${e.layer ? `<div class="log-layer">${escLog(e.layer)}</div>` : ""}</td>
+        <td class="mono">${escLog(e.phase)}${e._coin ? `<span class="log-coin">${escLog(e._coin)}</span>` : ""}${e.layer ? `<div class="log-layer">${escLog(e.layer)}</div>` : ""}</td>
         <td class="mono">${escLog(e.action)}</td>
         <td>${escLog(e.detail)}</td>
         <td><span class="log-status ${cls}">${escLog(e.status)}</span></td>
@@ -897,25 +1024,30 @@
     logPill.classList.toggle("err", errs > 0);
   }
 
-  function appendExecutionLog(entries) {
+  // coin 是**畫面用**的標註（比較題會有多個幣併發，時間軸交錯在一起，
+  // 不標的話根本看不出某一列是哪個幣的）。刻意存成底線開頭的 `_coin`，
+  // 且下載 .jsonl 時剝掉——欄位要跟正式 pipeline 的 agent/schemas.LogEntry
+  // 對齊才能並排比對，不能為了畫面方便多塞一個欄位進交付檔。
+  function appendExecutionLog(entries, coin) {
     if (!Array.isArray(entries) || !entries.length) return;
-    executionLog = executionLog.concat(entries);
+    executionLog = executionLog.concat(coin ? entries.map(e => ({ ...e, _coin: coin })) : entries);
     renderExecutionLog();
   }
 
-  function logClientError(action, msg) {
+  function logClientError(action, msg, coin) {
     // 前端看到的失敗也要進紀錄，否則 log 會停在最後一次成功的 stage，
     // 看不出後面究竟是沒跑還是跑掉了。
     appendExecutionLog([{
       ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       phase: "collect", action, detail: msg, status: "error", layer: null, metrics: {},
-    }]);
+    }], coin);
   }
 
   logDownloadBtn.addEventListener("click", () => {
     if (!executionLog.length) return;
     const blob = new Blob(
-      [executionLog.map(e => JSON.stringify(e)).join("\n") + "\n"],
+      // eslint-disable-next-line no-unused-vars —— _coin 是畫面用標註，不進交付檔
+      [executionLog.map(({ _coin, ...e }) => JSON.stringify(e)).join("\n") + "\n"],
       { type: "application/x-ndjson" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -934,9 +1066,15 @@
   // Stage 6-8（交叉驗證／辯論／結論）要重用 Stage 1 的原始問題跟 Stage 5 已經
   // 組好的卡片——不重新問一次 LLM、不重新跑一次 Stage 2-5，跟 Stage 5 圖表
   // 沿用同一份 Stage 5 回應是同一個理由（見 fetchPipeline 的註解）。
+  //
+  // ⚠️ 幣種一律是**陣列** currentAssets，不是單一 currentCoin（2026-08-02 改）：
+  // Stage 1 的 asset 本來就可能回多個幣（比較題），舊版 `data.asset[0]` 只取第一個，
+  // 後面每一層都只跑那一個幣——問「BTC 跟 ETH 哪個…」畫面上只出現 BTC 那一套，
+  // 比較題等於沒答完。卡片改成逐幣存放（cardsByCoin），下游要哪個幣自己取。
   let currentQuery = "";
-  let currentCoin = "";
-  let currentEvidenceCards = [];
+  let currentAssets = [];
+  let cardsByCoin = {};
+  let reasoningByCoin = {};   // {幣種: /api/stage789 回應}，比較裁決層的對照表要用
 
   function showError(msg) {
     errorBox.textContent = msg;
@@ -975,15 +1113,25 @@
       page2.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      const firstAsset = Array.isArray(data.asset) ? data.asset[0] : data.asset;
+      const assets = normalizeAssets(data.asset);
       currentQuery = query;
-      currentCoin = firstAsset || "";
-      currentEvidenceCards = [];
+      currentAssets = assets;
+      cardsByCoin = {};
+      reasoningByCoin = {};
+      // 比較題把頁寬放寬，讓每個幣的欄位不會被擠成窄條（單幣維持原本 880px）
+      document.body.classList.toggle("compare", assets.length > 1);
+      // 骨架改成「知道有哪幾個幣」之後才生成——欄數是幣數決定的，不能在載入時就寫死
+      buildAssetSkeletons(assets);
       resetReasoningStages();
+      if (!assets.length) {
+        showError("Stage 1 沒有判斷出任何幣種，後面幾層無法執行。");
+        return;
+      }
       // Stage 3 是純查表（讀檔），立刻就能顯示，不用等 Stage 2/4/5 的 API。
-      fetchAllStage3(firstAsset, data.horizon);
-      // Stage 2/4/5 由同一次 /api/stage5 驅動，確保三個區塊的數字一致。
-      if (firstAsset) fetchPipeline(firstAsset, data.horizon);
+      fetchAllStage3(assets, data.horizon);
+      // Stage 2/4/5 由同一次 /api/stage5 驅動，確保三個區塊的數字一致；
+      // 多個幣就各打一次（併發），彼此獨立失敗、獨立顯示。
+      runPipelines(assets, data.horizon);
     } catch (err) {
       const msg = String(err.message || err);
       const isCred = /AWS_SESSION_TOKEN|凭证|憑證|ExpiredToken|UnrecognizedClientException/i.test(msg);
@@ -1015,12 +1163,59 @@
     document.getElementById("r-horizon").textContent = data.horizon || "—";
     document.getElementById("r-goal").textContent = data.research_goal || "—";
     document.getElementById("r-reasoning").textContent = data.reasoning ? ("判斷依據：" + data.reasoning) : "";
+
+    // 比較題（Stage 1 判出多個幣）要在這裡就講清楚後面會怎麼跑，否則使用者看到
+    // 下面每一層突然變成兩欄會不知道那是什麼
+    const list = normalizeAssets(data.asset);
+    const note = document.getElementById("compare-note");
+    if (list.length > 1) {
+      note.innerHTML = `<b>比較題</b>——Stage 1 判斷出 ${list.length} 個幣種（${list.join("／")}）。`
+        + `下面每一層都會針對<b>每個幣各跑一次</b>，同一個 factor 的多個幣左右並排對照；`
+        + `每個幣的資料抓取、權重、卡片、關係圖、推理辯論全部各自獨立，不互相覆蓋、也不混算成一個。`;
+      note.style.display = "block";
+    } else {
+      note.style.display = "none";
+    }
+  }
+
+  // ---------- 多幣共用工具（比較題的核心：每一層都逐幣渲染） ----------
+  // Stage 1 回傳的 asset 可能是陣列、也可能是單一字串（舊格式），一律正規化成
+  // 去重＋大寫的陣列——後端 /api/stage5、/api/stage789 都用大寫幣別驗證。
+  function normalizeAssets(raw) {
+    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    return [...new Set(list.map(a => String(a).trim().toUpperCase()).filter(Boolean))];
+  }
+
+  function assetColsHtml(assets, colInner) {
+    const multi = assets.length > 1 ? " multi" : "";
+    return `<div class="asset-cols${multi}">`
+      + assets.map((coin, i) => `<div class="asset-col">${colInner(coin, i)}</div>`).join("")
+      + `</div>`;
+  }
+
+  // 幣種標頭（色票＋該欄自己的狀態 pill）。單幣時照樣顯示——一條路徑走到底，
+  // 不為了「單幣要跟改版前長得一模一樣」多養一套分支。
+  function assetHeadHtml(coin, i, pillId, pillLabel) {
+    return `<div class="asset-col-head">
+      <span class="asset-chip a${i % 5}">${coin}</span>
+      <span class="live-pill" id="${pillId}">${pillLabel}</span>
+    </div>`;
+  }
+
+  // 各欄的狀態 pill 彙總成一句話放在該層標題右邊：全成功講幾個幣，
+  // 有失敗就把失敗的幣名列出來，不要只顯示「失敗」讓人不知道是哪個幣掛了。
+  function summarizePills(pill, okCoins, failCoins, okLabel) {
+    const parts = [];
+    if (okCoins.length) parts.push(`${okCoins.join("／")} ${okLabel}`);
+    if (failCoins.length) parts.push(`${failCoins.join("／")} 失敗`);
+    pill.textContent = parts.join("・") || "無資料";
+    pill.classList.toggle("err", failCoins.length > 0);
   }
 
   // ---------- 六個 factor 共用的骨架（FACTOR_IDS 是單一事實來源，別處要顯示
   // factor 數量一律讀 FACTOR_IDS.length 或 Object.keys(byFactor).length，
   // 不要手寫數字——手寫數字就是這次 etf 加進來後被抓到的那種 bug）----------
-  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "panews_sentiment", "etf", "price", "orderbook_depth"];
+  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "panews_sentiment", "etf", "price", "orderbook_depth", "momentum"];
   const FACTOR_TYPE_LABEL = {
     funding_rate: "Statistical",
     active_address: "Statistical",
@@ -1029,58 +1224,90 @@
     etf: "Statistical（樣本天花板，僅近9-10天）",
     price: "Statistical（即時快照，無歷史序列）",
     orderbook_depth: "Snapshot（當下狀態，無歷史）",
+    momentum: "Statistical（RSI14，本地計算，現場算 ic）",
   };
 
-  function blockSkeleton(prefix, waitingLabel) {
+  // 每個 factor 一個區塊，區塊內部再按幣種切欄——同一個 factor 的 BTC／ETH
+  // 左右並排，比較題最想看的就是同一格數字兩邊差多少。
+  function blockSkeleton(prefix, waitingLabel, assets) {
     return FACTOR_IDS.map(id => `
       <div class="schema-block" id="${prefix}-${id}-block">
-        <h4>${id}（${FACTOR_TYPE_LABEL[id]}） <span class="live-pill" id="${prefix}-${id}-pill">${waitingLabel}</span></h4>
-        <div class="live-result" id="${prefix}-${id}-result"></div>
-        <div class="mini-error" id="${prefix}-${id}-error"></div>
+        <h4>${id}（${FACTOR_TYPE_LABEL[id]}）</h4>
+        ${assetColsHtml(assets, (coin, i) => `
+          ${assetHeadHtml(coin, i, `${prefix}-${id}-${coin}-pill`, waitingLabel)}
+          <div class="live-result" id="${prefix}-${id}-${coin}-result"></div>
+          <div class="mini-error" id="${prefix}-${id}-${coin}-error"></div>
+        `)}
       </div>
     `).join("");
   }
 
   // Stage 2 卡片內嵌 Knowledge Layer（原本獨立一個 Stage 3 區塊）：
-  // 用 <details> 點開才看得到——id 跟原本 blockSkeleton("s3", ...) 產生的完全
-  // 一樣（s3-${id}-pill／result／error），fetchStage3Factor／fetchAllStage3
-  // 不用改，照抓照塞，只是塞進去的位置換了。
-  function stage2Skeleton() {
+  // 用 <details> 點開才看得到——id 規則跟 blockSkeleton 一致
+  // （s3-${factor}-${coin}-pill／result／error），只是塞進去的位置在 Stage 2 卡片裡。
+  function stage2Skeleton(assets) {
     return FACTOR_IDS.map(id => `
       <div class="schema-block" id="s2-${id}-block">
-        <h4>${id}（${FACTOR_TYPE_LABEL[id]}） <span class="live-pill" id="s2-${id}-pill">待抓取…</span></h4>
-        <div class="live-result" id="s2-${id}-result"></div>
-        <div class="mini-error" id="s2-${id}-error"></div>
-        <details class="ref-box" style="margin-top:8px;">
-          <summary>查看 Knowledge Layer <span class="live-pill" id="s3-${id}-pill">待查表…</span></summary>
-          <div class="ref-body live-result" id="s3-${id}-result"></div>
-          <div class="mini-error" id="s3-${id}-error"></div>
-        </details>
+        <h4>${id}（${FACTOR_TYPE_LABEL[id]}）</h4>
+        ${assetColsHtml(assets, (coin, i) => `
+          ${assetHeadHtml(coin, i, `s2-${id}-${coin}-pill`, "待抓取…")}
+          <div class="live-result" id="s2-${id}-${coin}-result"></div>
+          <div class="mini-error" id="s2-${id}-${coin}-error"></div>
+          <details class="ref-box" style="margin-top:8px;">
+            <summary>查看 Knowledge Layer <span class="live-pill" id="s3-${id}-${coin}-pill">待查表…</span></summary>
+            <div class="ref-body live-result" id="s3-${id}-${coin}-result"></div>
+            <div class="mini-error" id="s3-${id}-${coin}-error"></div>
+          </details>
+        `)}
       </div>
     `).join("");
   }
 
-  document.getElementById("stage2-factors").innerHTML = stage2Skeleton();
-  document.getElementById("stage4-factors").innerHTML = blockSkeleton("s4", "待計算…");
-
-  function el(prefix, id, kind) { return document.getElementById(`${prefix}-${id}-${kind}`); }
-
-  function blockStart(prefix, id, label) {
-    el(prefix, id, "pill").textContent = label;
-    el(prefix, id, "pill").classList.remove("err");
-    el(prefix, id, "error").style.display = "none";
-    el(prefix, id, "result").style.display = "none";
+  // 骨架在「知道這次要跑哪幾個幣」之後才生成——欄數由幣數決定，不能在載入時寫死。
+  // Stage 4（畫面 5）Evidence Graph 與 Stage 4 卡片區也一起建，全部照同一組
+  // `${prefix}-${coin}-*` id 規則，下面各層各自往自己的欄位塞。
+  function buildAssetSkeletons(assets) {
+    document.getElementById("stage2-factors").innerHTML = stage2Skeleton(assets);
+    document.getElementById("stage4-factors").innerHTML = blockSkeleton("s4", "待計算…", assets);
+    stage5Cards.innerHTML = assetColsHtml(assets, (coin, i) => `
+      ${assetHeadHtml(coin, i, `s5-${coin}-pill`, "待組裝…")}
+      <div id="s5-${coin}-cards"></div>
+      <div class="mini-error" id="s5-${coin}-error"></div>
+    `);
+    graphBody.innerHTML = assetColsHtml(assets, (coin, i) => `
+      ${assetHeadHtml(coin, i, `graph-${coin}-pill`, "待畫圖…")}
+      <div id="graph-${coin}-body"></div>
+      <div class="mini-error" id="graph-${coin}-error"></div>
+    `);
+    buildReasoningSkeletons(assets);
+    // 推理層的價格標示要跟著幣數改：兩個幣就是兩條完整推理鏈，成本翻倍
+    document.getElementById("rt-note").innerHTML = assets.length > 1
+      ? `下面三層（交叉驗證／辯論／結論）呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈。`
+        + `這次是<b>比較題（${assets.length} 個幣）</b>：${assets.join("／")} <b>各跑一條</b>（各自只看自己的證據），`
+        + `全部跑完後<b>再跑一條合併鏈做比較裁決</b>（同時吃所有幣的證據）`
+        + `——最多 ${7 * (assets.length + 1)} 次 LLM 呼叫（${assets.length} 幣 × 7 ＋ 比較 7），併發送出但實測數十秒起跳。`
+      : `下面三層（交叉驗證／辯論／結論）呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈，`
+        + `最多 7 次 LLM 呼叫、實測數十秒——不像前面自動打，按下去才會跑。`;
   }
-  function blockDone(prefix, id, label, html) {
-    el(prefix, id, "pill").textContent = label;
-    el(prefix, id, "result").innerHTML = html;
-    el(prefix, id, "result").style.display = "block";
+
+  function el(prefix, id, coin, kind) { return document.getElementById(`${prefix}-${id}-${coin}-${kind}`); }
+
+  function blockStart(prefix, id, coin, label) {
+    el(prefix, id, coin, "pill").textContent = label;
+    el(prefix, id, coin, "pill").classList.remove("err");
+    el(prefix, id, coin, "error").style.display = "none";
+    el(prefix, id, coin, "result").style.display = "none";
   }
-  function blockFail(prefix, id, label, msg) {
-    el(prefix, id, "pill").textContent = label;
-    el(prefix, id, "pill").classList.add("err");
-    el(prefix, id, "error").textContent = msg;
-    el(prefix, id, "error").style.display = "block";
+  function blockDone(prefix, id, coin, label, html) {
+    el(prefix, id, coin, "pill").textContent = label;
+    el(prefix, id, coin, "result").innerHTML = html;
+    el(prefix, id, coin, "result").style.display = "block";
+  }
+  function blockFail(prefix, id, coin, label, msg) {
+    el(prefix, id, coin, "pill").textContent = label;
+    el(prefix, id, coin, "pill").classList.add("err");
+    el(prefix, id, coin, "error").textContent = msg;
+    el(prefix, id, coin, "error").style.display = "block";
   }
 
   function chipsHtml(list) {
@@ -1245,20 +1472,28 @@
     `;
   }
 
-  async function fetchStage3Factor(factorId, ctx) {
-    blockStart("s3", factorId, "查表中…");
+  // Knowledge 本身跟幣種無關（純查表讀 md），所以**一個 factor 只打一次**，
+  // 再逐幣渲染——多個幣打多次只是重複讀同一份檔。逐幣渲染仍有差別：
+  // Scope 那格會依 ctx.coin 判斷「這次問的幣適不適用」（見 scopeAssetsHtml）。
+  async function fetchStage3Factor(factorId, assets, horizon) {
+    assets.forEach(coin => blockStart("s3", factorId, coin, "查表中…"));
     try {
       const res = await fetch(`${API_BASE}/api/stage3/${factorId}`);
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
-      blockDone("s3", factorId, "live · " + data.knowledge.last_updated, knowledgeHtml(data.knowledge, ctx));
+      assets.forEach(coin => blockDone(
+        "s3", factorId, coin,
+        "live · " + data.knowledge.last_updated,
+        knowledgeHtml(data.knowledge, { coin, horizon }),
+      ));
     } catch (err) {
-      blockFail("s3", factorId, "查表失敗", String(err.message || err));
+      const msg = String(err.message || err);
+      assets.forEach(coin => blockFail("s3", factorId, coin, "查表失敗", msg));
     }
   }
 
-  function fetchAllStage3(coin, horizon) {
-    FACTOR_IDS.forEach(id => fetchStage3Factor(id, { coin, horizon }));
+  function fetchAllStage3(assets, horizon) {
+    FACTOR_IDS.forEach(id => fetchStage3Factor(id, assets, horizon));
   }
 
   // ---------- Stage 2 / 4 / 5：由同一次 /api/stage5 呼叫驅動 ----------
@@ -1772,40 +2007,45 @@
     `;
   }
 
-  function renderGraph(cards) {
+  // 逐幣各畫一張圖：關係是「這個幣這批卡片之間」的關係，兩個幣的卡片混在同一張圖裡
+  // 會畫出 FUNDING_RATE_BTC --supports--> ACTIVE_ADDRESS_ETH 這種不存在的跨幣邊。
+  function renderGraph(coin, cards) {
+    const pill = document.getElementById(`graph-${coin}-pill`);
+    const body = document.getElementById(`graph-${coin}-body`);
+    const errBox = document.getElementById(`graph-${coin}-error`);
     try {
       const graph = buildEvidenceGraph(cards);
       const isolatedCount = graph.nodes.filter(n => n.isolated).length;
-      graphLivePill.textContent = `live · ${graph.edges.length} 條邊・${isolatedCount} 個孤立節點`;
-      graphLivePill.classList.remove("err");
-      graphBody.innerHTML = graphHtml(graph);
-      graphLiveError.style.display = "none";
+      pill.textContent = `live · ${graph.edges.length} 條邊・${isolatedCount} 個孤立節點`;
+      pill.classList.remove("err");
+      body.innerHTML = graphHtml(graph);
+      errBox.style.display = "none";
     } catch (err) {
-      graphLivePill.textContent = "畫圖失敗";
-      graphLivePill.classList.add("err");
-      graphLiveError.textContent = String(err.message || err);
-      graphLiveError.style.display = "block";
+      pill.textContent = "畫圖失敗";
+      pill.classList.add("err");
+      errBox.textContent = String(err.message || err);
+      errBox.style.display = "block";
     }
   }
 
+  // 一個幣一次 /api/stage5：只動自己那幾欄，不碰別的幣，也不碰層級標題的彙總 pill
+  // （彙總交給 runPipelines，否則兩個幣的請求會互相蓋掉對方的狀態文字）。
+  // 回傳 true/false 讓 runPipelines 知道這個幣成不成功。
   async function fetchPipeline(coin, horizon) {
     FACTOR_IDS.forEach(id => {
-      blockStart("s2", id, "抓取中…");
-      blockStart("s4", id, "計算中…");
+      blockStart("s2", id, coin, "抓取中…");
+      blockStart("s4", id, coin, "計算中…");
     });
-    stage2LivePill.textContent = "抓取中…";
-    stage2LivePill.classList.remove("err");
-    weightLivePill.textContent = "計算中…";
-    weightLivePill.classList.remove("err");
-    weightLiveError.style.display = "none";
-    cardLivePill.textContent = "組裝中…（六個 factor 平行跑，約 25-45 秒）";
-    cardLivePill.classList.remove("err");
-    cardLiveError.style.display = "none";
-    stage5Cards.innerHTML = "";
-    graphLivePill.textContent = "等 Stage 5 完成…";
-    graphLivePill.classList.remove("err");
-    graphLiveError.style.display = "none";
-    graphBody.innerHTML = "";
+    const cardPill = document.getElementById(`s5-${coin}-pill`);
+    const cardErr = document.getElementById(`s5-${coin}-error`);
+    const cardBox = document.getElementById(`s5-${coin}-cards`);
+    const gPill = document.getElementById(`graph-${coin}-pill`);
+    cardPill.textContent = `組裝中…（${FACTOR_IDS.length} 個 factor 平行跑，約 25-45 秒）`;
+    cardPill.classList.remove("err");
+    cardErr.style.display = "none";
+    cardBox.innerHTML = "";
+    gPill.textContent = "等 Stage 4 完成…";
+    gPill.classList.remove("err");
 
     try {
       const res = await fetch(`${API_BASE}/api/stage5`, {
@@ -1816,7 +2056,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
 
-      appendExecutionLog(data.execution_log);
+      appendExecutionLog(data.execution_log, coin);
 
       const byFactor = {};
       (data.evidence_cards || []).forEach(c => { byFactor[c.factor] = c; });
@@ -1828,45 +2068,68 @@
         const card = byFactor[id];
         if (!card) {
           const msg = failedByFactor[id] || "這個 factor 沒有出現在回應中";
-          blockFail("s2", id, "抓取失敗", msg);
-          blockFail("s4", id, "計算失敗", msg);
+          blockFail("s2", id, coin, "抓取失敗", msg);
+          blockFail("s4", id, coin, "計算失敗", msg);
           return;
         }
-        blockDone("s2", id, "live", stage2Html(id, card.features));
+        blockDone("s2", id, coin, "live", stage2Html(id, card.features));
         const basis = (card.weight_detail && card.weight_detail.prior_weight && card.weight_detail.prior_weight.basis) || "";
-        blockDone("s4", id, basis ? "live · " + basis : "live", stage4Html(card.weight_detail));
+        blockDone("s4", id, coin, basis ? "live · " + basis : "live", stage4Html(card.weight_detail));
       });
 
-      stage2LivePill.textContent = `${Object.keys(byFactor).length} factors live`;
-      weightLivePill.textContent = `${Object.keys(byFactor).length} factors live`;
-      cardLivePill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
-      stage5Cards.innerHTML = (data.evidence_cards || [])
+      cardPill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
+      cardBox.innerHTML = (data.evidence_cards || [])
         .map((c, i) => stage5CardHtml(c, i + 1)).join("");
       if ((data.failed_factors || []).length) {
-        cardLiveError.textContent = "以下 factor 組裝失敗，未列入排序：\n" +
+        cardErr.textContent = "以下 factor 組裝失敗，未列入排序：\n" +
           data.failed_factors.map(f => `· ${f.factor}：${f.error}`).join("\n");
-        cardLiveError.style.display = "block";
+        cardErr.style.display = "block";
       }
-      renderGraph(data.evidence_cards || []);
-      currentEvidenceCards = data.evidence_cards || [];
+      renderGraph(coin, data.evidence_cards || []);
+      cardsByCoin[coin] = data.evidence_cards || [];
+      return { coin, ok: true, factors: Object.keys(byFactor).length };
     } catch (err) {
       const msg = String(err.message || err);
       FACTOR_IDS.forEach(id => {
-        blockFail("s2", id, "抓取失敗", msg);
-        blockFail("s4", id, "計算失敗", msg);
+        blockFail("s2", id, coin, "抓取失敗", msg);
+        blockFail("s4", id, coin, "計算失敗", msg);
       });
-      stage2LivePill.textContent = "抓取失敗";
-      stage2LivePill.classList.add("err");
-      weightLivePill.textContent = "計算失敗";
-      weightLivePill.classList.add("err");
-      cardLivePill.textContent = "組裝失敗";
-      cardLivePill.classList.add("err");
-      cardLiveError.textContent = msg;
-      cardLiveError.style.display = "block";
-      logClientError("stage2_5_request_failed", msg);
-      graphLivePill.textContent = "無法畫圖（Stage 5 失敗）";
-      graphLivePill.classList.add("err");
+      cardPill.textContent = "組裝失敗";
+      cardPill.classList.add("err");
+      cardErr.textContent = msg;
+      cardErr.style.display = "block";
+      logClientError("stage2_5_request_failed", `${coin}：${msg}`, coin);
+      gPill.textContent = "無法畫圖（Stage 4 失敗）";
+      gPill.classList.add("err");
+      return { coin, ok: false, factors: 0 };
     }
+  }
+
+  // 多個幣併發跑，各自獨立成功／失敗；層級標題的彙總 pill 由這裡統一收斂，
+  // 這樣「BTC 成功、ETH 失敗」會誠實顯示成兩件事，而不是最後一個回來的蓋掉前一個。
+  async function runPipelines(assets, horizon) {
+    const running = assets.length > 1 ? `${assets.length} 個幣併發抓取中…` : "抓取中…";
+    stage2LivePill.textContent = running;
+    stage2LivePill.classList.remove("err");
+    weightLivePill.textContent = assets.length > 1 ? `${assets.length} 個幣併發計算中…` : "計算中…";
+    weightLivePill.classList.remove("err");
+    weightLiveError.style.display = "none";
+    cardLivePill.textContent = assets.length > 1 ? `${assets.length} 個幣併發組裝中…` : "組裝中…";
+    cardLivePill.classList.remove("err");
+    cardLiveError.style.display = "none";
+    graphLivePill.textContent = "等 Stage 4 完成…";
+    graphLivePill.classList.remove("err");
+    graphLiveError.style.display = "none";
+
+    const results = await Promise.all(assets.map(coin => fetchPipeline(coin, horizon)));
+    const ok = results.filter(r => r.ok).map(r => r.coin);
+    const failed = results.filter(r => !r.ok).map(r => r.coin);
+    const factors = results.filter(r => r.ok).reduce((m, r) => Math.max(m, r.factors), 0);
+
+    summarizePills(stage2LivePill, ok, failed, `${factors} factors live`);
+    summarizePills(weightLivePill, ok, failed, `${factors} factors live`);
+    summarizePills(cardLivePill, ok, failed, "已排序");
+    summarizePills(graphLivePill, ok, failed, "已畫圖");
   }
   // ---------- Stage 6-8：交叉驗證／辯論／結論（呼叫 /api/stage789，手動觸發） ----------
   const reasonBtn = document.getElementById("reason-btn");
@@ -1885,9 +2148,24 @@
   const conclusionBody = document.getElementById("conclusion-body");
   const conclusionLiveError = document.getElementById("conclusion-live-error");
 
+  // 三層各自照幣種切欄；每個幣一條完整推理鏈，欄與欄之間完全獨立
+  // （不是把兩個幣的證據丟進同一條鏈裡混算——那會變成「一份混合結論」，
+  // 比較題要的是兩份可以並排對照的結論）。
+  const REASON_PREFIX = { cv: cvBody, debate: debateBody, concl: conclusionBody };
+
+  function buildReasoningSkeletons(assets) {
+    Object.entries(REASON_PREFIX).forEach(([prefix, host]) => {
+      host.innerHTML = assetColsHtml(assets, (coin, i) => `
+        ${assetHeadHtml(coin, i, `${prefix}-${coin}-pill`, "待執行…")}
+        <div id="${prefix}-${coin}-body"></div>
+        <div class="mini-error" id="${prefix}-${coin}-error"></div>
+      `);
+    });
+  }
+
   function resetReasoningStages() {
-    [stage7Card, stage8Card, stage9Card].forEach(c => c.classList.add("hidden"));
-    cvBody.innerHTML = ""; debateBody.innerHTML = ""; conclusionBody.innerHTML = "";
+    [stage7Card, stage8Card, stage9Card, document.getElementById("compare-card")]
+      .forEach(c => c.classList.add("hidden"));
     reasonErrorBox.textContent = ""; reasonErrorBox.classList.remove("on");
   }
 
@@ -1911,15 +2189,24 @@
   // LLM 吐回來的辯論／事實論證常是一整塊沒有斷行的文字，裡面自己用「第一，」
   // 「其次，」這類中文列點詞分過段——這裡照那些詞切成真正的 <p>，不改內容
   // 只加斷行，讀起來才不會是一整片牆。找不到列點詞就整段當一個 <p>。
+  // 【小標】要獨立成段落並且看得出是小標——實測辯論輸出很愛用
+  // 「【回應批評一：…】…【回應批評二：…】…」這種寫法把三四段塞成一整塊，
+  // 原本只切「第一／首先／一、」那幾種標記，遇到全形方括號整段不會斷（2026-08-02 實測）。
+  const _SEG_MARKERS = /(?=【)|(?=第[一二三四五六七八九十]+[，,、])|(?=首先[，,])|(?=其次[，,])|(?=再者[，,])|(?=最後[，,])|(?=另外[，,])|(?=同時[，,])|(?=綜合而言[，,])|(?=[一二三四五六七八九十]{1,2}、)/g;
+  const _HEADING = /^【([^】]{1,30})】\s*/;  // 超過 30 字的多半是引用內容不是小標，不硬當標題
+
   function paragraphize(text) {
     if (!text) return "";
-    // 辯論輸出實測常用「一、二、三、」裸數字條列（不帶「第」字），原本的
-    // markers 沒收這種寫法，整段就永遠只有一個 <p>，變成無格式長文
-    // （2026-08-02 實測踩到：反方逐輪批評、結論核心訊息都是這個寫法）。
-    const markers = /(?=第[一二三四五六七八九十]+[，,、])|(?=首先[，,])|(?=其次[，,])|(?=再者[，,])|(?=最後[，,])|(?=另外[，,])|(?=同時[，,])|(?=綜合而言[，,])|(?=[一二三四五六七八九十]{1,2}、)/g;
-    const parts = String(text).split(markers).map(s => s.trim()).filter(Boolean);
-    if (parts.length <= 1) return `<p>${text}</p>`;
-    return parts.map(p => `<p>${p}</p>`).join("");
+    const parts = String(text).split(_SEG_MARKERS).map(s => s.trim()).filter(Boolean);
+    const render = (seg) => {
+      const m = seg.match(_HEADING);
+      if (!m) return `<p>${seg}</p>`;
+      // 小標自己一行，內文接在下面——不是只加粗，不然還是黏成一片
+      const body = seg.slice(m[0].length).trim();
+      return `<p class="seg"><span class="seg-h">${m[1]}</span>${body}</p>`;
+    };
+    if (parts.length <= 1) return render(String(text).trim());
+    return parts.map(render).join("");
   }
 
   function factsHtml(facts) {
@@ -2111,59 +2398,268 @@
     `;
   }
 
-  async function runReasoning() {
-    if (!currentQuery || !currentCoin) {
-      reasonErrorBox.textContent = "還沒有 Stage 1 的問題／幣種可以用，請先送出上面的查詢。";
-      reasonErrorBox.classList.add("on");
-      return;
-    }
-    if (!currentEvidenceCards || currentEvidenceCards.length === 0) {
-      reasonErrorBox.textContent = "Stage 5 還沒有 Evidence Card 可用（可能還在跑，或組裝失敗），請等 Stage 4 完成再試一次。";
-      reasonErrorBox.classList.add("on");
-      return;
-    }
-    reasonErrorBox.textContent = ""; reasonErrorBox.classList.remove("on");
-    reasonBtn.disabled = true;
-    reasonSpinner.classList.add("on");
-    [stage7Card, stage8Card, stage9Card].forEach(c => c.classList.remove("hidden"));
-    cvLivePill.textContent = "推理中…（最多 7 次 LLM，數十秒）"; cvLivePill.classList.remove("err");
-    debateLivePill.textContent = "等交叉驗證完成…"; debateLivePill.classList.remove("err");
-    conclusionLivePill.textContent = "等辯論完成…"; conclusionLivePill.classList.remove("err");
-    cvBody.innerHTML = ""; debateBody.innerHTML = ""; conclusionBody.innerHTML = "";
+  // 三個區塊都包一層 .live-result（display:block 蓋掉預設 display:none）——
+  // 裡面用到的 .lr-row／.lr-note 樣式規則是寫成 `.live-result .lr-row` 這種
+  // 限定寫法（既有 CSS 慣例），沒包這層等於樣式規則整段不生效，變成無格式
+  // 純文字（2026-08-02 實測踩過這個坑，這裡修正）。
+  const LIVE_WRAP_STYLE = "display:block; margin-top:0; padding-top:0; border-top:none;";
 
+  function reasonEl(prefix, coin, kind) { return document.getElementById(`${prefix}-${coin}-${kind}`); }
+
+  // 比較題時，各幣那條鏈實際送出的問題要**限定範圍**。
+  // 不限定的話，每條鏈都拿到「SOL 與 BTC 過去一年走勢比較」但手上只有自己那個幣的
+  // 證據，於是整份結論拿去講「缺乏 BTC 相關數據，無法完成比較走勢分析」——
+  // 那不是分析結果，是餵法造成的自我抱怨（2026-08-02 Ken 從畫面上抓到）。
+  // 比較留給下面的比較裁決層做，那一層才真的同時看得到所有幣的證據。
+  // 送出的全文會顯示在該欄的「這條鏈實際收到的問題」裡，不藏。
+  function scopedQuery(coin) {
+    if (currentAssets.length <= 1) return currentQuery;
+    return `${currentQuery}\n\n`
+      + `（本次分析範圍限定：只針對 ${coin}。這是一道比較題拆出來的單幣分析，`
+      + `其他幣種（${currentAssets.filter(c => c !== coin).join("、")}）由各自獨立的分析負責，`
+      + `跨幣比較會在後續的比較層用全部幣種的證據統一進行。`
+      + `請只根據 ${coin} 自己的證據做出 ${coin} 的判斷，不需要因為手上沒有其他幣種的資料而拒答，`
+      + `也不要把「缺少其他幣種資料」當成本次分析的主要限制。）`;
+  }
+
+  function scopedQueryDisclosureHtml(coin, sent) {
+    if (sent === currentQuery) return "";
+    return `
+      <details class="ref-box" style="margin-bottom:12px;">
+        <summary>這條鏈實際收到的問題（比較題已限定範圍，非原文照送）</summary>
+        <div class="ref-body"><div class="lr-note" style="color:var(--ink); white-space:pre-wrap;">${esc(sent)}</div></div>
+      </details>
+    `;
+  }
+
+  function reasonColStart(coin) {
+    ["cv", "debate", "concl"].forEach(prefix => {
+      const pill = reasonEl(prefix, coin, "pill");
+      pill.textContent = prefix === "cv" ? "推理中…（最多 7 次 LLM）" : (prefix === "debate" ? "等交叉驗證…" : "等辯論…");
+      pill.classList.remove("err");
+      reasonEl(prefix, coin, "body").innerHTML = "";
+      reasonEl(prefix, coin, "error").style.display = "none";
+    });
+  }
+
+  function reasonColFail(coin, msg) {
+    ["cv", "debate", "concl"].forEach(prefix => {
+      const pill = reasonEl(prefix, coin, "pill");
+      pill.textContent = "推理失敗";
+      pill.classList.add("err");
+    });
+    const err = reasonEl("cv", coin, "error");
+    err.textContent = msg;
+    err.style.display = "block";
+  }
+
+  // 一個幣一條完整推理鏈（最多 7 次 LLM）。比較題有幾個幣就打幾次，併發送出。
+  async function runReasoningFor(coin) {
+    const cards = cardsByCoin[coin] || [];
+    if (!cards.length) {
+      reasonColFail(coin, "這個幣沒有 Evidence Card 可用（Stage 4 還在跑，或該幣組裝失敗）——推理鏈需要證據才能跑。");
+      return { coin, ok: false };
+    }
+    reasonColStart(coin);
+    const sentQuery = scopedQuery(coin);
     try {
       const res = await fetch(`${API_BASE}/api/stage789`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: currentQuery, coin: currentCoin, evidence_cards: currentEvidenceCards }),
+        body: JSON.stringify({ query: sentQuery, coin, evidence_cards: cards }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
 
-      appendExecutionLog(data.execution_log);
+      appendExecutionLog(data.execution_log, coin);
+      reasoningByCoin[coin] = data;
 
-      // 三個區塊都包一層 .live-result（display:block 蓋掉預設 display:none）——
-      // 裡面用到的 .lr-row／.lr-note 樣式規則是寫成 `.live-result .lr-row` 這種
-      // 限定寫法（既有 CSS 慣例），沒包這層等於樣式規則整段不生效，變成無格式
-      // 純文字（2026-08-02 實測踩過這個坑，這裡修正）。
-      const liveWrapStyle = "display:block; margin-top:0; padding-top:0; border-top:none;";
-      cvLivePill.textContent = `live · ${data.question_type || ""}`;
-      cvBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${cvHtml(data)}</div>`;
+      reasonEl("cv", coin, "pill").textContent = `live · ${data.question_type || ""}`;
+      reasonEl("cv", coin, "body").innerHTML =
+        `<div class="live-result" style="${LIVE_WRAP_STYLE}">${scopedQueryDisclosureHtml(coin, sentQuery)}${cvHtml(data)}</div>`;
 
-      debateLivePill.textContent = `live · ${(data.debate && data.debate.round_count) || 0} 輪`;
-      debateBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${debateHtml(data)}</div>`;
+      reasonEl("debate", coin, "pill").textContent = `live · ${(data.debate && data.debate.round_count) || 0} 輪`;
+      reasonEl("debate", coin, "body").innerHTML =
+        `<div class="live-result" style="${LIVE_WRAP_STYLE}">${debateHtml(data)}</div>`;
 
-      conclusionLivePill.textContent = `live · 信心 ${data.confidence_score}`;
-      conclusionBody.innerHTML = `<div class="live-result" style="${liveWrapStyle}">${conclusionHtml(data)}</div>`;
-
-      stage9Card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      reasonEl("concl", coin, "pill").textContent = `live · 信心 ${data.confidence_score}`;
+      reasonEl("concl", coin, "body").innerHTML =
+        `<div class="live-result" style="${LIVE_WRAP_STYLE}">${conclusionHtml(data)}</div>`;
+      return { coin, ok: true };
     } catch (err) {
       const msg = String(err.message || err);
-      cvLivePill.textContent = "推理失敗"; cvLivePill.classList.add("err");
-      debateLivePill.textContent = "推理失敗"; debateLivePill.classList.add("err");
-      conclusionLivePill.textContent = "推理失敗"; conclusionLivePill.classList.add("err");
-      reasonErrorBox.textContent = msg;
+      reasonColFail(coin, msg);
+      logClientError("stage789_request_failed", `${coin}：${msg}`, coin);
+      return { coin, ok: false };
+    }
+  }
+
+  // ---------- 比較裁決層：對照表（純算）＋ 合併推理鏈（1 次呼叫，最多 7 次 LLM） ----------
+  const compareCard = document.getElementById("compare-card");
+  const comparePill = document.getElementById("compare-live-pill");
+  const compareBody = document.getElementById("compare-body");
+  const compareError = document.getElementById("compare-live-error");
+
+  // 對照表的每一列：從各幣已經跑完的推理結果裡取值。全部是**已經算好的數字**，
+  // 這裡不重算、也不打 LLM——純粹把兩邊擺在一起讓人一眼看得到差在哪。
+  const CMP_ROWS = [
+    { k: "信心分數", get: d => d.confidence_score, hint: "這一邊的判斷有多站得住腳" },
+    { k: "資料品質", get: d => (d.confidence_breakdown || {}).data_confidence, hint: "涵蓋到的證據類別夠不夠" },
+    { k: "訊號一致性", get: d => (d.confidence_breakdown || {}).signal_consensus, hint: "各來源方向合不合" },
+    { k: "證據強度", get: d => (d.confidence_breakdown || {}).evidence_strength, hint: "證據本身的權重高不高" },
+    { k: "Base（辯論前）", get: d => (d.confidence_breakdown || {}).base, hint: "決定性、可複現的部分" },
+    { k: "辯論調整", get: d => (d.confidence_breakdown || {}).debate_adjustment, hint: "裁判讀完辯論才給，−15~+5", signed: true },
+    { k: "辯論輪數", get: d => (d.debate || {}).round_count, hint: "反方沒有新論點就提早收斂" },
+  ];
+
+  function comparisonTableHtml(coins) {
+    const rows = CMP_ROWS.map(row => {
+      const vals = coins.map(c => row.get(reasoningByCoin[c] || {}));
+      const nums = vals.filter(v => typeof v === "number");
+      const max = nums.length ? Math.max(...nums) : null;
+      const allSame = nums.length === coins.length && Math.min(...nums) === max;
+      return `<tr>
+        <td class="k">${row.k}<div class="lr-note" style="margin-top:2px;">${row.hint}</div></td>
+        ${vals.map(v => {
+          const hi = !allSame && typeof v === "number" && v === max;
+          return `<td class="num${hi ? " cmp-hi" : ""}">${
+            v === null || v === undefined ? "—" : (row.signed && v > 0 ? "+" : "") + v
+          }${hi ? " ▲" : ""}</td>`;
+        }).join("")}
+      </tr>`;
+    }).join("");
+
+    // 各幣排名第一的證據：比較題最常被問「你憑什麼說這個幣比較強」，
+    // 這一列直接指出兩邊最重的那張卡是誰
+    const topRow = `<tr>
+      <td class="k">最高權重證據<div class="lr-note" style="margin-top:2px;">該幣 |evidence_weight| 排第一的卡</div></td>
+      ${coins.map(c => {
+        const top = (cardsByCoin[c] || [])[0];
+        return `<td>${top ? `${esc(top.factor)}<div class="lr-note" style="margin-top:2px;">|weight| ${fmt(top.ranking_value)}</div>` : "—"}</td>`;
+      }).join("")}
+    </tr>`;
+
+    return `
+      <div class="lr-note" style="margin-bottom:8px;">對照表（前端純算，不打 LLM——數字全部來自上面各幣已經跑完的結果）</div>
+      <div style="overflow-x:auto;">
+        <table class="cmp-table">
+          <thead><tr><th>項目</th>${coins.map((c, i) => `<th><span class="asset-chip a${i % 5}">${c}</span></th>`).join("")}</tr></thead>
+          <tbody>${rows}${topRow}</tbody>
+        </table>
+      </div>
+      <div class="lr-note" style="margin-top:8px;">⚠ 這是<b>分析可信度</b>的對照，不是幣本身的強弱對照——信心分數高只代表那一邊的判斷比較站得住腳，不代表那個幣比較看好。誰比較強看下面的比較結論。</div>
+    `;
+  }
+
+  function comparisonVerdictHtml(data) {
+    const c = data.conclusion || {};
+    return `
+      <div class="cmp-verdict">
+        <h4>比較結論（${(data.coins || []).join(" vs ")}　·　題型判定：${esc(data.question_type || "")}${data.coin2 ? `　·　辯論框架：正方挺 ${data.coin}／反方挺 ${data.coin2}` : ""}）</h4>
+        <div class="live-result" style="${LIVE_WRAP_STYLE}">
+          <div style="font-size:14.5px; font-weight:600; line-height:1.75; margin-bottom:10px;">${paragraphize(c.market_judgment) || "（無結論）"}</div>
+          ${data.comparison_note ? `<div class="lr-note" style="margin-bottom:10px;">⚠ ${esc(data.comparison_note)}</div>` : ""}
+          <div class="confidence-gauge">
+            ${confidenceRingSvg(data.confidence_score || 0)}
+            <div class="cg-breakdown">
+              ${confidenceBarRow("資料品質", (data.confidence_breakdown || {}).data_confidence, ((data.confidence_breakdown || {}).weights || {}).data_confidence)}
+              ${confidenceBarRow("訊號一致性", (data.confidence_breakdown || {}).signal_consensus, ((data.confidence_breakdown || {}).weights || {}).signal_consensus)}
+              ${confidenceBarRow("證據強度", (data.confidence_breakdown || {}).evidence_strength, ((data.confidence_breakdown || {}).weights || {}).evidence_strength)}
+            </div>
+          </div>
+          <div class="lr-note" style="margin-top:6px;">Limitations（這個比較結論的已知限制）</div>
+          ${listOrNote(c.limitations, "（無）")}
+          <div class="lr-note" style="margin-top:10px;">Invalidation Conditions（什麼情況下這個比較會被推翻）</div>
+          ${listOrNote(c.invalidation_conditions, "（無）")}
+          <details class="ref-box" style="margin-top:12px;">
+            <summary>查看比較辯論逐輪（正方挺 ${esc(data.coin || "")}／反方挺 ${esc(data.coin2 || "")}）</summary>
+            <div class="ref-body">${debateHtml(data)}</div>
+          </details>
+          <details class="ref-box" style="margin-top:8px;">
+            <summary>查看合併後的事實層與交叉驗證（兩個幣的證據放在一起比對）</summary>
+            <div class="ref-body">${cvHtml(data)}</div>
+          </details>
+        </div>
+      </div>
+    `;
+  }
+
+  async function runComparison(coins) {
+    compareCard.classList.remove("hidden");
+    compareError.style.display = "none";
+    comparePill.textContent = "比較中…（1 條合併推理鏈，最多 7 次 LLM）";
+    comparePill.classList.remove("err");
+    // 對照表不用等 LLM，先畫出來——合併鏈要數十秒，這段時間不該是一片空白
+    compareBody.innerHTML = `<div class="live-result" style="${LIVE_WRAP_STYLE}">${comparisonTableHtml(coins)}
+      <div class="lr-note" style="margin-top:16px;">比較結論產生中…（把 ${coins.join("／")} 的全部卡片餵進同一條推理鏈）</div></div>`;
+
+    const cardsPayload = {};
+    coins.forEach(c => { cardsPayload[c] = cardsByCoin[c]; });
+    try {
+      const res = await fetch(`${API_BASE}/api/stage789`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // 這裡送**原始問題**（不像各幣鏈要限定範圍）——比較就是這一層的工作
+        body: JSON.stringify({ query: currentQuery, coin: coins[0], cards_by_coin: cardsPayload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+
+      appendExecutionLog(data.execution_log, coins.join("+"));
+      comparePill.textContent = `live · 信心 ${data.confidence_score}`;
+      compareBody.innerHTML = `<div class="live-result" style="${LIVE_WRAP_STYLE}">${comparisonTableHtml(coins)}</div>`
+        + comparisonVerdictHtml(data);
+      compareCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (err) {
+      const msg = String(err.message || err);
+      comparePill.textContent = "比較失敗";
+      comparePill.classList.add("err");
+      compareError.textContent = msg + "\n（上方對照表是前端純算的，不受這次失敗影響。）";
+      compareError.style.display = "block";
+      logClientError("comparison_request_failed", msg, coins.join("+"));
+    }
+  }
+
+  async function runReasoning() {
+    if (!currentQuery || !currentAssets.length) {
+      reasonErrorBox.textContent = "還沒有 Stage 1 的問題／幣種可以用，請先送出上面的查詢。";
       reasonErrorBox.classList.add("on");
+      return;
+    }
+    // 有任何一個幣還沒有卡片就先擋下來——比較題只跑一半的推理鏈，結論會缺一邊
+    const missing = currentAssets.filter(c => !(cardsByCoin[c] || []).length);
+    if (missing.length === currentAssets.length) {
+      reasonErrorBox.textContent = "Stage 4 還沒有 Evidence Card 可用（可能還在跑，或組裝失敗），請等 Stage 4 完成再試一次。";
+      reasonErrorBox.classList.add("on");
+      return;
+    }
+    reasonErrorBox.textContent = ""; reasonErrorBox.classList.remove("on");
+    if (missing.length) {
+      reasonErrorBox.textContent = `⚠ ${missing.join("／")} 沒有 Evidence Card（Stage 4 失敗或還在跑），`
+        + `這次只跑得動 ${currentAssets.filter(c => !missing.includes(c)).join("／")}；比較結論會缺這幾邊。`;
+      reasonErrorBox.classList.add("on");
+    }
+    reasonBtn.disabled = true;
+    reasonSpinner.classList.add("on");
+    [stage7Card, stage8Card, stage9Card].forEach(c => c.classList.remove("hidden"));
+    const runningLabel = currentAssets.length > 1
+      ? `${currentAssets.length} 個幣併發推理中…（每幣最多 7 次 LLM）`
+      : "推理中…（最多 7 次 LLM，數十秒）";
+    [cvLivePill, debateLivePill, conclusionLivePill].forEach(p => {
+      p.textContent = runningLabel; p.classList.remove("err");
+    });
+
+    try {
+      const results = await Promise.all(currentAssets.map(runReasoningFor));
+      const ok = results.filter(r => r.ok).map(r => r.coin);
+      const failed = results.filter(r => !r.ok).map(r => r.coin);
+      summarizePills(cvLivePill, ok, failed, "live");
+      summarizePills(debateLivePill, ok, failed, "live");
+      summarizePills(conclusionLivePill, ok, failed, "live");
+      stage9Card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // 各幣鏈都跑完之後才做比較——比較裁決層要吃兩邊的結論做對照表，
+      // 也要用兩邊的卡片跑合併鏈，任何一邊沒跑完都比不了
+      if (ok.length >= 2) await runComparison(ok);
     } finally {
       reasonBtn.disabled = false;
       reasonSpinner.classList.remove("on");
