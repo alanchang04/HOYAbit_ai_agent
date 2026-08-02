@@ -1,0 +1,50 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（active_address）
+# 對應 13_流程圖迭代定案v2.md Stage 2：抓什麼欄位固定，但抓多長的時間窗口
+# 由 LLM 依 Stage 1 判斷出的 Horizon 決定，這裡不寫死某一次的示範值，
+# 只記錄端點跟公式；`window` 是 LLM 給的參數（單位：天）。
+#
+# 端點（免 key，公開）：
+#   GET https://api.blockchain.info/charts/n-unique-addresses
+#     ?timespan={window}days&format=json&cors=true
+#   跟 agent/collectors/onchain.py 抓 hash-rate／n-transactions 同一個 API 家族。
+#   回傳依日期排序的 (date, value) 序列，一天一筆。
+
+feature:
+  factor: active_address
+  endpoint: https://api.blockchain.info/charts/n-unique-addresses
+  params:
+    timespan: "{window}days"   # window 由 LLM 依 Stage 1 Horizon 決定，非寫死
+    format: json
+    cors: true
+
+  # Raw
+  current_value: series[-1]              # 最新一筆
+  previous_value: series[-2]              # 前一筆
+  delta: current_value - previous_value
+
+  # Relative
+  percentile: percentile_rank(series, current_value)   # <= 現值 的比例
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])       # 最近 3 筆
+  slope_7d: least_squares_slope(series[-7:])    # 最近 7 筆
+  slope_30d: least_squares_slope(series[-window:])  # 全窗口
+
+  # Momentum
+  roc_1d: (current_value - series[-2]) / series[-2] * 100
+  roc_7d: (current_value - series[-8]) / series[-8] * 100   # window < 8 時無法計算，回 null
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: missing_count / window
+  sample_size: len(series)
+
+# ⚠️ 已知資料特性：blockchain.info 的位址計數常有「當日資料尚未收斂、隔天補齊」
+# 的 revision 現象，最新一兩筆的 roc_1d 可能因此偏大，跟 funding_rate「分母小、
+# 波動本來就大」不是同一類原因，下游引用最新一筆時要註明「待下次抓取驗證」。

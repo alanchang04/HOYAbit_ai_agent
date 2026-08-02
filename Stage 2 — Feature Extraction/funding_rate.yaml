@@ -1,0 +1,65 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（funding_rate）
+# 對應 13_流程圖迭代定案v2.md Stage 2：抓什麼欄位固定，但抓多長的時間窗口
+# 由 LLM 依 Stage 1 判斷出的 Horizon 決定，這裡不寫死某一次的示範值，
+# 只記錄端點跟公式；`window` 是 LLM 給的參數（單位：天）。
+#
+# 2026-08-02 補檔說明：funding_rate 原本沒有這份 yaml——13 正文用它當 Evidence Card
+# 的示範，抓取邏輯則直接寫在 webapp/stage1_demo_api.py 裡，是四個 factor 裡唯一
+# 沒有規格檔的一個。Stage 2 改成「程式讀規格檔」之後，缺這份會讓它變成唯一的
+# 寫死例外，所以照 active_address.yaml 的同一套骨架補上。內容＝現有實作的實際
+# 行為，不是新設計。
+#
+# 端點（免 key，公開）：
+#   GET https://fapi.binance.com/fapi/v1/fundingRate?symbol={symbol}&limit={window*3}
+#   跟 agent/collectors/derivatives.py 同一支端點（該檔的 FAPI_BASE 常數）。
+#   回傳依時間正序的結算紀錄，每 8 小時一筆，所以一天固定 3 筆。
+#
+# ⚠️ 這個 factor 的取樣頻率是「一天 3 筆」，不是 active_address 的「一天 1 筆」。
+# 所以下面 slope_7d／roc_7d 這種「近 N 天」的欄位不能直接切 series[-7:]（那只是
+# 近 56 小時），要換算成 series[-7*3:]。公式裡的 `samples_per_day` 就是這個換算
+# 係數（funding_rate=3，active_address=1），由程式依 factor 的資料頻率帶入。
+
+feature:
+  factor: funding_rate
+  endpoint: https://fapi.binance.com/fapi/v1/fundingRate
+  samples_per_day: 3          # 8 小時結算一次；日頻 factor 是 1
+  params:
+    symbol: "{symbol}"        # 由 Stage 1 判斷出的幣種對照 PERP_SYMBOL（BTC→BTCUSDT）
+    limit: "{window * 3}"     # window（天）× 每天 3 筆；Binance 單次上限 1000 筆，程式會夾住
+
+  # Raw
+  current_value: series[-1]              # 最新一筆結算費率（小數，顯示時 ×100 轉 %）
+  previous_value: series[-2]             # 前一筆（8 小時前）
+  delta: current_value - previous_value
+
+  # Relative
+  percentile: percentile_rank(current_value, series)   # <= 現值 的比例，母體＝這次抓取的整段窗口
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])                      # 最近 3 筆（約 1 天）
+  slope_7d: least_squares_slope(series[-7 * samples_per_day:])  # 最近 7 天（21 筆）
+  slope_30d: least_squares_slope(series)                        # 全窗口
+
+  # Momentum
+  roc_1d: (current_value - series[-1 - samples_per_day]) / series[-1 - samples_per_day] * 100
+  roc_7d: (current_value - series[-1 - 7 * samples_per_day]) / series[-1 - 7 * samples_per_day] * 100
+  # ⚠️ 費率本身可能是負數或極接近 0，分母小的時候 roc 會爆大或變號——這是資料性質，
+  # 不是計算錯誤。下游引用 roc 時要一起看 current_value 的絕對大小
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: 1 - len(series) / (window * samples_per_day)   # 實際拿到的筆數 vs 應有筆數
+  sample_size: len(series)
+
+  # 這個 factor 特有（其他三個沒有）：擁擠度標籤
+  crowd_label: crowd_label(percentile)   # 實作見 agent/collectors/derivatives.py，非本層自訂
+
+# ⚠️ 已知資料特性：Binance 只回傳「已結算」的費率，最新一筆的時間戳最多可能落後
+# 現在 8 小時，跟 active_address 的「當日資料尚未收斂」不是同一類問題（這裡的數字
+# 不會被回頭修正，只是有結算週期的延遲）。

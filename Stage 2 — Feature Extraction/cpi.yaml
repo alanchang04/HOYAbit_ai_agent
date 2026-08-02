@@ -1,0 +1,68 @@
+# Stage 2 — Feature Extraction，**改用 Event Factor 骨架**（cpi）
+#
+# ⚠️ 2026-08-02 重新分類：原本這份套用 Statistical Factor 模板（Percentile／
+# Trend／Momentum／Statistics），比對 09_權重改版草案.md 才發現分類錯了——
+# 09 的「Statistical Factor」量化表（Percentile＋IC/HitRate，連續數值每天
+# 都有值）明確只涵蓋 Price／Derivatives／On-chain／Macro(FNG/FX) 四類，
+# CPI 在 09 全文只出現在 Event 的 Failure Conditions 示範裡（跟 FOMC 並列），
+# agent/collectors/macro.py 現有實作也是把 CPI 當「排定公布時程的事件」處理
+# （CPI_RELEASES_2026 事件日曆），不是每日都有值的連續序列——CPI 一個月才
+# 公布一次，公布前後才有意義，改用 09 的 Event Factor Interpreter：
+# `event`／`impact`，沒有 `historical` 子物件，量化方式是 Domain Knowledge
+# 分級（Impact Level），不是統計回測。
+#
+# 端點（免 key，公開，事件時程；跟 agent/collectors/macro.py 的
+# CPI_RELEASES_2026 同一份資料，來源：BLS CPI 公布時程，經
+# usinflationcalculator.com 彙整對照）：
+#   最近一次：reference_month=2026-06, release_date=2026-07-14
+#   下一次：  reference_month=2026-07, release_date=2026-08-12
+# 數值本身（CPIAUCSL 指數/MoM/YoY）改記錄在 Stage 3 Knowledge 的
+# empirical_validation 區塊當「事件公布內容」，不是本層的欄位。
+
+feature:
+  factor: cpi
+  event_type: macro_data_release  # 對應 11流程圖模板.md Event Factor 骨架欄位
+  announcement_time: "2026-07-14T12:30:00Z"  # BLS CPI 公布慣例時間 08:30 ET（夏令時 UTC-4）
+  confirmation_count: 1  # 單一官方來源（BLS），非多方查證類事件
+  official_source_count: 1  # BLS 官方公布，經 FRED（CPIAUCSL）彙整
+  media_source_count: null  # 待補：這次沒有另外統計媒體報導篇數
+  affected_assets_count: 5  # 總經系統性因子，同時影響 BTC/ETH/SOL/BNB/XRP
+  hours_since_event: 456  # 以 2026-08-02 為基準，距 2026-07-14 公布約 19 天
+  expected_unlock_ratio: null  # 不適用——這個欄位是給代幣解鎖事件用的，CPI 沒有對應概念
+  affected_market_cap: null  # 待補：需要即時抓五幣市值加總才能填，這次沒做
+  duplicate_reports: null  # 不適用——CPI 是單一官方數字公布，沒有「重複報導」的概念
+
+  # 下一次事件（Event Factor 模板沒有這格，但 CPI 是排程事件，額外記錄方便下游判斷 hours_until_next）
+  next_release:
+    reference_month: "2026-07"
+    release_date: "2026-08-12"
+
+# ---------------------------------------------------------------------------
+# 數值來源（2026-08-02 補）
+# ---------------------------------------------------------------------------
+# 為什麼要多這一段：上面的 `feature:` 改成 Event Factor 骨架之後，這份檔案就只剩
+# 「事件何時公布」，沒有「這次公布的數字是多少」。但 Stage 5 cpi.md 的 fact 明確要
+# current_value／mom_pct／yoy_pct／percentile 四格（來源標「← Stage 2」），程式又必須
+# 有個地方讀得到 FRED 的端點——不補這段，CPI 就會是四個 factor 裡唯一「端點還寫死在
+# 程式裡」的一個，Stage 2 讀規格檔這件事就缺一角。
+#
+# 刻意**不**併回上面的 `feature:`：那裡是 Event 骨架，混進 Statistical 欄位就等於把
+# 2026-08-02 的重新分類又推翻掉。分成兩塊的語意是明確的——
+#   feature:      這個事件本身的性質（何時公布、幾個來源確認、影響幾個標的）
+#   value_source: 這次公布的數字（要另外去 FRED 抓）
+# Event Factor 特有的形狀，另外三個 Statistical factor 沒有這一段。
+value_source:
+  endpoint: https://fred.stlouisfed.org/graph/fredgraph.csv
+  params:
+    id: CPIAUCSL              # FRED 的 CPI 指數序列（月頻，免 key，全幣種通用不用逐幣抓）
+  window_unit: month          # ⚠ 窗口單位是「月」不是「天」——LLM 的日頻窗口判斷結果換算成月，
+                              # 不另外設計一套月頻 prompt
+  fields:
+    current_value: series[-1]                                  # 最新一期指數值
+    percentile: percentile_rank(current_value, series)         # 母體＝窗口內的月值。⚠ CPI 指數長期
+                                                               # 單調上升，現值幾乎永遠落在高分位，
+                                                               # 這格算得出數字但讀起來會誤導
+                                                               # （Stage 5 cpi.md 已標同一件事）
+    mom_pct: (series[-1] - series[-2]) / series[-2] * 100       # 月增率
+    yoy_pct: (series[-1] - series[-13]) / series[-13] * 100     # 年增率。⚠ 需要 13 期，窗口通常不夠長，
+                                                               # 所以這格固定用「完整序列」算，不受窗口影響
