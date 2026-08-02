@@ -53,10 +53,13 @@ evidence:
     # 現場用「本地 CSV 價格 × Binance funding 歷史」算出來的，所以同一個 factor 在不同
     # Horizon 下會得到不同的 ic（這正是 13 把 ic 改成吃 Horizon 當參數的用意）。
     # 附帶後果：這張卡的排名不像 cpi（固定 0.8）／liquidation（固定 0.3）那樣可預測，
-    # ic 是相關係數、值域 [-1, 1]，**可能是負的**——負的 ic × 正的 modifier 會讓
-    # evidence_weight 變負數，排序時直接掉到最後面。負 ic 的意思是「這個 factor 在這個
-    # Horizon 下跟未來報酬反向相關」，不是「算錯了」，但要不要在排序上跟「趨近 0」
-    # 分開處理，13 拍板是不分開——一律照 evidence_weight 排
+    # ic 是相關係數、值域 [-1, 1]，**可能是負的**——負 ic 的意思是「這個 factor 在這個
+    # Horizon 下跟未來報酬反向相關」，不是「算錯了」，更不是「沒有訊號」。
+    # ✅ 2026-08-02 Ken 補充拍板（就是這張卡逼出來的）：排序**取絕對值**。
+    # 舊做法照帶號值排，實測 BTC／horizon=2週 算出 final=-0.554——|0.554| 是五張卡裡
+    # 強度最高的，卻被排到最後一名，等於把最強的訊號當最弱的。改成照 |evidence_weight|
+    # 之後它排第二（僅次於 cpi 的 0.68）。方向沒有被抹掉：evidence_weight 仍然是 -0.554
+    # 帶號原值，卡片另有 weight_direction=反向訊號 這格，下游判方向讀那裡不是讀名次
 
   source_reliability: null          # Stage 4 未定案（該層仍註解狀態），跟著留白，不重複造一套新標準
   historical_support: null          # 同上，待「references 怎麼轉成分數」定案後一起補
@@ -84,16 +87,30 @@ evidence:
 
 prioritization:
   ranking_key: evidence_weight      # 13 拍板：純照 evidence_weight
+  ranking_transform: abs            # 2026-08-02 Ken 補充拍板：排序鍵不變（evidence_weight），
+                                    # 但比大小時**取絕對值**。理由：ic 是相關係數，負值代表反向訊號
+                                    # （factor 越高、後續報酬越低），那是有預測力的訊號不是弱訊號——
+                                    # 實測 BTC funding_rate ic=-0.55 是五張卡裡強度最高的一個，照帶號值
+                                    # 由大到小排會被排到最後一名，等於把最強的訊號當成最弱的。
+                                    # ⚠️ 代價：名次只表達「訊號強度」，不表達方向。方向沒有消失——留在
+                                    # evidence_weight 的正負號與卡片的 weight_direction 欄位，下游
+                                    # （Stage 6 Graph／Stage 7-9 推理鏈）要判方向讀那兩格，不是讀名次。
+                                    # 對 impact_level／domain_knowledge 型的卡片（值域 [0,1] 恆正）
+                                    # 取絕對值不改變任何東西——那種卡本來就沒有「方向」這個概念
   evidence_coverage: null           # 定義未拍板，不生成
-  expected_rank: 不可預測           # 唯一一張排名事前講不出來的卡——另外三張的 prior_weight
+  expected_rank: 不可預測           # 唯一一張排名事前講不出來的卡——另外幾張的 prior_weight
                                     # 要嘛是固定值（cpi 0.8／liquidation 0.3），要嘛結構性趨近 0
-                                    # （active_address ic≈0），只有這張的 ic 每次現場算、
-                                    # 可正可負。實測（BTC／horizon=2週）它排最後（final=-0.554），
-                                    # 但那是那一次的 ic 值，不是這個 factor 的固定位置
+                                    # （active_address ic≈0／panews ic=0.051），只有這張的 ic
+                                    # 每次現場算、可正可負、絕對值大小也每次不同。
+                                    # 實測（BTC／horizon=2週）final=-0.554：舊的帶號排序讓它排第五（最後），
+                                    # 改成 |evidence_weight| 之後排第二——同一個數字、同一次執行，
+                                    # 名次差四名，這就是取絕對值這條拍板實際改變的東西
 ```
 
 ### 這份的特殊之處
 
 四張卡裡，它是**唯一一張 Prior Weight 沒有檔案可讀的卡**。另外三張的權重來源都落在某個 `.md` 裡（cpi 讀 `impact_level`、liquidation 讀 Domain Knowledge 值、active_address 雖然也是現場算 ic 但同時有一份 Stage 4 .md 記錄實測結果），只有 funding_rate 從頭到尾靠現場計算。這件事在「程式讀規格檔」的架構下有個意義：**卡片 schema 讀得到檔案，不代表卡片的每一個值都讀得到檔案**——schema 講的是「這張卡長什麼樣」，值還是各層自己算出來的。這正是 13 說 Stage 5 是「組裝／輸出格式層，不重新運算」的意思。
 
-另外一點，`evidence_weight` 可能是負數這件事只有這張卡會遇到（cpi/liquidation 是 [0,1] 的重要性分數，active_address 的 ic 實測趨近 0 的正值）。13 的排序拍板「一律照 evidence_weight 由大到小」在負值上仍然成立、也不需要特別處理，但值域不一致這件事會讓「排序鍵到底在比什麼」更難解釋——這是 13「待處理 3」（Prior Weight 尺度沒統一、`normalization` 仍是註解狀態）在這張卡上的具體樣子。
+另外一點，`evidence_weight` 可能是負數這件事只有這張卡會遇到（cpi/liquidation 是 [0,1] 的重要性分數，active_address／panews_sentiment 的 ic 實測都是趨近 0 的正值）。**2026-08-02 的取絕對值拍板就是這張卡逼出來的**：實測 `final=-0.554`，帶號排序讓它排最後一名，但 |0.554| 其實是五張卡裡最強的訊號——負相關是「反向有效」，不是「無效」。改成照 `|evidence_weight|` 排之後它升到第二。
+
+要注意這條拍板**只解決了「強度比大小」這件事，沒有解決值域不一致**：ic 是 `[-1, 1]` 的相關係數，cpi/liquidation 的 0.8／0.3 是 `[0, 1]` 的重要性分數，取絕對值之後兩者仍然不是同一把尺（一個量「相關有多強」、一個量「這件事有多重要」）。那是 13「待處理 3」（Prior Weight 尺度沒統一、`normalization` 仍是註解狀態）的範圍，這張卡只是把問題顯示得最清楚的那一張。

@@ -27,9 +27,18 @@ knowledge:
   category: statistical
 
   # Time Property
-  primary_horizon: 中長期（結構性網路使用趨勢，非短線 timing 訊號；blockchain.info 每日一筆）
-  minimum_horizon: 數週（單日跳動常見資料 revision，見 Stage 2 active_address.yaml 的異常標記，不可用單日數字判斷）
-  maximum_horizon: 數月至跨週期（Metcalfe's Law 理論上對應網路價值的中長期成長趨勢，非用於捕捉短期反轉）
+  # primary_horizon 改成結構化（2026-08-02 拍板 Option B），格式與其他 factor 一致；
+  # 原 minimum_horizon／maximum_horizon 已收斂進 applicable_days 與 rationale。
+  primary_horizon:
+    scale: 中長期
+    applicable_days: [14, 365]  # ⚠️ 由下方 rationale 的「數週」～「數月至跨週期」人工換算成天，非回測值；
+                                 # 語意是「適用多長的分析期間」，不是「要抓幾天資料」
+    rationale: |
+      結構性網路使用趨勢，非短線 timing 訊號；blockchain.info 每日一筆。
+      下限（數週）：單日跳動常見資料 revision（見 Stage 2 active_address.yaml 的異常標記），
+      不可用單日數字判斷。
+      上限（數月至跨週期）：Metcalfe's Law 理論上對應網路價值的中長期成長趨勢，
+      非用於捕捉短期反轉。
   persistence: 中——2026 年實證顯示 ETF 通過後價格與鏈上使用量出現「脫鉤」，這個 factor 的訊號延續性比 2021 年前的週期弱，需搭配其他訊號交叉驗證
 
   # Scope

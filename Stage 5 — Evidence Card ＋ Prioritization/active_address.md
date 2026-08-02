@@ -78,6 +78,16 @@ evidence:
 
 prioritization:
   ranking_key: evidence_weight      # 13 拍板：純照 evidence_weight 由大到小，不參雜其他輸入
+  ranking_transform: abs            # 2026-08-02 Ken 補充拍板：排序鍵不變（evidence_weight），
+                                    # 但比大小時**取絕對值**。理由：ic 是相關係數，負值代表反向訊號
+                                    # （factor 越高、後續報酬越低），那是有預測力的訊號不是弱訊號——
+                                    # 實測 BTC funding_rate ic=-0.55 是五張卡裡強度最高的一個，照帶號值
+                                    # 由大到小排會被排到最後一名，等於把最強的訊號當成最弱的。
+                                    # ⚠️ 代價：名次只表達「訊號強度」，不表達方向。方向沒有消失——留在
+                                    # evidence_weight 的正負號與卡片的 weight_direction 欄位，下游
+                                    # （Stage 6 Graph／Stage 7-9 推理鏈）要判方向讀那兩格，不是讀名次。
+                                    # 對 impact_level／domain_knowledge 型的卡片（值域 [0,1] 恆正）
+                                    # 取絕對值不改變任何東西——那種卡本來就沒有「方向」這個概念
   evidence_coverage: null           # 定義 13 仍未拍板 → 不產生這個欄位假裝有定案（跟 Stage 4 的 source_reliability 同一種留白原則）
   expected_rank: 後段               # 理由見上方 evidence_weight 註解，不是預先安排的位置，是 ic≈0 的必然結果
     # ✅ 2026-08-02 Ken 拍板：**一律照 evidence_weight 排序**——不因這張卡的低分是

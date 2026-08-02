@@ -1,0 +1,71 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（etf）
+# 對應 13_流程圖迭代定案v2.md Stage 2：window 由 LLM 依 Stage 1 判斷出的 Horizon
+# 決定，這裡不寫死抓多久以前的資料，只記錄端點跟公式。
+#
+# 端點（免 key，公開，HTML table 需解析，非 JSON API）：
+#   GET https://bitbo.io/treasuries/etf-flows/
+#   美國現貨 BTC ETF 逐日淨流量（IBIT／FBTC／GBTC／BITB／ARKB／HODL／MSBT／
+#   BRRR／EZBC／BTCO／BTCW／DEFI 等各檔＋Totals 全市場合計），單位百萬美元。
+#   `Totals` 欄是這個 factor 要用的數字——各檔加總後的當日全市場淨流量。
+#
+# ⚠️ 免費資料源只給近期窗口，不是完整歷史——這點要在 Stage 2 就講清楚，
+# 不要等到 Stage 4 才發現：
+#   實測這個頁面只回傳**近 9-10 個交易日**＋ Total/Average/Maximum/Minimum
+#   四行統計，`?range=all` 參數無效（回傳一樣的內容），`/all/` 路徑 404。
+#   真正的完整歷史（farside.co.uk 宣稱回溯到 2024-01）擋 Cloudflare 機器人驗證，
+#   CoinGlass 有完整歷史 API 但要金鑰（跟這個專案其他 factor 一貫的免 key 原則
+#   不符）。這代表 ETF 這個 factor **從一開始**就是短樣本 factor，跟
+#   panews_sentiment 同一種先天限制（有真實數字，但樣本數不足以支撐正式的
+#   統計檢定），不是等做到 Stage 4 才發現的意外——這裡先講清楚，Stage 4
+#   不用重演一次「以為算得準結果樣本太少」的修正過程。
+#   `window` 由 LLM 判斷仍然有意義（決定要不要抓、抓多少現有的近期資料），
+#   只是不管 LLM 給多長的 window，實際能拿到的資料都被這個資料源的天花板卡住。
+
+# 解析方式：HTML table.stats-table.larger-table，第一欄 Date、最後一欄 Totals，
+# 表尾 Total／Average／Maximum／Minimum 四行是欄位統計不是逐日資料，解析時要排除
+# （實作見 webapp/stage1_demo_api.py 的 `_parse_etf_flow_table`）。
+#
+# ⚠️ 沒有 `params:` 區塊：bitbo.io 不接受任何會改變回傳內容的查詢參數
+# （`?range=all` 實測回傳一樣的內容，`/all/` 路徑 404），所以這裡不像
+# active_address 那樣把 window 套進 `render_params()` 當 HTTP 參數傳——
+# window 由 LLM 判斷這件事仍然有意義（決定「有意抓多深」），只是實際請求
+# 不帶任何窗口參數，一次請求就是資料源當下能給的全部，`window` 只用來跟
+# 實際可用天數比較、判斷有沒有被資料源天花板卡住（見 server 端 `capped` 邏輯）。
+
+feature:
+  factor: etf
+  endpoint: https://bitbo.io/treasuries/etf-flows/
+
+  # Raw
+  current_value: series[-1]              # 最新一個交易日的 Totals（百萬美元）
+  previous_value: series[-2]
+  delta: current_value - previous_value
+
+  # Relative（母體：資料源能給的全部天數，通常 <10 筆，percentile/z_score 在這麼小的母體下意義有限，見下方）
+  percentile: percentile_rank(series, current_value)
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])       # 最近 3 筆
+  slope_7d: least_squares_slope(series[-7:])    # 最近 7 筆（資料源天花板通常剛好卡在這附近）
+  slope_30d: least_squares_slope(series)        # 全部可取得的筆數，不是真的 30 筆
+
+  # Momentum
+  roc_1d: (current_value - series[-2]) / abs(series[-2]) * 100 if series[-2] != 0 else null   # ⚠️ Totals 常見負值/接近 0，分母可能很小或為 0，跟 funding_rate 的 roc_1d 註記同一類問題
+  roc_7d: (current_value - series[-8]) / abs(series[-8]) * 100 if len(series) > 8 and series[-8] != 0 else null
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: 0        # 資料源本身沒有缺值標記機制，交易日沒資料通常直接不出現在表格裡，不易區分「缺值」跟「非交易日」
+  sample_size: len(series)  # ⚠️ 實測通常是 9-10，遠低於 active_address 的 1807，這個數字本身就是這個 factor 的重要特徵，不是次要細節
+
+# ⚠️ 這次示範的已知落差（2026-08-02 首次建立，尚未接進 demo server）：
+#   跟 active_address／cpi 不同，這份還沒寫進 webapp/stage1_demo_api.py，
+#   純粹是 Stage 2 骨架設計，還沒有 `/api/stage2/etf` 這支路由。
+#   HTML table 解析比 JSON API 脆弱（bitbo.io 改版面就會壞），這點也要記錄，
+#   之後真的接程式碼時要加解析失敗的錯誤處理，不能假設表格結構永遠不變。

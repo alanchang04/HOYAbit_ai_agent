@@ -26,6 +26,14 @@ knowledge:
   # Time Property
   reaction_window: 公布當下至 2-3 個交易日（初期衝擊，見下方 References）
   expected_duration: 數週至數月（透過 Fed 政策路徑預期的間接管道，效果比直接價格衝擊持續更久，但屬於「累積效應」不是這次公布本身的延續）
+  # Event Factor 沒有 primary_horizon（那是 Statistical/Sentiment 骨架的欄位），但 Stage 4 的
+  # time_horizon_match 仍需要一個可數值比對的區間，所以這裡補一格 applicable_days，
+  # 內容是上面 reaction_window／expected_duration 兩段的換算，不是新的判斷。
+  applicable_days: [0, 90]      # ⚠️ 這是**兩段不連續**尺度的聯集，不是單一連續區間：
+                                 #   0-3 天   ＝ reaction_window（公布當下的直接衝擊）
+                                 #   14-90 天 ＝ expected_duration（Fed 政策預期的間接管道）
+                                 # 中間 4-13 天這段其實兩種效果都弱，但為了讓比對邏輯單純，
+                                 # 這裡用聯集表示；落在區間內不代表各點強度相同，見 Stage 4 的判讀說明
 
   # Scope
   affected_assets: [BTC, ETH, SOL, BNB, XRP]  # 總經系統性因子，全幣種同時受影響，跟 funding_rate/active_address 需要逐幣種資料的性質不同

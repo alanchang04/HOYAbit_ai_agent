@@ -26,9 +26,20 @@ knowledge:
   category: statistical
 
   # Time Property
-  primary_horizon: 短期（永續合約每 8 小時結算一次，訊號用近 30 天/90 筆百分位排名）
-  minimum_horizon: 數日（產業觀察：需連續多筆結算維持極端費率，單一筆極端讀數不足以構成訊號）
-  maximum_horizon: 數週至數月（產業觀察：持續極端費率後的反轉常在數月內出現，見 references）
+  # primary_horizon 改成結構化（2026-08-02 拍板 Option B）：原本是一段散文，
+  # Stage 4 的 time_horizon_match 只能丟給 LLM 讀散文猜「短期」跟「2週」搭不搭。
+  # 拆成 applicable_days（可數值比對）＋ rationale（保留原本論述）後，Stage 4
+  # 就能真的用 Stage 1 算出的 horizon_days 去比對，不必靠讀字判斷。
+  # 原 minimum_horizon／maximum_horizon 兩格散文已收斂進 applicable_days 與 rationale。
+  primary_horizon:
+    scale: 短期
+    applicable_days: [2, 60]   # ⚠️ 由下方 rationale 的「數日」～「數週至數月」人工換算成天，非回測值；
+                                # 語意是「這個 factor 適用多長的分析期間」，不是「要抓幾天資料」——
+                                # 抓取窗口由 Stage 2 依 Stage 1 的 Horizon 逐次判斷（13 拍板），兩者不可混用
+    rationale: |
+      永續合約每 8 小時結算一次，訊號衰減快。
+      下限（數日）：需連續多筆結算維持極端費率，單一筆極端讀數不足以構成訊號。
+      上限（數週至數月）：產業觀察指出持續極端費率後的反轉常在數月內出現，見 references。
   persistence: 中低——費率本身每 8 小時重新結算，但其反映的「擁擠倉位」狀態可持續數日到數週才緩解或反轉
 
   # Scope
@@ -37,7 +48,7 @@ knowledge:
   supported_market_types: 永續合約（perpetual futures），非現貨
 
   # Data Dependency
-  required_inputs: Binance USDⓈ-M /fapi/v1/fundingRate 近 90 筆歷史費率（約 30 天）
+  required_inputs: Binance USDⓈ-M /fapi/v1/fundingRate 歷史費率序列（每 8 小時一筆；取幾天由 Stage 2 依 Horizon 判斷，不固定）
   optional_inputs: 跨交易所（如 Hyperliquid／Bybit／OKX）費率同時對照——單一交易所費率可能被該場地個別大戶扭曲，跨場地一致才是較穩健的擁擠度訊號（見下方 Hyperliquid+Binance／Sharpe.ai 來源）
 
   # Relationship

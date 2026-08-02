@@ -28,9 +28,21 @@ knowledge:
   category: statistical
 
   # Time Property（來自文獻對現象本身的描述，非本專案資料驗證過的數字——見上方說明）
-  primary_horizon: 極短期（分鐘級——學術實證「Anatomy of a Crypto Cascade」用逐分鐘資料分析 2025-10 崩盤，顯示連鎖清算是分鐘尺度的急速事件，非日/週尺度訊號）
-  minimum_horizon: 分鐘（單次連鎖清算事件本身的展開時間）
-  maximum_horizon: 不適用——連鎖清算是離散事件（discontinuous event），不是持續性趨勢，沒有「延續多久」的概念，事件結束後市場結構重置（見下方 arxiv 2607.27070：多數個案有「critical slowing down」前兆，但少數新聞驅動的外生衝擊型完全沒有前兆，兩種類型不能用同一套時間尺度描述）
+  # primary_horizon 改成結構化（2026-08-02 拍板 Option B），格式與其他 factor 一致；
+  # 原 minimum_horizon／maximum_horizon 已收斂進 applicable_days 與 rationale。
+  primary_horizon:
+    scale: 極短期
+    applicable_days: [0, 1]     # ⚠️ 分鐘級事件，換算成天就是「不到一天」；上限取 1 不代表
+                                 # 「可以延續一天」，而是 applicable_days 的最小可表達粒度是天——
+                                 # 真正的上限概念對這個 factor 不成立，見 rationale
+    rationale: |
+      分鐘級——學術實證「Anatomy of a Crypto Cascade」用逐分鐘資料分析 2025-10 崩盤，
+      顯示連鎖清算是分鐘尺度的急速事件，非日/週尺度訊號；下限就是單次連鎖清算事件本身的展開時間。
+      上限「不適用」：連鎖清算是離散事件（discontinuous event），不是持續性趨勢，沒有
+      「延續多久」的概念，事件結束後市場結構重置（見 arxiv 2607.27070：多數個案有
+      「critical slowing down」前兆，但少數新聞驅動的外生衝擊型完全沒有前兆，兩類不能用
+      同一套時間尺度描述）。因此任何「這次查詢的 horizon 是幾天」跟這個 factor 比對，
+      結果幾乎必然是「查詢期間遠長於本 factor 尺度」——這是這個 factor 的真實定位，不是比對壞掉。
   persistence: 不適用——這是事件型 factor，不是持續存在的狀態量，「持續性」問題本身對這個 factor 不成立，跟 funding_rate／active_address／cpi 三份都不同
 
   # Scope

@@ -29,7 +29,16 @@ knowledge:
   data_type: 媒體報導標題＋摘要（記者編輯過的內容，非使用者原創社群貼文——跟 Twitter／Reddit 類 Sentiment 來源性質不同，見下方 Scope）
 
   # Time Property
-  primary_horizon: 短期，且高度狀態依存（regime-dependent）——2026 研究顯示情緒訊號在「恐懼/貪婪極端狀態」或「低市值+近期下跌資產」上預測力較顯著，BTC 屬大市值資產，正常狀態下訊號較弱，需搭配 market_regime 一起判斷，不是穩定的單一時間尺度
+  # primary_horizon 改成結構化（2026-08-02 拍板 Option B），格式與其他 factor 一致。
+  primary_horizon:
+    scale: 短期（狀態依存）
+    applicable_days: [1, 14]    # ⚠️ 由 rationale 的「短期」人工換算成天，非回測值。
+                                 # 這個 factor 特別要注意：即使 horizon 落在區間內，也不代表訊號可靠——
+                                 # 它的預測力是 regime-dependent（見 rationale），時間尺度匹配只是必要條件不是充分條件
+    rationale: |
+      短期，且高度狀態依存（regime-dependent）——2026 研究顯示情緒訊號在「恐懼/貪婪極端狀態」
+      或「低市值+近期下跌資產」上預測力較顯著，BTC 屬大市值資產，正常狀態下訊號較弱，
+      需搭配 market_regime 一起判斷，不是穩定的單一時間尺度。
   update_frequency: 準即時（NEWS 型快訊近乎即時發布，NORMAL 型深度文章數小時到數天一篇；本文件示範用歷史分頁端點，非即時 RSS，見 Stage 2 差異說明）
 
   # Scope
