@@ -45,6 +45,7 @@ v2 開發期間評審或隊友要看 demo，但 `main` 上是半成品：
 
 ```bash
 python scripts/deploy_ec2.py --ref v1.2-final  # 回到 v1
+python scripts/deploy_ec2.py --ref v1.1     # 回到 v1
 python scripts/deploy_ec2.py --status       # 確認機器現在跑哪一版
 python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 ```
@@ -58,6 +59,7 @@ python scripts/deploy_ec2.py --ref v2-dev   # 再切回 v2 繼續開發
 git checkout release/v1        # 直接在 v1 基礎上繼續
 # 或把 main 拉回 v1：
 git push origin v1.2-final:main --force-with-lease
+git push origin v1.1:main --force-with-lease
 ```
 
 用 `--force-with-lease` 而非 `--force`：若期間有人推了東西上去，
