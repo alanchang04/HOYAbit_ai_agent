@@ -83,6 +83,7 @@ import contextlib
 import contextvars
 import csv
 import json
+import math
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -104,7 +105,10 @@ from agent.collectors.derivatives import (
     percentile_rank,
 )
 from agent.config import get_settings
+from agent.filters.injection import sanitize_text, scan_raw_text
 from agent.reasoning.llm_client import build_llm_client
+from agent.reasoning.pipeline import run_reasoning
+from agent.schemas import Evidence, SourceType, now_iso
 from webapp.stage_specs import (
     build_evidence_card,
     compute_series_features,
@@ -139,6 +143,19 @@ REPORT_HTML_VAULT = Path(__file__).resolve().parent.parent.parent / REPORT_HTML_
 REPORT_HTML_REPO = Path(__file__).resolve().parent.parent / REPORT_HTML_NAME
 
 
+def _safe_print(message: str) -> None:
+    """印訊息到 console，印不出來就退成 ASCII，**不要讓它炸掉呼叫端**。
+
+    實際踩到的 bug（2026-08-02）：Windows 主控台預設 cp950，`print("⚠ ...")` 會拋
+    UnicodeEncodeError；這支被 `index()` 呼叫，結果整個首頁回 500——一句提醒訊息
+    把 demo 首頁弄掛了。用 uvicorn 一般啟動（沒有 -X utf8／PYTHONUTF8）就會遇到，
+    不是邊緣情況。日誌訊息永遠不該有能力讓請求失敗。"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        print(message.encode("ascii", "replace").decode("ascii"))
+
+
 def _resolve_report_html() -> Path | None:
     """決定首頁要送哪一份報告 HTML。
 
@@ -152,7 +169,7 @@ def _resolve_report_html() -> Path | None:
         if REPORT_HTML_REPO.exists():
             try:
                 if REPORT_HTML_VAULT.read_bytes() != REPORT_HTML_REPO.read_bytes():
-                    print(
+                    _safe_print(
                         f"⚠ {REPORT_HTML_NAME}：vault 正本與 repo 副本內容不同，"
                         f"這次送的是 vault 正本。部署前記得把副本同步過去："
                         f"cp '{REPORT_HTML_VAULT}' '{REPORT_HTML_REPO}'"
@@ -1334,11 +1351,33 @@ async def stage2_panews_sentiment(req: Stage2PanewsRequest):
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"PANews articles 抓取失敗：{exc}") from exc
 
+    # --- 爬蟲文字的注入防護（2026-08-02 接上 agent/filters/injection.py）---
+    # 這是**唯一**一個把自由文字爬進來的 Stage 2 factor（其他都是數字：funding rate、
+    # 位址數、CPI、清算單、ETF 淨流量）。正式 pipeline 那條路早就過 injection filter，
+    # 這支 demo API 原本沒接——目前原文沒進 API 回應也沒進 LLM prompt，所以還沒出事，
+    # 但那是巧合不是設計保證：哪天有人要在卡片上顯示標題、或把新聞餵進 Stage 7-9
+    # 辯論層，那條路就是沒過濾的。所以改成**在抓進來的當下就處理**，下游拿到的
+    # 一律是已淨化的字串。
+    #   sanitize_text  → 結構性中和（不可見字元／控制字元／換行／半形 `|`／長度上限）
+    #   scan_raw_text  → 注入特徵偵測，語意比照正式 pipeline：
+    #                    high   → 隔離，不計入情緒統計（但計數如實回報）
+    #                    medium → 標記，照常計入（下游仍是已淨化的字串）
     matched: list[tuple[datetime | None, float, bool]] = []
+    quarantined: list[str] = []
+    flagged_medium = 0
     for art in articles:
-        title, desc = str(art.get("title") or ""), str(art.get("desc") or "")
+        title = sanitize_text(str(art.get("title") or ""))
+        desc = sanitize_text(str(art.get("desc") or ""))
         if not _panews_match_coin(coin, title, desc):
             continue
+        severity, codes, _notes = scan_raw_text(f"{title} {desc}")
+        if severity == "high":
+            # 不把原文放進回應——這裡要的是「有幾篇被擋、命中什麼規則」，
+            # 貼原文等於把攻擊字串再往下游送一次
+            quarantined.append(",".join(codes))
+            continue
+        if severity == "medium":
+            flagged_medium += 1
         score, hit = _panews_article_score(title, desc)
         matched.append((_panews_published(art), score, hit))
 
@@ -1397,6 +1436,18 @@ async def stage2_panews_sentiment(req: Stage2PanewsRequest):
         "window_covered": reached_cutoff,
         "sample_count": len(matched),
         "source": f"PANews {PANEWS_ENDPOINT}（take={PANEWS_PAGE_SIZE} 分頁）",
+        "text_protection": {
+            "module": "agent/filters/injection.py",
+            "sanitized": "所有標題與摘要在抓進來的當下就過 sanitize_text（不可見字元／控制字元／換行／半形 | ／長度上限）",
+            "quarantined_high": len(quarantined),
+            "quarantined_codes": sorted(set(quarantined)),
+            "flagged_medium": flagged_medium,
+            "note": (
+                "high 命中＝隔離，不計入情緒統計；medium＝標記但照常計入（字串已淨化）。"
+                "隔離的原文刻意不放進回應——那等於把攻擊字串再往下游送一次。"
+                "這是六個 factor 裡唯一爬自由文字的一個，其餘都是數字，沒有這個風險面。"
+            ),
+        },
         "coverage_note": (
             f"⚠ 翻到 PANEWS_MAX_PAGES={PANEWS_MAX_PAGES} 頁上限就停了，最舊只翻到 "
             f"{min(all_published).strftime('%Y-%m-%d') if all_published else '未知'}，還沒回溯到 window "
@@ -1628,36 +1679,68 @@ def _applicable_days(knowledge: dict) -> list | None:
     return None
 
 
-def _horizon_match(horizon_days: int, knowledge: dict) -> tuple[float | None, str]:
+def _horizon_scale_label(knowledge: dict) -> str | None:
+    """這個 factor 適用尺度的**人看得懂的說法**（例如「短期」「極短期」）。
+    只給 [0, 1] 這種區間，讀的人得自己想「0 天是什麼意思」——液態清算那格的
+    上限 1 其實是「天」這個單位的粒度下限，不是真的可以撐一天。"""
+    ph = knowledge.get("primary_horizon")
+    if isinstance(ph, dict) and ph.get("scale"):
+        return str(ph["scale"])
+    if knowledge.get("category") == "event":
+        return "事件型（公布當下～政策管道）"
+    return None
+
+
+def _horizon_match(horizon_days: int, knowledge: dict) -> dict:
     """13 定義的 time_horizon_match：「比較 Stage 1 輸出的 horizon vs Stage 3
     Knowledge.primary_horizon 的接近程度」。2026-08-02 拍板 Option B 之後，
     Knowledge 那邊有了可數值比對的 `applicable_days`，這條線索就能真的算，
     不必再把一段散文丟給 LLM 讓它自己讀「短期」跟「2 週」搭不搭。
 
-    回傳 (score, 說明)。score 落在 0~1：查詢期間落在 factor 適用區間內＝1.0，
-    落在區間外則依偏離倍數遞減。**這裡算的只是四條線索之一**，最終的
-    context_modifier 仍然由 LLM 綜合判斷給出（13 拍板「LLM 解釋給出，不套公式」），
-    這裡不代替它下結論。"""
+    回傳的 dict 有兩種說明文字，用途不同：
+      `verdict`——一句話結論，給畫面用（畫面上不需要重述整個算式）
+      `detail`——完整的比對過程，給 LLM 判斷 context_modifier 時參考
+    score 落在 0~1：查詢期間落在 factor 適用區間內＝1.0，落在區間外依偏離倍數遞減。
+    **這裡算的只是四條線索之一**，最終的 context_modifier 仍由 LLM 綜合判斷給出
+    （13 拍板「LLM 解釋給出，不套公式」），這裡不代替它下結論。"""
     rng = _applicable_days(knowledge)
+    scale = _horizon_scale_label(knowledge)
+    base = {"query_horizon_days": horizon_days, "applicable_days": rng, "scale": scale}
+
     if not rng or len(rng) != 2:
-        return None, "這個 factor 的知識庫沒有 applicable_days，無法數值比對（當未知處理）"
+        return {
+            **base, "score": None,
+            "verdict": "知識庫沒有適用區間，無法比對（當未知處理）",
+            "detail": "這個 factor 的知識庫沒有 applicable_days，無法數值比對（當未知處理）",
+        }
 
     lo, hi = float(rng[0]), float(rng[1])
+    scale_text = f"{scale}（{rng[0]}~{rng[1]} 天）" if scale else f"{rng[0]}~{rng[1]} 天"
     if lo <= horizon_days <= hi:
-        return 1.0, f"查詢期間 {horizon_days} 天落在 factor 適用區間 [{rng[0]}, {rng[1]}] 天之內，時間尺度匹配"
+        return {
+            **base, "score": 1.0,
+            "verdict": f"這次分析 {horizon_days} 天，落在適用尺度內 → 尺度吻合",
+            "detail": f"查詢期間 {horizon_days} 天落在 factor 適用區間 [{rng[0]}, {rng[1]}] 天之內，時間尺度匹配",
+        }
     if horizon_days < lo:
-        # 查詢比 factor 擅長的尺度更短
         score = max(0.0, horizon_days / lo) if lo > 0 else 0.0
-        return score, (
-            f"查詢期間 {horizon_days} 天**短於** factor 適用區間 [{rng[0]}, {rng[1]}] 天的下限，"
-            f"偏離比例 {score:.2f}（1.0 表示完全匹配）"
-        )
-    # 查詢比 factor 擅長的尺度更長
+        return {
+            **base, "score": score,
+            "verdict": f"這次分析 {horizon_days} 天，比適用尺度更短 → 尺度不合",
+            "detail": (
+                f"查詢期間 {horizon_days} 天**短於** factor 適用區間 [{rng[0]}, {rng[1]}] 天的下限"
+                f"（適用尺度：{scale_text}），偏離比例 {score:.2f}（1.0 表示完全匹配）"
+            ),
+        }
     score = max(0.0, hi / horizon_days) if horizon_days > 0 else 0.0
-    return score, (
-        f"查詢期間 {horizon_days} 天**長於** factor 適用區間 [{rng[0]}, {rng[1]}] 天的上限，"
-        f"偏離比例 {score:.2f}（1.0 表示完全匹配）"
-    )
+    return {
+        **base, "score": score,
+        "verdict": f"這次分析 {horizon_days} 天，遠長於適用尺度 → 尺度不合",
+        "detail": (
+            f"查詢期間 {horizon_days} 天**長於** factor 適用區間 [{rng[0]}, {rng[1]}] 天的上限"
+            f"（適用尺度：{scale_text}），偏離比例 {score:.2f}（1.0 表示完全匹配）"
+        ),
+    }
 
 
 def _stage4_modifier_prompt(
@@ -1693,11 +1776,11 @@ def _stage4_modifier_prompt(
 
     # time_horizon_match 已經可以數值比對（Option B：Knowledge 有 applicable_days），
     # 直接把算好的分數與說明交給 LLM，不再要它自己讀散文猜「短期」跟「2 週」搭不搭。
-    match_score, match_note = _horizon_match(horizon_days, knowledge)
-    score_text = "無法計算" if match_score is None else f"{match_score:.2f}（1.00 = 完全匹配，越低表示尺度差越多）"
+    match = _horizon_match(horizon_days, knowledge)
+    score_text = "無法計算" if match["score"] is None else f"{match['score']:.2f}（1.00 = 完全匹配，越低表示尺度差越多）"
     time_property = (
         f"這次查詢 Horizon={horizon or '未提供'}（換算 {horizon_days} 天）。"
-        f"比對結果 match={score_text}——{match_note}。"
+        f"比對結果 match={score_text}——{match['detail']}。"
         f"參考：{scale_note}"
     )
     return (
@@ -1708,6 +1791,63 @@ def _stage4_modifier_prompt(
         f"但這些關聯 factor 今天的方向這輪 demo 還沒接上真實資料（當未知處理）\n"
         f"4. freshness：{freshness_note}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Prior Weight 換算：把三種來源放到同一把尺上（2026-08-02 拍板）
+# ---------------------------------------------------------------------------
+# 問題：取絕對值解決了「負號」，沒解決「單位」——ic 是相關係數（值域 [-1, 1]），
+# impact_level／Domain Knowledge 給的 0.8／0.3 是重要性分數（值域 [0, 1]），
+# 兩者放同一個排序鍵比大小，比的不是同一個被測量的量。
+#
+# 共同的尺定義成 `prior_strength ∈ [0, 1]`：「這個 factor 對本次 horizon 的證據
+# 強度，以 |ic| = IC_REF 為強訊號基準」。三種來源的換算方式見 `_to_prior_strength()`。
+#
+# 兩個常數刻意寫在程式而不是逐 factor 的 .md：它們是**全域規則**，六個 factor 必須
+# 用同一組數字換算，寫進 .md 反而會變成「每個 factor 可以有自己的尺」——那正是這次
+# 要解決的問題本身。值的來源是 13 的拍板，這裡只是實作。
+IC_REF = 0.1        # 多少 |ic| 算「強訊號」。量化實務日頻 IC 到 0.05 已算可用、0.1 很強
+IC_SHRINK_C = 30    # 「打五折的樣本數」：n = C 時折減係數剛好 0.5，比 30 多往上加、少往下砍
+
+
+def _ic_shrink(sample_size: int | None) -> float | None:
+    """樣本收縮係數 √n / (√n + √c)。
+
+    為什麼用 √n 不用 n：相關係數的標準誤大致是 1/√n，樣本從 100 加到 400 的可信度
+    提升，跟從 25 加到 100 是同一個量級——用 n 會讓大樣本被高估太多。
+
+    為什麼是連續折減不是 min_sample_size 門檻：13 拍板不設防呆（樣本少不該被擋掉），
+    這裡照那個精神——8 筆樣本的 factor 還是有卡片、還是進排序，只是要靠夠強的 ic
+    才擠得上去，不是被程式先砍掉。係數永遠不會到 1.0 也不會到 0。"""
+    if sample_size is None or sample_size <= 0:
+        return None
+    return math.sqrt(sample_size) / (math.sqrt(sample_size) + math.sqrt(IC_SHRINK_C))
+
+
+def _to_prior_strength(*, ic: float | None, sample_size: int | None) -> dict:
+    """IC 型 → prior_strength 的三步換算：取絕對值 → 樣本收縮 → 映射到 [0, 1]。
+
+    映射用 `1 - exp(-x/IC_REF)` 而不是 `min(x/IC_REF, 1)`：後者會讓 |ic|=0.3 跟 0.5
+    在收縮後都撞到上限 1.0，強弱差異被壓平；指數形式沒有硬上限、單調、且天然落在
+    [0, 1) 內。
+
+    方向不在這裡處理——`|ic|` 丟掉的正負號由 `_weight_direction()` 另外記錄，
+    這是 2026-08-02「排序取絕對值」那條拍板的落地位置（從排序時取，改成算的時候就取）。"""
+    if ic is None:
+        return {"strength": None, "shrink": None, "note": "ic 算不出來 → strength 留 null，不是 0（算不出來 ≠ 沒訊號）"}
+    shrink = _ic_shrink(sample_size)
+    if shrink is None:
+        return {"strength": None, "shrink": None, "note": "樣本數 0 或未知，無法收縮 → strength 留 null"}
+    adjusted = abs(ic) * shrink
+    strength = 1 - math.exp(-adjusted / IC_REF)
+    return {
+        "strength": strength,
+        "shrink": shrink,
+        "note": (
+            f"|ic|={abs(ic):.4f} × 樣本收縮 {shrink:.3f}（n={sample_size}，c={IC_SHRINK_C}）"
+            f"= {adjusted:.4f} → 1-exp(-{adjusted:.4f}/{IC_REF}) = {strength:.4f}"
+        ),
+    }
 
 
 async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) -> dict:
@@ -1732,15 +1872,45 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
     weight_md = _load_weight_md(factor_id)
     md_prior = (weight_md or {}).get("prior_weight") or {}
 
-    # --- 來源 2/3（以及離線算好 ic 的 panews_sentiment）：值寫在 Stage 4 .md 裡，不現場算 ---
+    # --- 來源 2/3（以及離線算好 ic 的 panews_sentiment／etf）：值寫在 Stage 4 .md 裡，不現場算 ---
     if md_prior.get("value") is not None:
         basis = md_prior.get("basis") or "domain_knowledge"
         md_ic = ((weight_md or {}).get("historical_predictability") or {}).get("ic") or {}
         example_run = md_ic.get("example_run") or {}
         offline_ic = basis == "rolling_spearman_ic"
+        md_value = float(md_prior["value"])
+
+        # 換算（2026-08-02 拍板）：.md 記錄「測到什麼」，這裡負責換算成同一把尺。
+        #   scale: raw_ic             → .md 的 value 是相關係數原值，要走三步換算
+        #   scale: relative_strength  → .md 的 value 已經是 [0,1] 的 IC 等價強度，直接用
+        # 分級型（impact_level／domain_knowledge）不做樣本收縮——人工分級本來就沒有
+        # 「樣本數」這個東西。⚠️ 這造成一個公式解不掉的不對稱：回測值會因樣本不足被打折，
+        # 拍腦袋的 0.8／0.3 不會。這裡不偷偷補一個折減係數去「平衡」（那等於重新引入
+        # 分組，跟排序拍板打架），而是照實把 basis 帶到卡片上讓人看得到，並記進 13 待處理。
+        md_scale = md_prior.get("scale") or ("raw_ic" if offline_ic else "relative_strength")
+        if md_scale == "raw_ic":
+            converted = _to_prior_strength(ic=md_value, sample_size=example_run.get("sample_size"))
+            strength = converted["strength"]
+            shrink = converted["shrink"]
+            convert_note = f"換算自 .md 記錄的離線 ic：{converted['note']}"
+        else:
+            strength = md_value
+            shrink = None
+            convert_note = (
+                f"這個值本來就是 [0,1] 的 IC 等價強度（basis={basis}），不需要換算、也不做樣本收縮"
+                "（人工分級沒有樣本數的概念）。⚠ 代價：它不會像回測值那樣因樣本不足被扣分，"
+                "這個不對稱是已知的，見 13 待處理。"
+            )
+
         return {
             "basis": basis,
-            "value": float(md_prior["value"]),
+            "value": strength,
+            "scale": "relative_strength",
+            "raw_value": md_value,
+            "md_scale": md_scale,
+            "shrink": shrink,
+            "ic_ref": IC_REF,
+            "conversion_note": convert_note,
             # ic 現場沒算，但如果 .md 裡有離線跑過的紀錄就照實帶出來，不要讓畫面上
             # 顯示「ic: null」誤導成「這個 factor 沒有 ic 概念」（那是 cpi 的情況）
             "ic": example_run.get("computed_value") if offline_ic else None,
@@ -1791,10 +1961,18 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
         }
 
     computed = _compute_rolling_spearman_ic(coin, horizon_days, anchor_date, series)
+    # 2026-08-02 拍板前這裡是「Prior Weight 就是 ic 本身」，現在多一步換算成
+    # prior_strength（同一把尺）。ic 原值不會消失——留在 `ic` 這格，帶號、未收縮。
+    converted = _to_prior_strength(ic=computed["ic"], sample_size=computed["sample_size"])
     return {
         "basis": "rolling_spearman_ic",
-        # Statistical Factor 的 Prior Weight 就是 ic 本身
-        "value": computed["ic"],
+        "value": converted["strength"],
+        "scale": "relative_strength",
+        "raw_value": computed["ic"],
+        "md_scale": "raw_ic（現場計算，非讀檔）",
+        "shrink": converted["shrink"],
+        "ic_ref": IC_REF,
+        "conversion_note": converted["note"],
         "ic": computed["ic"],
         "sample_size": computed["sample_size"],
         "input_horizon_days": computed["input_horizon_days"],
@@ -1847,7 +2025,7 @@ async def _compute_stage4(factor_id: str, coin: str, horizon: str | None, horizo
 
     # 把算好的 time_horizon_match 一起回傳，讓前端看得到「這條線索是怎麼算出來的」，
     # 不是只看到 LLM 綜合完的一個 modifier 數字。
-    match_score, match_note = _horizon_match(horizon_days, knowledge)
+    match = _horizon_match(horizon_days, knowledge)
     return {
         "factor": factor_id,
         "coin": coin,
@@ -1858,12 +2036,7 @@ async def _compute_stage4(factor_id: str, coin: str, horizon: str | None, horizo
             "context_modifier": context_modifier,
             "reasoning": modifier_reasoning,
             "source": modifier_source,
-            "time_horizon_match": {
-                "score": match_score,
-                "applicable_days": _applicable_days(knowledge),
-                "query_horizon_days": horizon_days,
-                "note": match_note,
-            },
+            "time_horizon_match": match,
             "inputs_status": {
                 "market_regime": "stub（尚未接上真實資料源）",
                 "time_horizon_match": "real（程式用 applicable_days 數值比對算出，非 LLM 讀散文猜）",
@@ -1985,28 +2158,34 @@ async def _build_evidence_card(factor_id: str, coin: str, horizon: str | None, h
         "factor": factor_id,
         "weight_detail": stage4,
         "card_spec": card_report,
-        # --- 排序用的量值與方向（2026-08-02 Ken 拍板：排序取絕對值）---
-        # evidence_weight 保持**帶號原值**不動（那是 Stage 4 算出來的東西，不該被排序
-        # 需求改寫）；排序另外用 ranking_value = |evidence_weight|。
-        # 為什麼要取絕對值：ic 是相關係數，值域 [-1, 1]，負值代表**反向訊號**
-        # （factor 越高、後續報酬越低）——那是有預測力的訊號，不是沒有訊號。
-        # 實測 BTC funding_rate ic=-0.55 是五個 factor 裡強度最高的一個，照帶號值
-        # 由大到小排會被排到最後一名，等於把最強的訊號當成最弱的。
-        # ⚠️ 代價要講清楚：取絕對值之後，排序只回答「訊號強不強」，不回答「往哪邊」。
-        # 方向資訊沒有消失，留在 evidence_weight 的正負號與 weight_direction 這格，
-        # 下游（Stage 6 Graph／Stage 7-9 推理鏈）要判斷方向時讀那兩個欄位，不是讀名次。
+        # --- 排序用的量值與方向 ---
+        # 2026-08-02 兩條拍板疊在這裡，順序要看清楚：
+        #   ① 排序取絕對值——ic 是相關係數，負值是**反向訊號**（factor 越高、後續報酬
+        #      越低），那是有預測力的訊號不是弱訊號，帶號排序會把最強的排到最後。
+        #   ② Prior Weight 換算成同一把尺（prior_strength ∈ [0,1]）——取絕對值已經
+        #      在 `_to_prior_strength()` 的第一步做掉了，所以 final_evidence_weight
+        #      現在恆為非負，這行 abs() 實質上是 no-op。**刻意留著**：它是拍板①的
+        #      正確描述，也是防呆（哪天換算規則改了、又冒出負值，排序不會突然壞掉）。
+        # 方向資訊沒有消失——它從 evidence_weight 的正負號搬到了 weight_direction
+        # 這格（以及 weight_detail.prior_weight.raw_value 的帶號 ic 原值）。
+        # 下游（Stage 6 Graph／Stage 7-9 推理鏈）要判斷方向讀那兩處，不是讀名次。
         "ranking_value": abs(stage4["final_evidence_weight"]) if stage4["final_evidence_weight"] is not None else None,
         "weight_direction": _weight_direction(stage4),
     }
 
 
 def _weight_direction(stage4: dict) -> dict:
-    """排序取絕對值之後，方向要有地方標示，不能只剩一個沒有正負的數字。
+    """方向要有地方標示，不能只剩一個沒有正負的數字。
+
+    ⚠️ 讀的是 **prior_weight.raw_value（帶號的 ic 原值）**，不是 final_evidence_weight——
+    換算成 prior_strength 之後 final 恆為非負，拿它判方向會永遠得到「同向訊號」，
+    那是錯的。正負號的唯一來源是換算前的 ic。
+
     只有 ic 型的權重才有「方向」可言——impact_level／domain_knowledge 給的是
-    [0, 1] 的重要性分數，本來就恆正，那不是「正向訊號」，是「沒有方向這個概念」，
-    兩者不能混為一談。"""
-    basis = (stage4.get("prior_weight") or {}).get("basis")
-    weight = stage4.get("final_evidence_weight")
+    [0, 1] 的重要性分數（換算後仍是重要性），那不是「正向訊號」，是「沒有方向這個
+    概念」，兩者不能混為一談。"""
+    prior = stage4.get("prior_weight") or {}
+    basis = prior.get("basis")
     if basis != "rolling_spearman_ic":
         return {
             "sign": None,
@@ -2017,22 +2196,23 @@ def _weight_direction(stage4: dict) -> dict:
                 "取絕對值對這種卡片不會改變任何東西。"
             ),
         }
-    if weight is None:
-        return {"sign": None, "label": "無法判斷", "note": "權重算不出來，方向也無從談起。"}
-    if weight < 0:
+    raw_ic = prior.get("raw_value")
+    if raw_ic is None:
+        return {"sign": None, "label": "無法判斷", "note": "ic 算不出來，方向也無從談起。"}
+    if raw_ic < 0:
         return {
             "sign": "negative",
             "label": "反向訊號",
             "note": (
-                f"ic 為負（final_weight={weight:.4f}）：這個 factor 的值越高，horizon 之後的報酬"
-                "越低。這是**有預測力**的訊號，只是方向相反，排序照 |weight| 算強度，"
-                "方向留在這裡給下游讀。"
+                f"ic 為負（原值 {raw_ic:.4f}）：這個 factor 的值越高，horizon 之後的報酬越低。"
+                "這是**有預測力**的訊號，只是方向相反——強度已經換算進 evidence_weight，"
+                "方向只剩這裡看得到。"
             ),
         }
     return {
         "sign": "positive",
         "label": "同向訊號",
-        "note": f"ic 為正（final_weight={weight:.4f}）：factor 值越高，horizon 之後的報酬越高。",
+        "note": f"ic 為正（原值 {raw_ic:.4f}）：factor 值越高，horizon 之後的報酬越高。",
     }
 
 
@@ -2285,5 +2465,180 @@ async def stage6_graph(req: Stage5FundingRequest):
                 f"{len(graph['referenced_but_no_card'])} 條關係指向這批沒有分析的 factor、"
                 f"{isolated} 個孤立節點。"
             ),
+            "execution_log": run_log,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Stage 7-9 — 交叉驗證層／辯論層／結論層＋信心分數
+# ---------------------------------------------------------------------------
+#
+# **不重寫一套新的推理鏈**：agent/reasoning/pipeline.py 的 run_reasoning() 已經是
+# 跑得動、846+ 測試覆蓋、release/v1 上線的 Step A(事實)→B(交叉驗證)→C1/C2(辯論，
+# 最多 2 輪)→D(結論)＋L5 三維信心分數。這輪稍早（commit 109ba5a／4ef81cf）已經把
+# Evidence Graph 接進 Step B／C1／C2／D 的 prompt（DEBATE_GRAPH_RULE），這裡直接
+# 呼叫既有函式就會自動吃到，不用另外處理。
+#
+# 唯一要做的事：把 Stage 5 的 Evidence Card（dict，這批 demo 自己的格式）轉成
+# agent/schemas.py 的 Evidence 物件（pipeline.py 的 prompt 是照 Evidence 物件設計
+# 的）。兩邊 schema 對不上的地方老實轉換，不假裝完全對應：
+#   - Evidence.id 要求 `ev-\d{3,}` 格式，Evidence Card 的 evidence_id（例如
+#     FUNDING_RATE_BTC）不符合，這裡另外編號，回傳 id_map 給前端把 ev-001
+#     對回可讀的卡片名稱
+#   - source_type 是既有六類 collector 分類（price/onchain/news/social/macro/
+#     derivatives），跟這批新 factor 的 Statistical/Event/Sentiment 分型是兩套
+#     不同的分類系統，SOURCE_TYPE_BY_FACTOR 是人工對照表——etf 沒有完美對應
+#     （機構資金流，最接近 macro 的「系統性、非資產微結構」性質，不是精確匹配，
+#     這裡明講不是隱瞞）
+#   - source_weight 讀 Stage 5 的 ranking_value（已經是換算過的 [0,1] 強度值，
+#     不是帶號的 evidence_weight），跟既有 source_weight 的值域定義一致
+#   - related_evidence 直接複用 `_build_evidence_graph()` 解析出來的邊（Stage 6
+#     已經做過 factor 名 → 卡片的比對），轉成「指向 ev-id」的格式，不重新寫一次
+#     關係解析邏輯
+
+SOURCE_TYPE_BY_FACTOR = {
+    "funding_rate": SourceType.DERIVATIVES,
+    "liquidation": SourceType.DERIVATIVES,
+    "active_address": SourceType.ONCHAIN,
+    "cpi": SourceType.MACRO,
+    "panews_sentiment": SourceType.NEWS,
+    "etf": SourceType.MACRO,  # 最接近的既有分類，非精確匹配，見上方說明
+}
+
+_DEBATE_RELATION_TO_CARD_KEY = {"supports": "confirms", "conflicts": "conflicts", "independent": "independent"}
+
+
+def _fact_summary_text(card: dict) -> str:
+    fact = card.get("fact") or {}
+    if not fact:
+        return f"{card.get('factor', '（未知 factor）')}：無 Fact 摘要"
+    return f"{card.get('factor')}：" + "；".join(f"{k}={v}" for k, v in fact.items())
+
+
+def _cards_to_evidences(cards: list[dict], coin: str) -> tuple[list[Evidence], dict[str, str]]:
+    """把 Stage 5 Evidence Card 轉成 Evidence 物件，回傳 (evidences, id_map)——
+    id_map 是 {原本的 evidence_id: 新配的 ev-NNN}，前端顯示辯論逐字稿時要用它
+    把 ev-001 對回 FUNDING_RATE_BTC 這種可讀名稱。"""
+    id_map = {c["evidence_id"]: f"ev-{i:03d}" for i, c in enumerate(cards, start=1)}
+    graph = _build_evidence_graph(cards)  # 複用 Stage 6 已經做好的關係解析，不重寫一次
+
+    related_by_source: dict[str, dict[str, list[str]]] = {
+        c["evidence_id"]: {"confirms": [], "conflicts": [], "independent": []} for c in cards
+    }
+    for edge in graph["edges"]:
+        key = _DEBATE_RELATION_TO_CARD_KEY[edge["relation"]]
+        related_by_source[edge["from"]][key].append(id_map[edge["to"]])
+
+    evidences: list[Evidence] = []
+    for card in cards:
+        weight = card.get("ranking_value")
+        source_weight = max(0.0, min(1.0, float(weight))) if weight is not None else 0.5
+        weight_reason = ((card.get("weight_detail") or {}).get("prior_weight") or {}).get("reason") or ""
+        evidences.append(Evidence(
+            id=id_map[card["evidence_id"]],
+            coin=coin,
+            source=str(card.get("traceability") or card.get("factor") or "（未知來源）"),
+            fetched_at=now_iso(),
+            content_reference=_fact_summary_text(card),
+            related_claim=str(card.get("factor") or ""),
+            source_type=SOURCE_TYPE_BY_FACTOR.get(card.get("factor"), SourceType.MACRO),
+            source_weight=source_weight,
+            weight_reason=weight_reason,
+            related_evidence=related_by_source[card["evidence_id"]],
+        ))
+    return evidences, id_map
+
+
+class Stage789Request(BaseModel):
+    query: str
+    coin: str
+    evidence_cards: list[dict]
+
+
+@app.post("/api/stage789")
+async def stage789(req: Stage789Request):
+    """Stage 7（交叉驗證層）／Stage 8（辯論層）／Stage 9（結論層＋信心分數）。
+
+    ⚠️ 吃前端已經拿到的 `evidence_cards`（來自 /api/stage5 的回應），**不重新呼叫
+    stage5_all()**——跟 Stage 6 前端組圖同一個理由：Stage 2/4 的 LLM 窗口判斷／
+    context_modifier 每次呼叫都可能給出不同結果，重打一次會讓這裡看到的證據跟
+    畫面上 Stage 2-5 顯示的對不起來，還多等一次昂貴的 pipeline。
+
+    這是目前這支 demo 最重的一次呼叫：Step A(1 次 LLM) + Step B(1 次) + 最多兩輪
+    辯論（正方最多 2 次＋反方最多 2 次）+ Step D(1 次) = 最多 7 次 LLM 呼叫，
+    沒有設 deadline（demo 用途不做 15 分鐘賽制的時間預算控制），實測可能要數十秒。
+    """
+    coin = req.coin.upper()
+    if PERP_SYMBOL.get(coin) is None:
+        raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
+    if not req.query.strip():
+        raise HTTPException(400, "缺少原始查詢問題（query）——Step B 的題型判斷、Step C 的辯論框架都需要它")
+    if not req.evidence_cards:
+        raise HTTPException(400, "evidence_cards 是空的，沒有證據可以進行推理鏈")
+
+    with _capture_log() as run_log:
+        _log(
+            "stage789_received",
+            f"coin={coin}，{len(req.evidence_cards)} 張 Evidence Card 進推理鏈",
+            phase="reason",
+            layer="S7_9_reasoning",
+        )
+        with _timed(
+            "adapter_cards_to_evidences",
+            "Stage 5 卡片 → Evidence（推理鏈的輸入格式）",
+            phase="reason",
+            layer="S7_9_reasoning",
+        ):
+            evidences, id_map = _cards_to_evidences(req.evidence_cards, coin)
+
+        settings = get_settings()
+        try:
+            llm_client = build_llm_client(settings)
+        except Exception as exc:  # noqa: BLE001
+            _log("llm_client_init", f"失敗：{exc}", status="error", layer="S7_9_reasoning")
+            raise HTTPException(500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}") from exc
+
+        try:
+            with _timed(
+                "run_reasoning",
+                "Step A 事實層 → B 交叉驗證 → C1/C2 辯論（最多 2 輪）→ D 結論＋信心分數"
+                "（最多 7 次 LLM 呼叫）",
+                phase="reason",
+                layer="S7_9_reasoning",
+            ):
+                result = await asyncio.to_thread(
+                    run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None
+                )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"推理鏈執行失敗（backend={settings.llm_backend}）：{exc}") from exc
+
+        _log(
+            "stage789_done",
+            f"題型={result.question_type}，辯論 {(result.debate or {}).get('round_count', 0)} 輪，"
+            f"信心 {result.confidence_score}",
+            phase="reason",
+            layer="S7_9_reasoning",
+            metrics={
+                "confidence_score": result.confidence_score,
+                "debate_rounds": (result.debate or {}).get("round_count", 0),
+                "facts": len(result.facts),
+            },
+        )
+
+        return {
+            "coin": coin,
+            "question": req.query,
+            "backend": settings.llm_backend,
+            "question_type": result.question_type,
+            "id_map": id_map,
+            "facts": result.facts,
+            "cross_validation": result.cross_validation,
+            "inference": result.inference,
+            "debate": result.debate,
+            "conclusion": result.conclusion,
+            "confidence_score": result.confidence_score,
+            "confidence_breakdown": result.confidence_breakdown,
+            "primary_horizon": result.primary_horizon,
+            "primary_horizon_basis": result.primary_horizon_basis,
             "execution_log": run_log,
         }

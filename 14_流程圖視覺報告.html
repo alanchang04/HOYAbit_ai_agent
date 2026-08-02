@@ -1,17 +1,55 @@
 <!--
-  對應：[[13流程圖迭代定案v2]]（Stage 1-5 這輪異動）
-  頁面編號 2026-08-02 再改過一次：原本獨立一個區塊的 Knowledge Layer（原
-  Stage 3）併進 Stage 2 卡片內，改成點開「查看 Knowledge Layer」才看得到——
-  它本來就是查表用的背景知識，不是每次都要看的即時數字。原 Stage 4/5 依序
-  遞補成 Stage 3/4，畫面編號連續；程式碼內部的 id 前綴（s3／s4／s5）跟
-  Stage 4/5 對應的實際資料夾名稱（Stage 4 — Dynamic Evidence Weight Engine／
-  Stage 5 — Evidence Card ＋ Prioritization）維持不動，只有畫面上看得到的
-  badge 數字跟標題文字改了，避免動到大量內部管線只為了改個顯示編號。
+  對應：[[13流程圖迭代定案v2]]（Stage 1-9 這輪異動）
+
+  ⚠️ 畫面 badge 編號跟 13 文件的設計編號**不是一一對應**，這是刻意的，理由見下方
+  ①，換算表如下（後面提到「Stage N」除非特別註明，一律是設計文件編號）：
+
+  | 設計文件編號 | 內容 | 畫面 badge |
+  |---|---|---|
+  | Stage 1 | LLM 判斷 Asset/Horizon/Research Goal | 1 |
+  | Stage 2 | Feature Extraction | 2 |
+  | Stage 3 | Knowledge Layer | （併入 Stage 2 卡片，點開才看得到，無獨立 badge） |
+  | Stage 4 | Dynamic Evidence Weight Engine | 3 |
+  | Stage 5 | Evidence Card ＋ Prioritization | 4 |
+  | Stage 6 | Evidence Graph | 5 |
+  | Stage 7 | 交叉驗證層 | 6 |
+  | Stage 8 | 辯論層 | 7 |
+  | Stage 9 | 結論層＋信心分數 | 8 |
+
+  頁面編號沿革（2026-08-02 三次異動）：
+  ①原本獨立一個區塊的 Knowledge Layer（設計文件 Stage 3）併進 Stage 2 卡片內，
+    改成點開「查看 Knowledge Layer」才看得到——它本來就是查表用的背景知識，
+    不是每次都要看的即時數字，這一併就讓後面所有 badge 都比設計編號少 1。
+    程式碼內部的 id 前綴（s3／s4／s5／s6…）刻意跟設計文件編號對齊、不跟著
+    badge 換，只有畫面上看得到的 badge 數字跟標題文字改了，避免動到大量
+    內部管線只為了改個顯示編號。
+  ②新增 Evidence Graph（設計文件 Stage 6，畫面 badge 5）——吃 Stage 5 已經
+    抓到的 evidence_cards 在前端組圖，不打 /api/stage6（避免重跑一次完整
+    pipeline、多等一次 LLM），圖演算法是 webapp/stage1_demo_api.py 的
+    `_build_evidence_graph` 移植版，兩邊要保持邏輯一致。同時新增第六個
+    factor：etf（美國現貨 BTC ETF 淨流量，資料源 bitbo.io，樣本只有近 9-10
+    個交易日）。
+  ③新增交叉驗證／辯論／結論三層（設計文件 Stage 7-9，畫面 badge 6-8）——
+    **不重寫一套新的推理鏈**，直接呼叫 agent/reasoning/pipeline.py 既有的
+    run_reasoning()（Step A→B→C1/C2→D＋L5 信心分數，846+ 測試覆蓋、
+    release/v1 上線），只把 Stage 5 的 Evidence Card 轉成它要的 Evidence
+    物件格式。這三層很貴（最多 7 次 LLM），改成按鈕手動觸發，不像前面幾層
+    自動打。
+  ④Stage 2 卡片與 Evidence Card 補上「規格檔來源」顯示——端點／參數／欄位清單
+    讀自 `Stage 2 — Feature Extraction/{factor}.yaml`、卡片格子讀自
+    `Stage 5 — Evidence Card ＋ Prioritization/{factor}.md`（見 webapp/stage_specs.py）。
+    這件事本來只在程式裡，畫面上看不出來數字是照哪份規格檔算的，也看不出
+    「規格檔定義了幾格、哪幾格結構性不存在／哪幾格 demo 還沒實作」。現在每張
+    Stage 2 卡片下方會列出規格檔路徑與欄位分類，可展開看 features 全欄位；
+    Evidence Card 則顯示卡片 schema 出處、對應欄位（如 cpi 的
+    primary_horizon → reaction_window）與「schema 有、這次填不出來」的格子。
+    panews_sentiment 另外顯示爬蟲文字的注入防護結果（隔離／標記篇數）。
   全部為真實可互動 demo，呼叫 HOYAbit_ai_agent/webapp/stage1_demo_api.py：
     Stage 1 打 Bedrock 判斷 Asset/Horizon/Research Goal（單一 LLM call）
-    Stage 2/3/4（畫面編號）由同一次 /api/stage5 呼叫驅動（避免兩次 LLM 窗口判斷不一致）
+    Stage 2/3/4/5（設計編號，畫面 2/3/4）由同一次 /api/stage5 呼叫驅動（避免多次 LLM 窗口判斷不一致）
+    Stage 6（畫面 5）前端組圖，不額外打 API
+    Stage 7-9（畫面 6-8）呼叫 /api/stage789，手動按鈕觸發
     Knowledge Layer 純查表讀 Stage 3 — Knowledge Layer/{factor}.md，刻意不打 LLM
-  Stage 6-9（13 文件原編號）尚未做進本頁，待後續拍板再補。
   啟動方式見同目錄 HOYAbit_ai_agent/webapp/stage1_demo_api.py 檔頭註解。
 -->
 <!doctype html>
@@ -19,7 +57,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Evidence-driven Research Pipeline · Stage 1-5</title>
+<title>Evidence-driven Research Pipeline · Stage 1-9</title>
 <style>
   :root {
     color-scheme: light;
@@ -41,8 +79,14 @@
     --accent-4-bg: #e3edf5;
     --accent-5: #7a5230;   /* Stage 5 — 已可互動 */
     --accent-5-bg: #f2e9df;
-    --accent-6: #1f5f7a;   /* Stage 6 Evidence Graph — 已可互動 */
-    --accent-6-bg: #e0eef3;
+    --accent-6: #2f6a6a;   /* Stage 6（畫面編號 5）— Evidence Graph，已可互動 */
+    --accent-6-bg: #e2eeee;
+    --accent-7: #8a6d1f;   /* Stage 7（畫面編號 6）— 交叉驗證層，已可互動 */
+    --accent-7-bg: #f3ecd7;
+    --accent-8: #8f2f4f;   /* Stage 8（畫面編號 7）— 辯論層，已可互動 */
+    --accent-8-bg: #f5e2e8;
+    --accent-9: #2f3f8f;   /* Stage 9（畫面編號 8）— 結論層＋信心分數，已可互動 */
+    --accent-9-bg: #e2e5f5;
     --accent-log: #4a4740;  /* Execution Log — 中性灰，不跟任何 stage 搶色 */
     --accent-log-bg: #eeece4;
     --danger: #a13f2f;
@@ -70,8 +114,14 @@
       --accent-4-bg: #1c2a33;
       --accent-5: #d3a878;
       --accent-5-bg: #2e2519;
-      --accent-6: #6cbcd6;
-      --accent-6-bg: #172a31;
+      --accent-6: #6fd0d0;
+      --accent-6-bg: #1c2f2f;
+      --accent-7: #d9b95c;
+      --accent-7-bg: #332c18;
+      --accent-8: #e08aa8;
+      --accent-8-bg: #331c26;
+      --accent-9: #8a97e0;
+      --accent-9-bg: #1c1f33;
       --accent-log: #b8b4a6;
       --accent-log-bg: #24231d;
       --danger: #e08a78;
@@ -88,6 +138,10 @@
     --accent-3: #b39cf0; --accent-3-bg: #2a2438;
     --accent-4: #6fb3e0; --accent-4-bg: #1c2a33;
     --accent-5: #d3a878; --accent-5-bg: #2e2519;
+    --accent-6: #6fd0d0; --accent-6-bg: #1c2f2f;
+    --accent-7: #d9b95c; --accent-7-bg: #332c18;
+    --accent-8: #e08aa8; --accent-8-bg: #331c26;
+    --accent-9: #8a97e0; --accent-9-bg: #1c1f33;
     --danger: #e08a78; --danger-bg: #3a2420;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
   }
@@ -100,6 +154,10 @@
     --accent-3: #5b3fa1; --accent-3-bg: #ece6f7;
     --accent-4: #1f5f8f; --accent-4-bg: #e3edf5;
     --accent-5: #7a5230; --accent-5-bg: #f2e9df;
+    --accent-6: #2f6a6a; --accent-6-bg: #e2eeee;
+    --accent-7: #8a6d1f; --accent-7-bg: #f3ecd7;
+    --accent-8: #8f2f4f; --accent-8-bg: #f5e2e8;
+    --accent-9: #2f3f8f; --accent-9-bg: #e2e5f5;
     --danger: #a13f2f; --danger-bg: #f6e6e2;
     --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
   }
@@ -120,6 +178,9 @@
   header.top h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
   header.top .lineage { color: var(--muted); font-size: 12.5px; margin: 0 0 18px; }
   header.top .lineage code { font-size: 12px; }
+  header.top .lineage p { margin: 0 0 8px; }
+  header.top .lineage ul { margin: 4px 0 10px; padding-left: 20px; }
+  header.top .lineage li { margin-bottom: 6px; line-height: 1.5; }
 
   .changelog {
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
@@ -190,6 +251,31 @@
 
   .stage-card { border-radius: 16px; padding: 20px 22px; margin-top: 18px; border: 1px solid var(--line); box-shadow: var(--shadow); }
   .stage-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  /* 大標下的一句話：這層在做什麼。跟卡片最下方那段長註記分工——
+     這裡回答「是什麼」，下面那段回答「怎麼做到的、有哪些限制」。 */
+  .stage-lead {
+    margin: -6px 0 14px; font-size: 13px; line-height: 1.65; color: var(--ink-2);
+    padding-left: 36px;   /* 對齊標題文字，讓它看起來是標題的延伸而不是內容的一部分 */
+  }
+  .stage-lead b { color: var(--ink); font-weight: 600; }
+
+  /* 三型差異對照表：Statistical／Event／Sentiment 在該層各自被怎麼處理 */
+  .type-table {
+    margin: 0 0 14px 36px; border-collapse: collapse; font-size: 12.5px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  }
+  .type-table th, .type-table td {
+    text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top;
+  }
+  .type-table tr:last-child td { border-bottom: none; }
+  .type-table th { color: var(--muted); font-weight: 600; white-space: nowrap; background: var(--surface-2); }
+  .type-table td:first-child { white-space: nowrap; font-weight: 600; color: var(--ink); }
+  .type-table code { font-size: 11.5px; }
+  details.type-box { margin: 14px 0 0; }
+  details.type-box > summary {
+    cursor: pointer; font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-bottom: 8px;
+  }
+  details.type-box .type-table { margin-left: 0; }
   .stage-badge {
     width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 700; flex: none;
@@ -229,48 +315,113 @@
   .s6 .stage-title { color: var(--accent-6); }
   .s6 .stage-tag { background: var(--accent-6); color: var(--accent-6-bg); }
 
-  .slog { background: var(--accent-log-bg); }
-  .slog .stage-badge { background: var(--accent-log); color: var(--accent-log-bg); }
-  .slog .stage-title { color: var(--accent-log); }
-  .slog .stage-tag { background: var(--accent-log); color: var(--accent-log-bg); }
+  /* ---- Stage 6：真的畫成節點圖，不是清單 ---- */
+  .graph-wrap {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 8px; display: flex; justify-content: center;
+  }
+  .graph-svg { width: 100%; max-width: 480px; height: auto; }
+  .graph-svg .g-edge-line { stroke-width: 1.6; fill: none; }
+  .graph-svg .g-edge-line.independent { stroke: var(--line-strong); stroke-dasharray: 4 3; }
+  .graph-svg .g-edge-line.supports { stroke: var(--accent-6); }
+  .graph-svg .g-edge-line.conflicts { stroke: var(--danger); }
+  .graph-svg .g-edge-label {
+    font-size: 8.5px; fill: var(--muted); font-weight: 600; text-anchor: middle;
+  }
+  .graph-svg .g-node circle {
+    fill: var(--accent-6-bg); stroke: var(--accent-6); stroke-width: 1.8;
+  }
+  .graph-svg .g-node.isolated circle {
+    fill: var(--surface-2); stroke: var(--line-strong); stroke-dasharray: 3 2;
+  }
+  .graph-svg .g-node text {
+    font-size: 9.5px; fill: var(--ink); text-anchor: middle; font-weight: 600;
+    paint-order: stroke; stroke: var(--surface); stroke-width: 3px;
+  }
+  .graph-svg .g-node .g-node-coin { font-size: 7.5px; fill: var(--muted); font-weight: 500; }
 
-  /* ---- Stage 6 Evidence Graph ---- */
-  .graph-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; font-size: 11.5px; color: var(--ink-2); }
-  .graph-legend b { font-weight: 700; }
-  .edge-list { display: flex; flex-direction: column; gap: 6px; }
-  .edge-item {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-    padding: 8px 12px; font-size: 12.5px;
+  .graph-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 11.5px; color: var(--ink-2); }
+  .graph-legend .g-item { display: flex; align-items: center; gap: 5px; }
+  .graph-legend .g-swatch { width: 16px; height: 2px; flex: none; }
+  .graph-legend .g-swatch.supports { background: var(--accent-6); }
+  .graph-legend .g-swatch.conflicts { background: var(--danger); }
+  .graph-legend .g-swatch.independent {
+    background: repeating-linear-gradient(90deg, var(--line-strong) 0 4px, transparent 4px 7px);
   }
-  .edge-node { font-weight: 600; }
-  .edge-rel {
-    font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 700; letter-spacing: .02em;
+  .graph-legend .g-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+    background: var(--surface-2); border: 1.5px dashed var(--line-strong);
   }
-  .rel-supports { background: var(--accent-1-bg); color: var(--accent-1); border: 1px solid var(--accent-1); }
-  .rel-conflicts { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
-  .rel-independent { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--line-strong); }
-  .node-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .node-chip {
-    font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
-    background: var(--surface); border: 1px solid var(--line-strong); font-weight: 600;
-  }
-  .node-chip.isolated { border-style: dashed; color: var(--muted); }
-  .dangling-list { font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
 
-  /* ---- Execution Log ---- */
-  .log-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-  table.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  table.log-table th, table.log-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  table.log-table th { position: sticky; top: 0; background: var(--surface-2); font-size: 11px; color: var(--muted); z-index: 1; }
-  table.log-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
-  .log-status { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; font-weight: 700; }
-  .log-ok { background: var(--accent-1-bg); color: var(--accent-1); }
-  .log-error { background: var(--danger-bg); color: var(--danger); }
-  .log-skipped { background: var(--accent-2-bg); color: var(--accent-2); }
-  .log-layer { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .log-ms { text-align: right; font-variant-numeric: tabular-nums; }
+  .graph-edge-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+  .graph-edge-row .rel-tag {
+    font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    background: var(--accent-6); color: var(--accent-6-bg); flex: none;
+  }
+  .graph-edge-row .rel-tag.conflicts { background: var(--danger); color: var(--danger-bg); }
+  .graph-edge-row .rel-tag.independent { background: var(--line-strong); color: var(--ink); }
+
+  .s7 { background: var(--accent-7-bg); }
+  .s7 .stage-badge { background: var(--accent-7); color: var(--accent-7-bg); }
+  .s7 .stage-title { color: var(--accent-7); }
+  .s7 .stage-tag { background: var(--accent-7); color: var(--accent-7-bg); }
+
+  .s8 { background: var(--accent-8-bg); }
+  .s8 .stage-badge { background: var(--accent-8); color: var(--accent-8-bg); }
+  .s8 .stage-title { color: var(--accent-8); }
+  .s8 .stage-tag { background: var(--accent-8); color: var(--accent-8-bg); }
+
+  .s9 { background: var(--accent-9-bg); }
+  .s9 .stage-badge { background: var(--accent-9); color: var(--accent-9-bg); }
+  .s9 .stage-title { color: var(--accent-9); }
+  .s9 .stage-tag { background: var(--accent-9); color: var(--accent-9-bg); }
+
+  /* Stage 6-8（辯論鏈）觸發按鈕：這段很貴（最多 7 次 LLM），不像前面自動打，
+     要 Ken 自己按才會跑。 */
+  .reason-trigger {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 12px;
+  }
+  .reason-trigger .rt-note { font-size: 12.5px; color: var(--muted); flex: 1 1 auto; }
+
+  /* 交叉驗證層：一致訊號 / 矛盾訊號 兩欄並排 */
+  .cv-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px) { .cv-columns { grid-template-columns: 1fr; } }
+  .cv-col h5 { margin: 0 0 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .cv-col ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); }
+  .cv-col li { margin-bottom: 6px; line-height: 1.55; }
+  .cv-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .cv-dot.ok { background: var(--accent-6); }
+  .cv-dot.warn { background: var(--danger); }
+
+  /* 辯論逐輪：正方／反方交錯排版，像對話串 */
+  .debate-round { margin-bottom: 16px; }
+  .debate-round .dr-label { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; margin-bottom: 8px; text-transform: uppercase; }
+  .debate-turn {
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; font-size: 13px; line-height: 1.6;
+    max-width: 92%;
+  }
+  .debate-turn.bull { background: var(--accent-6-bg); border: 1px solid var(--accent-6); margin-right: auto; }
+  .debate-turn.bear { background: var(--accent-8-bg); border: 1px solid var(--accent-8); margin-left: auto; }
+  .debate-turn .dt-role { font-size: 11px; font-weight: 700; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .debate-turn.bull .dt-role { color: var(--accent-6); }
+  .debate-turn.bear .dt-role { color: var(--accent-8); }
+  .debate-turn .dt-critique {
+    margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong);
+    color: var(--ink-2); font-style: italic;
+  }
+  .debate-turn .dt-evidence { margin-top: 8px; }
+
+  /* 結論層＋信心分數：圓環量表 */
+  .conclusion-box { font-size: 13.5px; line-height: 1.7; }
+  .confidence-gauge { display: flex; align-items: center; gap: 18px; margin: 10px 0 16px; flex-wrap: wrap; }
+  .cg-ring { flex: none; }
+  .cg-breakdown { flex: 1 1 240px; min-width: 200px; }
+  .cg-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12px; }
+  .cg-bar-row .cg-label { flex: 0 0 92px; color: var(--muted); }
+  .cg-bar-track { flex: 1 1 auto; height: 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .cg-bar-fill { height: 100%; background: var(--accent-9); border-radius: 999px; }
+  .cg-bar-row .cg-value { flex: 0 0 34px; text-align: right; font-weight: 600; }
 
   .field-row { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 10px; }
   .field { min-width: 140px; }
@@ -338,6 +489,23 @@
   }
   .todo-note .dot { flex: none; margin-top: 5px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
+  .slog { background: var(--accent-log-bg); }
+  .slog .stage-badge { background: var(--accent-log); color: var(--accent-log-bg); }
+  .slog .stage-title { color: var(--accent-log); }
+  .slog .stage-tag { background: var(--accent-log); color: var(--accent-log-bg); }
+  .log-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.log-table th, table.log-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.log-table th { position: sticky; top: 0; background: var(--surface-2); font-size: 11px; color: var(--muted); z-index: 1; }
+  table.log-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .log-status { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; font-weight: 700; }
+  .log-ok { background: var(--accent-1-bg); color: var(--accent-1); }
+  .log-error { background: var(--danger-bg); color: var(--danger); }
+  .log-skipped { background: var(--accent-2-bg); color: var(--accent-2); }
+  .log-layer { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .log-ms { text-align: right; font-variant-numeric: tabular-nums; }
+
   .back-row { margin-top: 22px; }
 </style>
 </head>
@@ -346,13 +514,25 @@
 
   <header class="top">
     <h1>Evidence-driven Research Pipeline</h1>
-    <p class="lineage">
-      承接 <code>13_流程圖迭代定案v2.md</code>（Stage 1-5 這輪異動）／完整迭代脈絡見 <code>07_流程圖迭代定案.md</code>。
-      本頁 Stage 1-5 全部接上真實資料與真實 LLM 呼叫，五個 factor（funding_rate／active_address／cpi／liquidation／panews_sentiment）跑完整條鏈，Statistical／Event／Sentiment 三型都有；Stage 6-9 尚未做進本頁。
-    </p>
+    <div class="lineage">
+      <p>這是一個<b>端對端即時互動 Demo</b>：輸入問題後，下面每一層都是真實資料＋真實 LLM 呼叫現場跑出來的，不是預錄畫面或假資料（每一層底下都有一段說明在講「這層在做什麼」，這裡不重複，講的是更上層的「為什麼這樣設計」）。</p>
+      <p><b>為什麼拆成五層，不是丟給 LLM 一次生成答案？</b>因為市場判斷最怕的不是「答案不準」，而是「答案怎麼來的說不清楚」——這條管線刻意把事實、背景知識、重要性、優先順序、證據關係拆成五個各自獨立、可以單獨檢查的環節：</p>
+      <ul>
+        <li><b>事實與解讀分開</b>——Stage 2 只記客觀讀數，不判斷好壞</li>
+        <li><b>知識與當下分開</b>——Knowledge Layer 是人工研究、附真實學術／產業出處的背景知識，不跟今天的即時數字混在一起</li>
+        <li><b>重要性與方向脫鉤</b>——Stage 3 的權重只回答「這筆證據有多重要」，學界對某個因子看多看空沒有共識時（例如 CPI 對比特幣到底是不是避險），系統照樣能公平給分，不用先幫你選邊站</li>
+        <li><b>只排序、不刪除</b>——Stage 4 連算不出權重的證據也留著，不會偷偷藏起對結論不利的資料</li>
+        <li><b>攤開矛盾、不強行整合</b>——Stage 5 把證據彼此打不打架畫出來，而不是幫你合併成一個看似篤定的答案</li>
+      </ul>
+      <p>好處是任何一層出錯都能被單獨定位是哪個環節、為什麼——不是整條黑盒子一起賭對錯。</p>
+    </div>
 
     <details class="changelog">
-      <summary>這輪（13 v2）改了什麼——展開看異動總覽</summary>
+      <summary>這輪（13 v2）改了什麼／設計文件出處——展開看異動總覽</summary>
+      <p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">
+        設計文件：<code>13_流程圖迭代定案v2.md</code>（Stage 1-9 這輪異動）／完整迭代脈絡見 <code>07_流程圖迭代定案.md</code>。
+        本頁 Stage 1-9（設計文件編號，非畫面 badge 編號）全部接上真實資料與真實 LLM 呼叫，Statistical／Event／Sentiment 三型都有；Stage 6 Evidence Graph 吃 Stage 5 同一份回應在前端畫圖，不再打一次 API；Stage 7-9（交叉驗證／辯論／結論＋信心分數）直接呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈（不重寫一套新的），手動按鈕觸發，不像前面自動打——最多 7 次 LLM 呼叫，太貴不能每次查詢自動跑。
+      </p>
       <table>
         <tr><th>項目</th><th>11 原設計</th><th>13 這輪改動</th></tr>
         <tr><td>Query Understanding</td><td>獨立層，判斷方式未明說</td><td>併入 Stage 1，明確定義為<b>單一 LLM 判斷</b></td></tr>
@@ -403,6 +583,7 @@
           <span class="stage-title">Stage 1 — LLM 判斷結果</span>
           <span class="stage-tag" id="backend-tag">live</span>
         </div>
+        <div class="stage-lead"><b>讀懂問題。</b>把一句自然語言問句，拆成後面每一層都要吃的三個判斷：分析哪個幣、看多長的時間、想回答哪一類問題。整條流程只有這裡在「理解人話」，一次 LLM 呼叫同時定案三件事。</div>
         <div class="field-row">
           <div class="field">
             <div class="k">Asset</div>
@@ -426,7 +607,38 @@
           <span class="stage-title">Stage 2 — Feature Extraction</span>
           <span class="stage-tag">4 factors live</span>
         </div>
+        <div class="stage-lead"><b>去抓資料，只記事實。</b>每個 factor 各自打自己的資料源，算出「現在的值、相對歷史的什麼位置、近期往哪個方向走」。抓多長由 LLM 依上一層的 Horizon 現場判斷。這層不解讀好壞、不給方向結論。<br>每張卡片下方可展開的 <b>Knowledge Layer</b> 是配套的背景知識——「這個 factor 本身是什麼、擅長什麼尺度、跟誰互相印證」，純查表不推理。</div>
         <div class="factor-row" id="stage2-factors"></div>
+        <details class="type-box">
+          <summary>三型資料在這層的差異——抓法與算得出來的欄位都不同（點開）</summary>
+          <table class="type-table">
+            <tr><th>型別</th><th>窗口的單位與意義</th><th>算得出來的欄位</th><th>算不出來的欄位（結構性，不是漏做）</th></tr>
+            <tr>
+              <td>Statistical<br><span class="lr-note">funding_rate／active_address／etf</span></td>
+              <td><b>天</b>——「回看多久」。由 LLM 依 Horizon 現場判斷</td>
+              <td>現值、<code>percentile</code>（相對這段窗口的位置）、<code>trend</code>（窗口內前後半段比較）</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Event<br><span class="lr-note">cpi</span></td>
+              <td><b>月</b>——資料本身是月頻，LLM 判斷的天數要先換算成月（<code>window_months</code>）</td>
+              <td>現值、<code>percentile</code>、<code>mom_pct</code>／<code>yoy_pct</code>（月增／年增，事件型才有意義的變化率）</td>
+              <td><code>trend</code>——月頻資料在短窗口內只有 1~2 筆，做前後半段比較沒有意義</td>
+            </tr>
+            <tr>
+              <td>Sentiment<br><span class="lr-note">panews_sentiment</span></td>
+              <td><b>天,但只決定「往回翻多深」</b>——超出窗口的文章標記為非近期<b>但照樣計入</b>，不是過濾邊界</td>
+              <td>情緒分數、<code>nonzero_ratio</code>（關鍵字法的覆蓋率）、<code>window_covered</code>（有沒有翻到窗口底）</td>
+              <td>嚴格的 <code>percentile</code>——分數是簡化版關鍵字計分而非 NLP 模型，母體本身可信度有限</td>
+            </tr>
+            <tr>
+              <td>資料源缺歷史<br><span class="lr-note">liquidation</span></td>
+              <td><b>秒</b>——沒有「回看窗口」這個概念，只能開 WebSocket 監聽固定秒數</td>
+              <td>觀察窗內的清算筆數與金額</td>
+              <td><code>percentile</code>／<code>trend</code>／<code>slope</code> 全部——查歷史的 API 已停用，沒有母體可比</td>
+            </tr>
+          </table>
+        </details>
         <div class="todo-note"><span class="dot"></span><span>五個 factor 各自真的去抓真實資料，不是同一套邏輯換名字——funding_rate／active_address 窗口＝天、由 LLM 依 Horizon 現場判斷（不是查表），而且各自有專屬的背景知識 prompt；cpi 窗口＝月，換算後才抓；liquidation 沒有「回看窗口」這個概念，是真的開 WebSocket 監聽固定秒數，percentile／trend 等需要歷史序列的欄位這個 factor 結構性沒有，一律不產生；panews_sentiment 的窗口只決定「往回翻多深」而不是過濾邊界（超出窗口的文章標記為非近期但照樣計入），翻不到窗口底時會標 <code>window_covered=false</code> 並說明只翻到哪天，情緒分數是簡化版關鍵字計分、不是 NLP 模型（<code>nonzero_ratio</code> 就是這套方法的覆蓋率）。active_address 目前只支援 BTC（資料源限制），查其他幣種會顯示原因。每張卡片下方「查看 Knowledge Layer」點開才是原本獨立一個 Stage 3 區塊的內容——Knowledge 本來就是查表用的背景知識，不是每次都要看的即時數字，跟 Stage 2 的即時抓取結果放在一起、預設收合比較合理。五份內容分別讀自 <code>Stage 3 — Knowledge Layer/{factor}.md</code>——Ken 手動研究、附真實學術／產業出處的正式版本，欄位對照 11流程圖模板.md 的 Statistical／Event／Sentiment Knowledge schema（三型不同骨架，不是同一份欄位表）。刻意不對齊結論：funding_rate 產業文獻偏肯定短期訊號，active_address 近期研究反而在講預測力減弱，cpi 學界對通膨關係沒有共識、liquidation 只能即時監聽沒有歷史可驗證、panews_sentiment 的預測力是狀態依存（極端情緒下才顯著）——每份都根據各自的資料現實寫，不是同一套模板換名字。單一事實來源是這些 .md，這支 demo 只是讀檔解析，刻意不打 LLM（Knowledge Layer 本身是 library，不是推理層）。</span></div>
       </div>
 
@@ -436,7 +648,30 @@
           <span class="stage-title">Stage 3 — Dynamic Evidence Weight Engine</span>
           <span class="stage-tag" id="weight-live-pill">計算中…</span>
         </div>
+        <div class="stage-lead"><b>決定「今天這筆證據有多重要」。</b>兩層相乘：<b>Prior Weight</b> 是這個 factor 本質上準不準／重不重要（跟今天無關），<b>Context Modifier</b> 是今天的情境該把它調高還是調低（跟今天有關）。這層只評估份量，不評估多空方向。</div>
         <div class="factor-row" id="stage4-factors"></div>
+        <details class="type-box">
+          <summary>三型資料在這層的差異——Prior 用哪種算法、Modifier 讀哪些欄位（點開）</summary>
+          <table class="type-table">
+            <tr><th>型別</th><th>Prior Weight 怎麼來</th><th>Modifier 的線索差在哪</th></tr>
+            <tr>
+              <td>Statistical<br><span class="lr-note">funding_rate／active_address／etf／panews_sentiment</span></td>
+              <td><code>rolling_spearman_ic</code> <b>現場真的算</b>——因為它們每天都有連續數值，可以跟未來報酬配對算相關係數</td>
+              <td>時間尺度比對 <code>primary_horizon.applicable_days</code>；關聯訊號讀 <code>confirms／conflicts</code></td>
+            </tr>
+            <tr>
+              <td>Event<br><span class="lr-note">cpi</span></td>
+              <td><b>不算 ic</b>，讀 Knowledge 的 <code>impact_level</code> 分級（Very High→0.8）——離散事件沒有「每天的值」可以跟每天的報酬配對，套 ic 的前提不成立</td>
+              <td>時間尺度比對的是 <code>reaction_window</code>＋<code>expected_duration</code> 換算的區間（兩段不連續尺度的聯集）；關聯訊號讀 <code>usually_affects／related_events</code>（不是 confirms/conflicts）；<b>freshness 語意是「距上次公布多久」</b>，月頻資料本質上不可能「很新」</td>
+            </tr>
+            <tr>
+              <td>資料源缺歷史<br><span class="lr-note">liquidation</span></td>
+              <td><b>ic 算不出來</b>（沒有歷史序列可配對），改用 Domain Knowledge 給有理由的低分（0.3）——低是因為它本質是確認性訊號，不是「沒算出來所以給 0」</td>
+              <td>時間尺度幾乎必然不合（適用尺度是分鐘級）；<b>freshness 恆等於「當下」</b>，因為沒有「查詢過去」這個選項</td>
+            </tr>
+          </table>
+          <div class="lr-note" style="margin-top:6px;">三種 Prior Weight 來源最後都收斂成同一個 <code>evidence_weight</code> 概念，不是三套互不相容的系統——所以下一層可以直接照它排序。</div>
+        </details>
         <div class="mini-error" id="weight-live-error"></div>
         <div class="todo-note"><span class="dot"></span><span>Prior Weight 有三種來源（13 文件 2026-08-02 拍板，同一個 <code>evidence_weight</code> 概念下的不同填法）：<b>Statistical Factor</b>（funding_rate／active_address）現場真的算 <code>rolling_spearman_ic</code>；<b>Event Factor</b>（cpi）不算 ic——離散事件沒有「每天的值」可跟每天的 forward_return 配對，改讀 Knowledge Layer 的 <code>impact_level</code> 分級；<b>資料源結構性缺歷史序列</b>（liquidation）ic 也算不出來，改用 Domain Knowledge 給有理由的低分。後兩種的數值與理由都寫在 <code>Stage 4 — Dynamic Evidence Weight Engine/{factor}.md</code> 裡（資料夾名稱沿用原編號，內容沒動），程式只負責讀，不自己訂數字。Dynamic Modifier 一律真的打一次 LLM；market_regime／cross_source_consensus 兩條線索還沒接上真實資料源，LLM 會老實當「未知」處理。</span></div>
       </div>
@@ -447,34 +682,65 @@
           <span class="stage-title">Stage 4 — Evidence Card ＋ Prioritization</span>
           <span class="stage-tag" id="card-live-pill">組裝中…</span>
         </div>
+        <div class="stage-lead"><b>包成統一格式，排出優先順序。</b>把前面幾層的事實／知識／權重裝進同一種卡片，再依訊號強度排出「哪幾筆最值得討論」。這層<b>不重新運算任何數字</b>，只做組裝與排序，而且只排序、不刪除。</div>
         <div class="factor-row" id="stage5-cards"></div>
         <div class="mini-error" id="card-live-error"></div>
-        <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——實測 BTC funding_rate 的 <code>final=-0.55</code> 是五張卡裡強度最高的，照帶號值排卻掉到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——照帶號值排會把強度最高的反向訊號排到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
       </div>
 
       <div class="stage-card s6">
         <div class="stage-head">
           <span class="stage-badge">5</span>
           <span class="stage-title">Stage 5 — Evidence Graph</span>
-          <span class="stage-tag" id="graph-live-pill">建圖中…</span>
+          <span class="stage-tag" id="graph-live-pill">畫圖中…</span>
         </div>
-        <div class="graph-legend">
-          <span><b>節點</b>＝這批 Evidence Card</span>
-          <span><span class="edge-rel rel-supports">supports</span> 互相印證</span>
-          <span><span class="edge-rel rel-conflicts">conflicts</span> 互相矛盾</span>
-          <span><span class="edge-rel rel-independent">independent</span> 彼此獨立</span>
-          <span>虛線節點＝孤立（這批沒有任何邊連到它）</span>
-        </div>
-        <div class="node-chips" id="graph-nodes"></div>
-        <div class="edge-list" id="graph-edges"></div>
-        <div id="graph-dangling-wrap" style="display:none; margin-top:12px;">
-          <div class="k" style="font-size:11.5px; color:var(--muted); margin-bottom:6px;">
-            關係指向這次沒有分析的 factor（不畫成邊，但如實列出）
-          </div>
-          <div class="dangling-list" id="graph-dangling"></div>
-        </div>
+        <div class="stage-lead"><b>看證據之間打不打架。</b>把卡片之間的關係畫成圖（互相印證／互相衝突／彼此獨立），回答「這些訊號是不是在講同一件事、有沒有互相矛盾」。排序只說哪個重要，這層說它們之間的關係——圖上不含任何市場方向。</div>
+        <div id="graph-body"></div>
         <div class="mini-error" id="graph-live-error"></div>
-        <div class="todo-note"><span class="dot"></span><span>這一層<b>不重新判斷任何關係</b>，只是把 Stage 3 Knowledge 已經寫好的 <code>confirms</code>／<code>conflicts</code>／<code>independent</code> 組裝成圖（跟 Stage 4 卡片同樣是「組裝層」精神）。設計與三個已知缺口見 <code>Stage 6 — Evidence Graph/design.md</code>：①<b>關係指向沒有卡片的 factor</b>（例如 funding_rate 的 Knowledge 寫 <code>confirms: open_interest</code>，但這批只分析五個 factor）——關係是真的，只是這次沒一起分析，所以列在下方而不畫邊、也不假造節點；②<b>cpi 這類 Event Factor 結構性不會主動發出邊</b>，因為 Event Knowledge 的關係欄位（<code>usually_affects</code>／<code>related_events</code>）跟 Statistical／Sentiment 的三個 key 名稱不同，Stage 4 組裝時讀不到——這裡誠實維持不對稱，不硬湊一條邊；③但 cpi <b>不一定是孤立節點</b>，別的卡片（例如 liquidation 的 <code>independent</code>）可能反過來指向它。<b>圖不完整不是資料錯，是這次只分析了這幾個 factor。</b></span></div>
+        <div class="todo-note"><span class="dot"></span><span>吃 Stage 5 已經抓到的卡片，把每張卡 Knowledge 的 <code>confirms／conflicts／independent</code> 畫成關係圖——這一層不重新判斷任何關係，也<b>不再打一次 API</b>（沿用 Stage 5 同一份回應，避免多等一次 LLM／多花一次 token，兩邊數字保證一致）。兩種誠實缺口：<b>①</b> <code>referenced_but_no_card</code>——Knowledge 提到的關聯 factor（例如 open_interest／hash-rate／price）這批查詢沒有對應卡片，不畫成邊但列出來，不是關係不存在，是這次沒有一起分析；<b>②</b> 孤立節點——例如 cpi／panews_sentiment 這類 Knowledge 骨架本身沒有對稱關係欄位（或欄位待驗證留空）的卡片，可能完全連不上任何邊，圖上用虛線淡化標示。設計文件見 <code>Stage 6 — Evidence Graph/design.md</code>，圖演算法必須跟 <code>webapp/stage1_demo_api.py</code> 的 <code>_build_evidence_graph</code> 保持一致（前端這份是移植版，見程式碼註解）。</span></div>
+      </div>
+
+      <div class="reason-trigger">
+        <span class="rt-note">下面三層（交叉驗證／辯論／結論）呼叫既有的 <code>agent/reasoning/pipeline.py</code> 完整推理鏈，最多 7 次 LLM 呼叫、實測數十秒——不像前面自動打，按下去才會跑。</span>
+        <span class="spinner" id="reason-spinner"></span>
+        <button class="primary" id="reason-btn" type="button">開始推理辯論 →</button>
+      </div>
+      <div class="error-box" id="reason-error-box"></div>
+
+      <div class="stage-card s7 hidden" id="stage7-card">
+        <div class="stage-head">
+          <span class="stage-badge">6</span>
+          <span class="stage-title">Stage 6 — 交叉驗證層</span>
+          <span class="stage-tag" id="cv-live-pill">待執行…</span>
+        </div>
+        <div class="stage-lead"><b>把事實攤開，看哪裡一致、哪裡打架。</b>先把證據摘成客觀事實（不下判斷），再比對哪些訊號互相印證、哪些真的矛盾——Stage 5 的關係圖如果已經標好 <code>supports</code>，這裡會直接採信不重新論證，圖沒覆蓋到的部分才自己判斷。</div>
+        <div id="cv-body"></div>
+        <div class="mini-error" id="cv-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>對應 <code>agent/reasoning/pipeline.py</code> 的 Step A（事實抽取，逐字轉錄不摘要）＋ Step B（交叉驗證）。<code>direction_matrix</code>（各來源方向投票）算完就不再進任何下游 prompt——辯論前先看到預先算好的方向判決等於錨定，這是 Ken v3 提案要防的事，這裡故意不顯示。</span></div>
+      </div>
+
+      <div class="stage-card s8 hidden" id="stage8-card">
+        <div class="stage-head">
+          <span class="stage-badge">7</span>
+          <span class="stage-title">Stage 7 — 辯論層</span>
+          <span class="stage-tag" id="debate-live-pill">待執行…</span>
+        </div>
+        <div class="stage-lead"><b>正反方對打，逼出漏洞。</b>正方先建構最有利的論證，反方看過之後具體挑毛病並提出反向論證，正方再回應——最多兩輪，雙方都看得到 Stage 5 的證據權重與關係圖（<code>supports</code> 不能疊加信心、<code>conflicts</code> 不能略過不談）。</div>
+        <div id="debate-body"></div>
+        <div class="mini-error" id="debate-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>對應 Step C1（正方）／C2（反方）。反方每輪自報 <code>has_new_points</code>，沒有新論點就提早收斂，不會為了湊輪數硬吵。辯論規則裡的 <code>DEBATE_WEIGHT_RULE</code>／<code>DEBATE_GRAPH_RULE</code> 是這輪稍早接進 <code>release/v1</code> 的（commit <code>109ba5a</code>／<code>4ef81cf</code>），這裡吃得到。</span></div>
+      </div>
+
+      <div class="stage-card s9 hidden" id="stage9-card">
+        <div class="stage-head">
+          <span class="stage-badge">8</span>
+          <span class="stage-title">Stage 8 — 結論層＋信心分數</span>
+          <span class="stage-tag" id="conclusion-live-pill">待執行…</span>
+        </div>
+        <div class="stage-lead"><b>收斂成一個判斷，並附上這個判斷有多可信。</b>信心分數分兩層：<b>Base</b>（資料品質＋訊號一致性＋證據強度，決定性、可複現）加上<b>辯論調整</b>（LLM 裁判讀完整場辯論才給，−15~+5，不對稱是刻意的——辯論若揭露真漏洞要大砍，只是確認原判斷最多小加）。</div>
+        <div class="conclusion-box" id="conclusion-body"></div>
+        <div class="mini-error" id="conclusion-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>對應 Step D＋L5 三維信心分數。<code>limitations</code>／<code>invalidation_conditions</code> 是報告本來就該有的自我修正機制——寫清楚「什麼情況下這個結論會被推翻」，不是自信滿滿講死。</span></div>
       </div>
 
       <div class="stage-card slog">
@@ -485,7 +751,7 @@
         </div>
         <div class="log-toolbar">
           <button class="ghost" id="log-download-btn" type="button">下載 execution_log.jsonl</button>
-          <span class="k" id="log-summary" style="font-size:11.5px; color:var(--muted);"></span>
+          <span id="log-summary" style="font-size:11.5px; color:var(--muted);"></span>
         </div>
         <div class="log-table-wrap">
           <table class="log-table">
@@ -495,7 +761,7 @@
             <tbody id="log-tbody"></tbody>
           </table>
         </div>
-        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。</span></div>
+        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積（Stage 1／Stage 2-5／Stage 6-8 三段）後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。⚠ 累計工作時間會大於實際牆鐘時間，因為五個 factor 是併發跑的。</span></div>
       </div>
 
       <div class="back-row">
@@ -510,6 +776,76 @@
 <script>
   const API_BASE = ""; // 同源相對路徑：由 stage1_demo_api.py 在 http://127.0.0.1:8001/ 提供本頁時最單純
 
+  // ---------- Execution Log（跨 stage 累積）----------
+  // 三段各自回傳自己的 execution_log：Stage 1、Stage 2-5、Stage 6-8。
+  // 這裡累積成一條時間軸，並可下載成跟正式 pipeline 同格式的 .jsonl。
+  const logPill = document.getElementById("log-pill");
+  const logTbody = document.getElementById("log-tbody");
+  const logSummary = document.getElementById("log-summary");
+  const logDownloadBtn = document.getElementById("log-download-btn");
+  let executionLog = [];
+
+  function escLog(t) {
+    return String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function renderExecutionLog() {
+    if (!executionLog.length) {
+      logTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">尚無紀錄</td></tr>';
+      logSummary.textContent = "";
+      logPill.textContent = "尚無紀錄";
+      return;
+    }
+    logTbody.innerHTML = executionLog.map(e => {
+      const ms = (e.metrics && e.metrics.elapsed_ms != null) ? e.metrics.elapsed_ms : null;
+      const cls = e.status === "error" ? "log-error" : (e.status === "skipped" ? "log-skipped" : "log-ok");
+      return `<tr>
+        <td class="mono">${escLog((e.ts || "").replace("T", " ").replace("Z", ""))}</td>
+        <td class="mono">${escLog(e.phase)}${e.layer ? `<div class="log-layer">${escLog(e.layer)}</div>` : ""}</td>
+        <td class="mono">${escLog(e.action)}</td>
+        <td>${escLog(e.detail)}</td>
+        <td><span class="log-status ${cls}">${escLog(e.status)}</span></td>
+        <td class="log-ms mono">${ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms")}</td>
+      </tr>`;
+    }).join("");
+    const errs = executionLog.filter(e => e.status === "error").length;
+    const totalMs = executionLog.reduce((a, e) => a + ((e.metrics && e.metrics.elapsed_ms) || 0), 0);
+    logSummary.textContent =
+      `${executionLog.length} 筆・累計工作時間 ${(totalMs / 1000).toFixed(1)}s（各層併發，非牆鐘總時長）`
+      + (errs ? `・${errs} 筆錯誤` : "");
+    logPill.textContent = `${executionLog.length} 筆` + (errs ? `・${errs} 錯誤` : "");
+    logPill.classList.toggle("err", errs > 0);
+  }
+
+  function appendExecutionLog(entries) {
+    if (!Array.isArray(entries) || !entries.length) return;
+    executionLog = executionLog.concat(entries);
+    renderExecutionLog();
+  }
+
+  function logClientError(action, msg) {
+    // 前端看到的失敗也要進紀錄，否則 log 會停在最後一次成功的 stage，
+    // 看不出後面究竟是沒跑還是跑掉了。
+    appendExecutionLog([{
+      ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      phase: "collect", action, detail: msg, status: "error", layer: null, metrics: {},
+    }]);
+  }
+
+  logDownloadBtn.addEventListener("click", () => {
+    if (!executionLog.length) return;
+    const blob = new Blob(
+      [executionLog.map(e => JSON.stringify(e)).join("
+") + "
+"],
+      { type: "application/x-ndjson" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "execution_log.jsonl"; a.click();
+    URL.revokeObjectURL(url);
+  });
+
   const queryInput = document.getElementById("query-input");
   const submitBtn = document.getElementById("submit-btn");
   const spinner = document.getElementById("spinner");
@@ -517,6 +853,13 @@
   const page1 = document.getElementById("page-1");
   const page2 = document.getElementById("page-2");
   const backBtn = document.getElementById("back-btn");
+
+  // Stage 6-8（交叉驗證／辯論／結論）要重用 Stage 1 的原始問題跟 Stage 5 已經
+  // 組好的卡片——不重新問一次 LLM、不重新跑一次 Stage 2-5，跟 Stage 5 圖表
+  // 沿用同一份 Stage 5 回應是同一個理由（見 fetchPipeline 的註解）。
+  let currentQuery = "";
+  let currentCoin = "";
+  let currentEvidenceCards = [];
 
   function showError(msg) {
     errorBox.textContent = msg;
@@ -549,18 +892,20 @@
         throw new Error(detail);
       }
       renderResult(data);
-      // 每次送出新問題都從頭累積，不要把上一題的紀錄混進來
-      executionLog = [];
+      executionLog = [];              // 新問題從頭累積，不混上一題的紀錄
       appendExecutionLog(data.execution_log);
       page1.classList.add("hidden");
       page2.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       const firstAsset = Array.isArray(data.asset) ? data.asset[0] : data.asset;
+      currentQuery = query;
+      currentCoin = firstAsset || "";
+      currentEvidenceCards = [];
+      resetReasoningStages();
       // Stage 3 是純查表（讀檔），立刻就能顯示，不用等 Stage 2/4/5 的 API。
       fetchAllStage3(firstAsset, data.horizon);
-      // Stage 2/3/4/5 由同一次 /api/stage6 驅動（它內部呼叫 Stage 5 實作），
-      // 確保各區塊的數字與 Evidence Graph 來自同一批卡片、不會前後不一致。
+      // Stage 2/4/5 由同一次 /api/stage5 驅動，確保三個區塊的數字一致。
       if (firstAsset) fetchPipeline(firstAsset, data.horizon);
     } catch (err) {
       const msg = String(err.message || err);
@@ -596,13 +941,14 @@
   }
 
   // ---------- 五個 factor 共用的骨架 ----------
-  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment"];
+  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf"];
   const FACTOR_TYPE_LABEL = {
     funding_rate: "Statistical",
     active_address: "Statistical",
     cpi: "Event",
     liquidation: "Statistical（資料源缺歷史）",
     panews_sentiment: "Sentiment（ic 離線算）",
+    etf: "Statistical（樣本天花板，僅近9-10天）",
   };
 
   function blockSkeleton(prefix, waitingLabel) {
@@ -844,114 +1190,77 @@
   const cardLivePill = document.getElementById("card-live-pill");
   const cardLiveError = document.getElementById("card-live-error");
   const stage5Cards = document.getElementById("stage5-cards");
-  const graphLivePill = document.getElementById("graph-live-pill");
-  const graphLiveError = document.getElementById("graph-live-error");
-  const graphNodes = document.getElementById("graph-nodes");
-  const graphEdges = document.getElementById("graph-edges");
-  const graphDangling = document.getElementById("graph-dangling");
-  const graphDanglingWrap = document.getElementById("graph-dangling-wrap");
-  const logPill = document.getElementById("log-pill");
-  const logTbody = document.getElementById("log-tbody");
-  const logSummary = document.getElementById("log-summary");
-  const logDownloadBtn = document.getElementById("log-download-btn");
 
-  // 跨 stage 累積的執行紀錄（Stage 1 一份、Stage 2-5 一份），下載時合併成一個
-  // .jsonl —— 格式跟正式 pipeline 的 execution_log.jsonl 一致（一行一個 JSON）。
-  let executionLog = [];
-
-  function renderExecutionLog() {
-    if (!executionLog.length) {
-      logTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">尚無紀錄</td></tr>';
-      logSummary.textContent = "";
-      return;
-    }
-    const esc = (t) => String(t == null ? "" : t)
+  // ---------- 規格檔來源 ＋ features 全欄位（2026-08-02 新增） ----------
+  // Stage 2 的端點／參數／欄位清單都讀自 `Stage 2 — Feature Extraction/{factor}.yaml`
+  // （見 webapp/stage_specs.py）。畫面上原本只看得到摘要那幾格，看不出「這些數字是
+  // 照哪份規格檔算的、規格檔定義了幾格、哪幾格結構性不存在」——這段就是把那件事顯示出來。
+  function esc(v) {
+    return String(v === null || v === undefined ? "" : v)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    logTbody.innerHTML = executionLog.map(e => {
-      const ms = (e.metrics && e.metrics.elapsed_ms != null) ? e.metrics.elapsed_ms : null;
-      const statusClass = e.status === "error" ? "log-error"
-        : (e.status === "skipped" ? "log-skipped" : "log-ok");
-      return `<tr>
-        <td class="mono">${esc((e.ts || "").replace("T", " ").replace("Z", ""))}</td>
-        <td class="mono">${esc(e.phase)}${e.layer ? `<div class="log-layer">${esc(e.layer)}</div>` : ""}</td>
-        <td class="mono">${esc(e.action)}</td>
-        <td>${esc(e.detail)}</td>
-        <td><span class="log-status ${statusClass}">${esc(e.status)}</span></td>
-        <td class="log-ms mono">${ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms")}</td>
-      </tr>`;
-    }).join("");
-
-    const errs = executionLog.filter(e => e.status === "error").length;
-    const totalMs = executionLog.reduce(
-      (a, e) => a + ((e.metrics && e.metrics.elapsed_ms) || 0), 0);
-    // 各層是併發跑的，逐項相加會超過真實牆鐘時間——講明是「累計」而不是「總耗時」，
-    // 免得被當成整跑時間誤讀。
-    logSummary.textContent =
-      `${executionLog.length} 筆紀錄・累計工作時間 ${(totalMs / 1000).toFixed(1)}s（各層併發，非牆鐘總時長）`
-      + (errs ? `・${errs} 筆錯誤` : "");
-    logPill.textContent = `${executionLog.length} 筆` + (errs ? `・${errs} 錯誤` : "");
-    logPill.classList.toggle("err", errs > 0);
   }
 
-  function appendExecutionLog(entries) {
-    if (!Array.isArray(entries) || !entries.length) return;
-    executionLog = executionLog.concat(entries);
-    renderExecutionLog();
+  function fieldChips(label, names, tone) {
+    if (!names || !names.length) return "";
+    const color = tone === "warn" ? "var(--danger)" : "var(--muted)";
+    return `<div class="lr-row"><span class="lr-k">${label}</span><span class="lr-v" style="color:${color};">${names.map(esc).join("、")}</span></div>`;
   }
 
-  logDownloadBtn.addEventListener("click", () => {
-    if (!executionLog.length) return;
-    // 一行一個 JSON 物件（JSON Lines），跟正式 pipeline 的 execution_log.jsonl 同格式
-    const blob = new Blob(
-      [executionLog.map(e => JSON.stringify(e)).join("
-") + "
-"],
-      { type: "application/x-ndjson" }
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "execution_log.jsonl";
-    a.click();
-    URL.revokeObjectURL(url);
-  });
+  // 一份 report（Stage 2 一般 factor）或兩份（cpi：Event 骨架 ＋ value_source）
+  function specReportHtml(report, title) {
+    if (!report) return "";
+    const n = (report.fields_defined || []).length;
+    const rows = [
+      fieldChips("算出來的", report.fields_computed),
+      fieldChips("規格檔即資料（照抄）", report.fields_from_spec_literal),
+      fieldChips("結構性不存在（整格不產生）", report.fields_null_by_design),
+      fieldChips("樣本不足", report.fields_insufficient_data, "warn"),
+      fieldChips("⚠ 規格檔有定義、demo 未實作", report.fields_unimplemented, "warn"),
+    ].join("");
+    return `
+      <div class="lr-note" style="margin-top:8px;">${title}：<code>${esc(report.source_file || report.endpoint || "")}</code>（定義 ${n} 格${report.samples_per_day ? `，samples_per_day=${report.samples_per_day}` : ""}）</div>
+      ${rows}
+    `;
+  }
 
-  function renderGraph(graph) {
-    const esc = (t) => String(t == null ? "" : t)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const nodes = graph.nodes || [];
-    const edges = graph.edges || [];
-    const dangling = graph.referenced_but_no_card || [];
-
-    graphNodes.innerHTML = nodes.map(n =>
-      `<span class="node-chip${n.isolated ? " isolated" : ""}" title="${esc(n.evidence_id)}${n.isolated ? "（孤立節點）" : ""}">
-         ${esc(n.factor)}${n.isolated ? " ·孤立" : ""}
-       </span>`).join("");
-
-    graphEdges.innerHTML = edges.length
-      ? edges.map(e => `<div class="edge-item">
-           <span class="edge-node">${esc(e.from_factor || e.from)}</span>
-           <span class="edge-rel rel-${esc(e.relation)}">${esc(e.relation)}</span>
-           <span class="edge-node">${esc(e.to_factor || e.to)}</span>
-         </div>`).join("")
-      : '<div style="color:var(--muted); font-size:12.5px;">這批卡片之間沒有可連的邊——不是關係不存在，是兩端都要有卡片才畫得出來（見下方與說明）。</div>';
-
-    if (dangling.length) {
-      graphDanglingWrap.style.display = "block";
-      graphDangling.innerHTML = dangling.map(d =>
-        `<div>· <b>${esc(d.from_factor || d.from)}</b> —${esc(d.relation)}→ <code>${esc(d.referenced_factor)}</code>（這次沒分析這個 factor）</div>`
-      ).join("");
-    } else {
-      graphDanglingWrap.style.display = "none";
+  function featureSpecHtml(f) {
+    if (!f) return "";
+    const spec = f.feature_spec;
+    let specBlocks = "";
+    if (spec && (spec.event_skeleton || spec.value_source)) {
+      // cpi 是 Event Factor：feature 骨架記事件時程，數值端點另外放 value_source
+      specBlocks = specReportHtml(spec.event_skeleton, "事件骨架規格檔")
+                 + specReportHtml(spec.value_source, "數值來源");
+    } else if (spec) {
+      specBlocks = specReportHtml(spec, "規格檔");
     }
 
-    const isolated = nodes.filter(n => n.isolated).length;
-    graphLivePill.textContent =
-      `live · ${nodes.length} 節點 / ${edges.length} 邊` + (isolated ? ` / ${isolated} 孤立` : "");
-    graphLivePill.classList.remove("err");
+    const feats = f.features;
+    const featRows = feats && Object.keys(feats).length
+      ? `<details style="margin-top:8px;">
+           <summary style="cursor:pointer; font-size:12px; color: var(--muted);">查看 features 全欄位（${Object.keys(feats).length} 格，照規格檔算）</summary>
+           <div style="margin-top:6px;">
+             ${Object.entries(feats).map(([k, v]) =>
+               `<div class="lr-row"><span class="lr-k">${esc(k)}</span><span class="lr-v">${esc(typeof v === "object" ? JSON.stringify(v) : v)}</span></div>`
+             ).join("")}
+           </div>
+         </details>`
+      : "";
+
+    // 爬蟲文字的注入防護（目前只有 panews_sentiment 有這格，其餘 factor 抓的都是數字）
+    const tp = f.text_protection;
+    const tpRow = tp
+      ? `<div class="lr-note" style="margin-top:8px;">文字防護：<code>${esc(tp.module)}</code>　隔離 ${tp.quarantined_high} 篇${tp.quarantined_codes && tp.quarantined_codes.length ? `（${tp.quarantined_codes.map(esc).join("、")}）` : ""}／標記 ${tp.flagged_medium} 篇</div>`
+      : "";
+
+    return specBlocks + featRows + tpRow;
   }
 
   function stage2Html(factorId, f) {
+    return stage2BodyHtml(factorId, f) + featureSpecHtml(f);
+  }
+
+  function stage2BodyHtml(factorId, f) {
     if (!f) return "<div class=\"lr-note\">（無資料）</div>";
     const windowSourceLabel = f.window_source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗）";
     if (factorId === "liquidation") {
@@ -1008,6 +1317,18 @@
     domain_knowledge: "Domain Knowledge（資料源結構性缺歷史序列）",
   };
 
+  // Final Evidence Weight 是 Prior Strength × Context Modifier 的結果——只印結果
+  // 會讓人不知道這個數字怎麼來的，這裡把算式一起寫出來。
+  function finalWeightText(w, pw, dm) {
+    const fw = w.final_evidence_weight;
+    if (fw === null || fw === undefined) return "（無法計算）";
+    const a = pw.value, b = dm.context_modifier;
+    if (a === null || a === undefined || b === null || b === undefined) return fmt(fw);
+    return `${fmt(fw)}　＝　${fmt(a)}（Prior）× ${b}（Modifier）`;
+  }
+
+  function FACTOR_LABEL_SHORT(factorId) { return factorId || "此 factor"; }
+
   function stage4Html(w) {
     if (!w) return "<div class=\"lr-note\">（無資料）</div>";
     const pw = w.prior_weight || {};
@@ -1017,10 +1338,21 @@
     const thm = dm.time_horizon_match;
     const modifierSourceLabel = dm.source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗，中性值 1.0）";
 
+    // Prior Weight 顯示的是**換算後**的 prior_strength（六個 factor 共同的尺），
+    // 原始測量值（帶號 ic／人工分級分數）另外顯示——只顯示換算後的數字會讓人
+    // 看不出 0.24 是「ic 0.051 打完樣本折」還是「本來就是 0.24」。
     let priorRows = `
       <div class="lr-row"><span class="lr-k">Basis</span><span class="lr-v">${BASIS_LABEL[pw.basis] || pw.basis || "（未知）"}</span></div>
-      <div class="lr-row"><span class="lr-k">Prior Weight</span><span class="lr-v">${pw.value === null || pw.value === undefined ? "（算不出來）" : fmt(pw.value)}</span></div>
+      <div class="lr-row"><span class="lr-k">Prior Strength（換算後，排序用）</span><span class="lr-v">${pw.value === null || pw.value === undefined ? "（算不出來）" : fmt(pw.value)}</span></div>
+      <div class="lr-row"><span class="lr-k">原始測量值</span><span class="lr-v">${pw.raw_value === null || pw.raw_value === undefined ? "（無）" : fmt(pw.raw_value)}${pw.md_scale ? "（" + pw.md_scale + "）" : ""}</span></div>
     `;
+    if (pw.shrink !== null && pw.shrink !== undefined) {
+      priorRows += `<div class="lr-row"><span class="lr-k">樣本收縮係數</span><span class="lr-v">${fmt(pw.shrink)}（√n/(√n+√30)）</span></div>`;
+    }
+    // 換算說明／理由／出處都是「想深究才需要看」的內容，預設收起來，
+    // 卡片正面只留看得懂結果所需的數字。
+    let priorProse = "";
+    if (pw.conversion_note) priorProse += `<div class="lr-note">換算：${pw.conversion_note}</div>`;
     if (pw.basis === "rolling_spearman_ic") {
       priorRows += `
         <div class="lr-row"><span class="lr-k">IC</span><span class="lr-v">${pw.ic === null || pw.ic === undefined ? "（算不出來）" : fmt(pw.ic)}</span></div>
@@ -1030,27 +1362,24 @@
     if (pw.impact_level) {
       priorRows += `<div class="lr-row"><span class="lr-k">Impact Level</span><span class="lr-v">${pw.impact_level}</span></div>`;
     }
-    if (pw.reason) {
-      priorRows += `<div class="lr-note" style="margin-top:6px; white-space:pre-wrap;">${pw.reason}</div>`;
-    }
-    if (pw.note) {
-      priorRows += `<div class="lr-note" style="margin-top:6px;">${pw.note}</div>`;
-    }
-    if (pw.source_file) {
-      priorRows += `<div class="lr-note">來源：${pw.source_file}</div>`;
+    if (pw.reason) priorProse += `<div class="lr-note" style="margin-top:6px; white-space:pre-wrap;">${pw.reason}</div>`;
+    if (pw.note) priorProse += `<div class="lr-note" style="margin-top:6px;">${pw.note}</div>`;
+    if (pw.source_file) priorProse += `<div class="lr-note" style="margin-top:6px;">來源：${pw.source_file}</div>`;
+    if (priorProse) {
+      priorRows += `<details class="ref-box" style="margin-top:8px;"><summary>為什麼是這個 Prior Weight（換算、理由、出處）</summary><div class="ref-body">${priorProse}</div></details>`;
     }
 
     return `
       <div class="lr-note">Prior Weight</div>
       ${priorRows}
       <div class="lr-note" style="margin-top:12px;">Dynamic Modifier</div>
-      ${thm ? `<div class="lr-row"><span class="lr-k">time_horizon_match（程式算）</span><span class="lr-v">${thm.score === null || thm.score === undefined ? "無法計算" : thm.score.toFixed(2)}${Array.isArray(thm.applicable_days) ? `　查詢 ${thm.query_horizon_days} 天 vs 適用 ${thm.applicable_days[0]}~${thm.applicable_days[1]} 天` : ""}</span></div>
-      <div class="lr-note" style="margin-top:4px;">${thm.note || ""}</div>` : ""}
+      ${thm ? `<div class="lr-row"><span class="lr-k">時間尺度匹配（程式算）</span><span class="lr-v">${thm.score === null || thm.score === undefined ? "無法計算" : thm.score.toFixed(2)}</span></div>
+      <div class="lr-note" style="margin-top:2px;">${thm.verdict || ""}${thm.scale ? `　｜　${FACTOR_LABEL_SHORT(w.factor)} 適用：${thm.scale}` : ""}</div>` : ""}
       <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Context Modifier</span><span class="lr-v">${dm.context_modifier}（${modifierSourceLabel}）</span></div>
-      <div class="lr-note" style="margin-top:4px; font-size:12.5px; color:var(--ink);">${dm.reasoning || ""}</div>
+      ${dm.reasoning ? `<details class="ref-box" style="margin-top:6px;"><summary>LLM 為什麼給這個 Modifier</summary><div class="ref-body"><div class="lr-note" style="color:var(--ink);">${dm.reasoning}</div></div></details>` : ""}
       <div class="lr-row" style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--line-strong);">
         <span class="lr-k">Final Evidence Weight</span>
-        <span class="lr-v">${w.final_evidence_weight === null || w.final_evidence_weight === undefined ? "（無法計算）" : fmt(w.final_evidence_weight)}</span>
+        <span class="lr-v">${finalWeightText(w, pw, dm)}</span>
       </div>
     `;
   }
@@ -1059,6 +1388,20 @@
     return Object.entries(fact || {})
       .map(([k, v]) => `<div class="lr-row"><span class="lr-k">${k}</span><span class="lr-v">${v}</span></div>`)
       .join("");
+  }
+
+  // 卡片有哪些格子、哪一格是「對應到 Knowledge 的別的欄位」、哪一格這次填不出來，
+  // 全部由 `Stage 5 — Evidence Card ＋ Prioritization/{factor}.md` 決定（見 stage_specs.py）。
+  // 這段把那份出處顯示出來，不然畫面上看不出卡片格式是讀檔來的還是程式寫死的。
+  function cardSpecHtml(card) {
+    const s = card.card_spec;
+    if (!s) return "";
+    const mapped = Object.entries(s.mapped_fields || {});
+    return `
+      <div class="lr-note" style="margin-top:8px;">卡片 schema：<code>${esc(s.source_file)}</code>（${(s.fields_from_spec || []).length} 格${s.ranking_key ? `，ranking_key=${esc(s.ranking_key)}${s.ranking_transform ? "／" + esc(s.ranking_transform) : ""}` : ""}）</div>
+      ${mapped.length ? `<div class="lr-row"><span class="lr-k">對應欄位（非原欄位）</span><span class="lr-v">${mapped.map(([k, v]) => `${esc(k)} → ${esc(v)}`).join("、")}</span></div>` : ""}
+      ${(s.unresolved_fields || []).length ? `<div class="lr-row"><span class="lr-k">schema 有、這次填不出來</span><span class="lr-v" style="color:var(--muted);">${s.unresolved_fields.map(esc).join("、")}（整格不產生，不留 null）</span></div>` : ""}
+    `;
   }
 
   function stage5CardHtml(card, rank) {
@@ -1084,7 +1427,9 @@
           <div class="lr-row"><span class="lr-k">Confirms</span><span class="lr-v">${card.related_evidence.confirms || "（無）"}</span></div>
           <div class="lr-row"><span class="lr-k">Conflicts</span><span class="lr-v">${card.related_evidence.conflicts || "（無）"}</span></div>
           <div class="lr-row"><span class="lr-k">Independent</span><span class="lr-v">${card.related_evidence.independent || "（無）"}</span></div>
-          <div class="lr-note" style="margin-top:8px;">Traceability：${card.traceability || "（無）"}</div>
+          <div class="lr-note" style="margin-top:8px;">Traceability：${typeof card.traceability === "object" && card.traceability ? esc(card.traceability.source) : esc(card.traceability) || "（無）"}</div>
+          ${typeof card.traceability === "object" && card.traceability && card.traceability.note ? `<div class="lr-note" style="white-space:pre-wrap;">${esc(card.traceability.note)}</div>` : ""}
+          ${cardSpecHtml(card)}
           <details style="margin-top:10px;">
             <summary style="cursor:pointer; font-size:12px; color: var(--muted);">查看完整卡片 JSON（含 features／knowledge／weight_detail 全部欄位）</summary>
             <pre style="margin-top:8px; padding:10px; background:var(--surface-2); border-radius:8px; font-size:11.5px; overflow-x:auto; white-space:pre-wrap; word-break:break-all;">${JSON.stringify(card, null, 2)}</pre>
@@ -1092,6 +1437,222 @@
         </div>
       </div>
     `;
+  }
+
+  // ---------- Stage 6：Evidence Graph（吃 Stage 5 已經抓到的卡片，不再打一次 API） ----------
+  // ⚠️ 這是 webapp/stage1_demo_api.py 的 `_build_evidence_graph` 移植成 JS 的版本，
+  // 不是呼叫 /api/stage6——理由：/api/stage6 內部會重跑一次完整的 stage5_all
+  // （含 Stage 4 的 LLM context_modifier 呼叫），跟畫面已經顯示的 Stage 5 結果
+  // 可能給出不同的窗口判斷／權重數字，兩邊會對不起來，還多等 25-45 秒。
+  // 兩份實作邏輯必須保持一致，改一邊要記得改另一邊（見 Stage 6 design.md）。
+  const graphLivePill = document.getElementById("graph-live-pill");
+  const graphLiveError = document.getElementById("graph-live-error");
+  const graphBody = document.getElementById("graph-body");
+
+  function parseRelatedFactorNames(raw) {
+    if (!raw) return [];
+    return String(raw)
+      .split(/[＋+、]/)
+      .map(piece => piece.trim().split(/[（(]/)[0].trim())
+      .filter(Boolean);
+  }
+  function normalizeFactorToken(token) {
+    return token.trim().toLowerCase().replace(/-/g, "_");
+  }
+
+  function buildEvidenceGraph(cards) {
+    const byFactor = {};
+    cards.forEach(c => { byFactor[c.factor] = c; });
+    const connected = new Set();
+    const edges = [];
+    const referencedButNoCard = [];
+    const relationLabel = { confirms: "supports", conflicts: "conflicts", independent: "independent" };
+
+    cards.forEach(card => {
+      const related = card.related_evidence || {};
+      ["confirms", "conflicts", "independent"].forEach(relation => {
+        const label = relationLabel[relation];
+        parseRelatedFactorNames(related[relation]).forEach(name => {
+          const targetFactor = Object.keys(byFactor).find(
+            f => normalizeFactorToken(f) === normalizeFactorToken(name)
+          );
+          if (!targetFactor) {
+            referencedButNoCard.push({ from: card.evidence_id, relation: label, referenced_factor: name });
+            return;
+          }
+          if (targetFactor === card.factor) return; // 防呆：不畫自我關係
+          edges.push({ from: card.evidence_id, to: byFactor[targetFactor].evidence_id, relation: label });
+          connected.add(card.evidence_id);
+          connected.add(byFactor[targetFactor].evidence_id);
+        });
+      });
+    });
+
+    const nodes = cards.map(c => ({
+      evidence_id: c.evidence_id,
+      factor: c.factor,
+      category: c.category,
+      isolated: !connected.has(c.evidence_id),
+    }));
+
+    return { nodes, edges, referenced_but_no_card: referencedButNoCard };
+  }
+
+  // 短標籤：節點名一律是 {FACTOR}_{COIN}（例如 ACTIVE_ADDRESS_BTC），圖上把幣種
+  // 拆成第二行小字，主標籤只留 factor 名——六個節點同時擠 "_BTC" 後綴在圓周上
+  // 反而讓每個標籤變長、更難讀，拆開後主標籤短，辨識度更高。
+  function splitNodeLabel(evidenceId) {
+    const parts = String(evidenceId).split("_");
+    const coin = parts[parts.length - 1];
+    const factor = parts.slice(0, -1).join("_");
+    return { factor, coin };
+  }
+
+  const REL_ORDER = { supports: 0, conflicts: 1, independent: 2 };
+
+  function graphSvg(graph) {
+    const n = graph.nodes.length;
+    if (n === 0) return `<div class="lr-note" style="padding:16px;">沒有卡片可以畫圖。</div>`;
+
+    const size = 420;
+    const cx = size / 2, cy = size / 2;
+    const r = n <= 2 ? 0 : size / 2 - 78;
+    const nodeR = 34;
+    const pos = {};
+    graph.nodes.forEach((node, i) => {
+      const angle = (2 * Math.PI * i) / Math.max(n, 1) - Math.PI / 2;
+      pos[node.evidence_id] = n === 1
+        ? { x: cx, y: cy }
+        : { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    });
+
+    // 同一對節點之間如果有多條邊（目前資料沒有，但未來 factor 一多可能出現），
+    // 用弧度而不是重疊的直線分開——用 from/to 的字母序當 key，index 決定彎曲量。
+    const pairCount = {};
+    const edgesSvg = graph.edges
+      .slice()
+      .sort((a, b) => (REL_ORDER[a.relation] ?? 9) - (REL_ORDER[b.relation] ?? 9))
+      .map(e => {
+        const p1 = pos[e.from], p2 = pos[e.to];
+        if (!p1 || !p2) return "";
+        const key = [e.from, e.to].sort().join("|");
+        const seq = pairCount[key] = (pairCount[key] || 0);
+        pairCount[key] += 1;
+        const dx = p2.x - p1.x, dy = p2.y - p1.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        // 起訖點縮進節點半徑，箭頭才不會插進圓圈裡
+        const sx = p1.x + (dx / dist) * (nodeR + 4), sy = p1.y + (dy / dist) * (nodeR + 4);
+        const ex = p2.x - (dx / dist) * (nodeR + 10), ey = p2.y - (dy / dist) * (nodeR + 10);
+        const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+        // 弧度偏移：同一對節點的第二條邊才彎曲，第一條走直線
+        const bend = seq === 0 ? 0 : 16 * seq;
+        const nx = -dy / dist, ny = dx / dist; // 法向量
+        const ctrlX = mx + nx * bend, ctrlY = my + ny * bend;
+        const path = bend === 0
+          ? `M ${sx} ${sy} L ${ex} ${ey}`
+          : `M ${sx} ${sy} Q ${ctrlX} ${ctrlY} ${ex} ${ey}`;
+        const labelX = bend === 0 ? mx : ctrlX;
+        const labelY = (bend === 0 ? my : ctrlY) - 4;
+        return `
+          <path class="g-edge-line ${e.relation}" d="${path}" marker-end="url(#arrow-${e.relation})"></path>
+          <text class="g-edge-label" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}">${e.relation}</text>
+        `;
+      }).join("");
+
+    const nodesSvg = graph.nodes.map(node => {
+      const p = pos[node.evidence_id];
+      const { factor, coin } = splitNodeLabel(node.evidence_id);
+      const label = factor.length > 13 ? factor.slice(0, 12) + "…" : factor;
+      return `
+        <g class="g-node ${node.isolated ? "isolated" : ""}">
+          <title>${node.evidence_id}${node.category ? "・" + node.category : ""}${node.isolated ? "・孤立節點（這次沒有連到任何邊）" : ""}</title>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${nodeR}"></circle>
+          <text x="${p.x.toFixed(1)}" y="${(p.y - 2).toFixed(1)}">${label}</text>
+          <text class="g-node-coin" x="${p.x.toFixed(1)}" y="${(p.y + 11).toFixed(1)}">${coin}</text>
+        </g>
+      `;
+    }).join("");
+
+    // marker 內容不會繼承外層 <g> 的 CSS class／currentColor（SVG marker 是獨立的
+    // 渲染上下文），所以箭頭顏色要直接指到對應的 CSS 變數，不能靠 class 疊上去。
+    const arrowFill = {
+      supports: "var(--accent-6)",
+      conflicts: "var(--danger)",
+      independent: "var(--line-strong)",
+    };
+
+    return `
+      <svg class="graph-svg" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          ${["supports", "conflicts", "independent"].map(rel => `
+            <marker id="arrow-${rel}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" style="fill:${arrowFill[rel]}; stroke:none;"></path>
+            </marker>
+          `).join("")}
+        </defs>
+        <g>${edgesSvg}</g>
+        ${nodesSvg}
+      </svg>
+    `;
+  }
+
+  function graphHtml(graph) {
+    const legend = `
+      <div class="graph-legend">
+        <span class="g-item"><span class="g-swatch supports"></span>supports</span>
+        <span class="g-item"><span class="g-swatch conflicts"></span>conflicts</span>
+        <span class="g-item"><span class="g-swatch independent"></span>independent</span>
+        <span class="g-item"><span class="g-dot"></span>孤立節點（沒有連到任何邊）</span>
+      </div>
+    `;
+
+    const edgesHtml = graph.edges.length
+      ? graph.edges.map(e => `
+          <div class="graph-edge-row">
+            <span class="rel-tag ${e.relation}">${e.relation}</span>
+            <span>${e.from}</span><span style="color:var(--muted);">→</span><span>${e.to}</span>
+          </div>
+        `).join("")
+      : `<div class="lr-note">這次查詢的卡片彼此沒有連得上的關係。</div>`;
+
+    const refHtml = graph.referenced_but_no_card.length
+      ? `<details class="ref-box" style="margin-top:8px;">
+           <summary>referenced_but_no_card — 有關係但這批沒有對應卡片（${graph.referenced_but_no_card.length} 條）</summary>
+           <div class="ref-body">
+             ${graph.referenced_but_no_card.map(r => `
+               <div class="lr-row"><span class="lr-k">${r.from}</span><span class="lr-v">--${r.relation}--&gt; <b>${r.referenced_factor}</b>（這批沒有這張卡）</span></div>
+             `).join("")}
+           </div>
+         </details>`
+      : "";
+
+    return `
+      <div class="graph-wrap">${graphSvg(graph)}</div>
+      ${legend}
+      <details class="ref-box" style="margin-top:12px;">
+        <summary>查看邊與節點清單（${graph.edges.length} 條邊・${graph.nodes.length} 個節點，精確文字版）</summary>
+        <div class="ref-body">
+          ${edgesHtml}
+          ${refHtml}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderGraph(cards) {
+    try {
+      const graph = buildEvidenceGraph(cards);
+      const isolatedCount = graph.nodes.filter(n => n.isolated).length;
+      graphLivePill.textContent = `live · ${graph.edges.length} 條邊・${isolatedCount} 個孤立節點`;
+      graphLivePill.classList.remove("err");
+      graphBody.innerHTML = graphHtml(graph);
+      graphLiveError.style.display = "none";
+    } catch (err) {
+      graphLivePill.textContent = "畫圖失敗";
+      graphLivePill.classList.add("err");
+      graphLiveError.textContent = String(err.message || err);
+      graphLiveError.style.display = "block";
+    }
   }
 
   async function fetchPipeline(coin, horizon) {
@@ -1102,22 +1663,25 @@
     weightLivePill.textContent = "計算中…";
     weightLivePill.classList.remove("err");
     weightLiveError.style.display = "none";
-    cardLivePill.textContent = "組裝中…（五個 factor 平行跑，約 25-45 秒）";
+    cardLivePill.textContent = "組裝中…（六個 factor 平行跑，約 25-45 秒）";
     cardLivePill.classList.remove("err");
     cardLiveError.style.display = "none";
     stage5Cards.innerHTML = "";
+    graphLivePill.textContent = "等 Stage 5 完成…";
+    graphLivePill.classList.remove("err");
+    graphLiveError.style.display = "none";
+    graphBody.innerHTML = "";
 
     try {
-      // 打 /api/stage6：它內部直接呼叫 Stage 5 的實作（同一個 process，不重抓資料），
-      // 一次拿回 evidence_cards ＋ graph ＋ 兩層合併後的 execution_log，
-      // 避免前端打兩次造成兩次獨立的 LLM 窗口判斷、數字對不起來。
-      const res = await fetch(`${API_BASE}/api/stage6`, {
+      const res = await fetch(`${API_BASE}/api/stage5`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coin, horizon }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+
+      appendExecutionLog(data.execution_log);
 
       const byFactor = {};
       (data.evidence_cards || []).forEach(c => { byFactor[c.factor] = c; });
@@ -1139,16 +1703,16 @@
       });
 
       weightLivePill.textContent = `${Object.keys(byFactor).length} factors live`;
-      cardLivePill.textContent = `live · ${(data.evidence_cards || []).length} 張卡（依 evidence_weight 排序）`;
+      cardLivePill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
       stage5Cards.innerHTML = (data.evidence_cards || [])
         .map((c, i) => stage5CardHtml(c, i + 1)).join("");
-      if (data.graph) renderGraph(data.graph);
-      appendExecutionLog(data.execution_log);
       if ((data.failed_factors || []).length) {
         cardLiveError.textContent = "以下 factor 組裝失敗，未列入排序：\n" +
           data.failed_factors.map(f => `· ${f.factor}：${f.error}`).join("\n");
         cardLiveError.style.display = "block";
       }
+      renderGraph(data.evidence_cards || []);
+      currentEvidenceCards = data.evidence_cards || [];
     } catch (err) {
       const msg = String(err.message || err);
       FACTOR_IDS.forEach(id => {
@@ -1161,19 +1725,241 @@
       cardLivePill.classList.add("err");
       cardLiveError.textContent = msg;
       cardLiveError.style.display = "block";
-      graphLivePill.textContent = "建圖失敗";
+      logClientError("stage2_5_request_failed", msg);
+      graphLivePill.textContent = "無法畫圖（Stage 5 失敗）";
       graphLivePill.classList.add("err");
-      graphLiveError.textContent = "上游 Stage 2-4 失敗，沒有卡片可以建圖：" + msg;
-      graphLiveError.style.display = "block";
-      // 失敗本身也是執行紀錄的一部分——這裡補一筆前端可見的紀錄，
-      // 免得 log 面板停在「只有 Stage 1」而看不出後面發生什麼事。
-      appendExecutionLog([{
-        ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-        phase: "collect", action: "stage2_5_request_failed", detail: msg,
-        status: "error", layer: null, metrics: {},
-      }]);
     }
   }
+  // ---------- Stage 6-8：交叉驗證／辯論／結論（呼叫 /api/stage789，手動觸發） ----------
+  const reasonBtn = document.getElementById("reason-btn");
+  const reasonSpinner = document.getElementById("reason-spinner");
+  const reasonErrorBox = document.getElementById("reason-error-box");
+  const stage7Card = document.getElementById("stage7-card");
+  const stage8Card = document.getElementById("stage8-card");
+  const stage9Card = document.getElementById("stage9-card");
+  const cvLivePill = document.getElementById("cv-live-pill");
+  const cvBody = document.getElementById("cv-body");
+  const cvLiveError = document.getElementById("cv-live-error");
+  const debateLivePill = document.getElementById("debate-live-pill");
+  const debateBody = document.getElementById("debate-body");
+  const debateLiveError = document.getElementById("debate-live-error");
+  const conclusionLivePill = document.getElementById("conclusion-live-pill");
+  const conclusionBody = document.getElementById("conclusion-body");
+  const conclusionLiveError = document.getElementById("conclusion-live-error");
+
+  function resetReasoningStages() {
+    [stage7Card, stage8Card, stage9Card].forEach(c => c.classList.add("hidden"));
+    cvBody.innerHTML = ""; debateBody.innerHTML = ""; conclusionBody.innerHTML = "";
+    reasonErrorBox.textContent = ""; reasonErrorBox.classList.remove("on");
+  }
+
+  function idLegendHtml(idMap) {
+    const rows = Object.entries(idMap || {});
+    if (rows.length === 0) return "";
+    return `
+      <details class="ref-box" style="margin-bottom:12px;">
+        <summary>證據代號對照（辯論逐字稿裡的 ev-001 等於哪張卡）</summary>
+        <div class="ref-body">
+          ${rows.map(([cardId, evId]) => `<div class="lr-row"><span class="lr-k">${evId}</span><span class="lr-v">${cardId}</span></div>`).join("")}
+        </div>
+      </details>
+    `;
+  }
+
+  function evidenceIdsChips(ids) {
+    return (ids && ids.length) ? chipsHtml(ids) : `<span class="lr-note">（無引用）</span>`;
+  }
+
+  function factsHtml(facts) {
+    if (!facts || facts.length === 0) return `<div class="lr-note">（沒有抽出任何事實）</div>`;
+    return facts.map(f => `
+      <div class="lr-row" style="margin-bottom:8px;">
+        <span class="lr-k">${f.source_type || "—"}</span>
+        <span class="lr-v">${f.summary || ""}　${evidenceIdsChips(f.evidence_ids)}</span>
+      </div>
+    `).join("");
+  }
+
+  function cvListHtml(items) {
+    if (!items || items.length === 0) return `<li class="lr-note" style="list-style:none; padding-left:0;">（無）</li>`;
+    return items.map(s => `<li>${s}</li>`).join("");
+  }
+
+  function cvHtml(data) {
+    const cv = data.cross_validation || {};
+    const structural = cv.structural_context || [];
+    return `
+      ${idLegendHtml(data.id_map)}
+      <div class="lr-note" style="margin-bottom:8px;">Step A — 事實層（逐字轉錄，不摘要／不下判斷）</div>
+      ${factsHtml(data.facts)}
+      <div class="lr-note" style="margin:14px 0 8px;">Step B — 交叉驗證</div>
+      <div class="cv-columns">
+        <div class="cv-col">
+          <h5><span class="cv-dot ok"></span>consistent_signals（一致訊號）</h5>
+          <ul>${cvListHtml(cv.consistent_signals)}</ul>
+        </div>
+        <div class="cv-col">
+          <h5><span class="cv-dot warn"></span>contradictions（真矛盾，同尺度內）</h5>
+          <ul>${cvListHtml(cv.contradictions)}</ul>
+        </div>
+      </div>
+      ${structural.length ? `
+        <div class="lr-note" style="margin-top:14px;">structural_context（跨尺度位置關係，不算矛盾）</div>
+        <ul class="ref-list">${cvListHtml(structural)}</ul>
+      ` : ""}
+    `;
+  }
+
+  function debateTurnHtml(round) {
+    return `
+      <div class="debate-round">
+        <div class="dr-label">第 ${round.round} 輪</div>
+        <div class="debate-turn bull">
+          <div class="dt-role">🐂 正方</div>
+          <div>${round.bull_argument || ""}</div>
+          <div class="dt-evidence">${evidenceIdsChips(round.bull_evidence_ids)}</div>
+        </div>
+        <div class="debate-turn bear">
+          <div class="dt-role">🐻 反方${round.bear_has_new_points === false ? "（自報無新論點，收斂）" : ""}</div>
+          ${round.bear_critique ? `<div class="dt-critique">批評正方：${round.bear_critique}</div>` : ""}
+          <div>${round.bear_argument || ""}</div>
+          <div class="dt-evidence">${evidenceIdsChips(round.bear_evidence_ids)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function debateHtml(data) {
+    const debate = data.debate || {};
+    const rounds = debate.rounds || [];
+    if (rounds.length === 0) {
+      return `<div class="lr-note">這次沒有觸發正反辯論（單模型 fallback 路徑或證據不足）。</div>`;
+    }
+    return `
+      <div class="lr-note" style="margin-bottom:10px;">共 ${debate.round_count} 輪・收斂原因：${debate.stopped_reason || "—"}</div>
+      ${rounds.map(debateTurnHtml).join("")}
+    `;
+  }
+
+  // 信心分數圓環：r=52，周長 2πr；依分數畫出對應弧長，分數分三個色階
+  // （<45 偏警示、45-70 中性、>70 偏肯定），跟報告措辭「信心低/中/高」對得上。
+  function confidenceRingSvg(score) {
+    const r = 52, c = 2 * Math.PI * r;
+    const pct = Math.max(0, Math.min(100, score)) / 100;
+    const color = score < 45 ? "var(--danger)" : (score < 70 ? "var(--accent-7)" : "var(--accent-6)");
+    return `
+      <svg class="cg-ring" width="130" height="130" viewBox="0 0 130 130">
+        <circle cx="65" cy="65" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="12"></circle>
+        <circle cx="65" cy="65" r="${r}" fill="none" stroke="${color}" stroke-width="12"
+          stroke-linecap="round" stroke-dasharray="${(c * pct).toFixed(1)} ${c.toFixed(1)}"
+          transform="rotate(-90 65 65)"></circle>
+        <text x="65" y="60" text-anchor="middle" font-size="30" font-weight="700" fill="var(--ink)">${Math.round(score)}</text>
+        <text x="65" y="80" text-anchor="middle" font-size="11" fill="var(--muted)">／100</text>
+      </svg>
+    `;
+  }
+
+  function confidenceBarRow(label, value, weight) {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    return `
+      <div class="cg-bar-row">
+        <span class="cg-label">${label}${weight ? `（×${weight}）` : ""}</span>
+        <span class="cg-bar-track"><span class="cg-bar-fill" style="width:${pct}%;"></span></span>
+        <span class="cg-value">${pct.toFixed(0)}</span>
+      </div>
+    `;
+  }
+
+  function listOrNote(items, emptyNote) {
+    if (!items || items.length === 0) return `<div class="lr-note">${emptyNote}</div>`;
+    return `<ul class="ref-list">${items.map(s => `<li>${typeof s === "string" ? s : JSON.stringify(s)}</li>`).join("")}</ul>`;
+  }
+
+  function conclusionHtml(data) {
+    const c = data.conclusion || {};
+    const b = data.confidence_breakdown || {};
+    const w = b.weights || {};
+    return `
+      <div style="font-size:14.5px; font-weight:600; margin-bottom:10px;">${c.market_judgment || "（無結論）"}</div>
+      <div class="lr-row" style="margin-bottom:12px;"><span class="lr-k">適用尺度</span><span class="lr-v">${data.primary_horizon || "—"}${data.primary_horizon_basis ? "　" + data.primary_horizon_basis : ""}</span></div>
+
+      <div class="confidence-gauge">
+        ${confidenceRingSvg(data.confidence_score || 0)}
+        <div class="cg-breakdown">
+          ${confidenceBarRow("資料品質", b.data_confidence, w.data_confidence)}
+          ${confidenceBarRow("訊號一致性", b.signal_consensus, w.signal_consensus)}
+          ${confidenceBarRow("證據強度", b.evidence_strength, w.evidence_strength)}
+          <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Base</span><span class="lr-v">${b.base}</span></div>
+          <div class="lr-row"><span class="lr-k">辯論調整</span><span class="lr-v">${b.debate_adjustment > 0 ? "+" : ""}${b.debate_adjustment}${b.debate_adjustment_reason ? "　" + b.debate_adjustment_reason : ""}</span></div>
+        </div>
+      </div>
+
+      <div class="lr-note" style="margin-top:6px;">Limitations（這個結論的已知限制）</div>
+      ${listOrNote(c.limitations, "（無）")}
+      <div class="lr-note" style="margin-top:10px;">Invalidation Conditions（什麼情況下這個結論會被推翻）</div>
+      ${listOrNote(c.invalidation_conditions, "（無）")}
+      ${(c.debate_summary && c.debate_summary.length) ? `
+        <div class="lr-note" style="margin-top:10px;">Debate Summary（裁判整理的辯論重點）</div>
+        ${listOrNote((c.debate_summary || []).map(d => typeof d === "string" ? d : (d.point || JSON.stringify(d))), "（無）")}
+      ` : ""}
+    `;
+  }
+
+  async function runReasoning() {
+    if (!currentQuery || !currentCoin) {
+      reasonErrorBox.textContent = "還沒有 Stage 1 的問題／幣種可以用，請先送出上面的查詢。";
+      reasonErrorBox.classList.add("on");
+      return;
+    }
+    if (!currentEvidenceCards || currentEvidenceCards.length === 0) {
+      reasonErrorBox.textContent = "Stage 5 還沒有 Evidence Card 可用（可能還在跑，或組裝失敗），請等 Stage 4 完成再試一次。";
+      reasonErrorBox.classList.add("on");
+      return;
+    }
+    reasonErrorBox.textContent = ""; reasonErrorBox.classList.remove("on");
+    reasonBtn.disabled = true;
+    reasonSpinner.classList.add("on");
+    [stage7Card, stage8Card, stage9Card].forEach(c => c.classList.remove("hidden"));
+    cvLivePill.textContent = "推理中…（最多 7 次 LLM，數十秒）"; cvLivePill.classList.remove("err");
+    debateLivePill.textContent = "等交叉驗證完成…"; debateLivePill.classList.remove("err");
+    conclusionLivePill.textContent = "等辯論完成…"; conclusionLivePill.classList.remove("err");
+    cvBody.innerHTML = ""; debateBody.innerHTML = ""; conclusionBody.innerHTML = "";
+
+    try {
+      const res = await fetch(`${API_BASE}/api/stage789`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: currentQuery, coin: currentCoin, evidence_cards: currentEvidenceCards }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+
+      appendExecutionLog(data.execution_log);
+
+      cvLivePill.textContent = `live · ${data.question_type || ""}`;
+      cvBody.innerHTML = cvHtml(data);
+
+      debateLivePill.textContent = `live · ${(data.debate && data.debate.round_count) || 0} 輪`;
+      debateBody.innerHTML = debateHtml(data);
+
+      conclusionLivePill.textContent = `live · 信心 ${data.confidence_score}`;
+      conclusionBody.innerHTML = conclusionHtml(data);
+
+      stage9Card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (err) {
+      const msg = String(err.message || err);
+      cvLivePill.textContent = "推理失敗"; cvLivePill.classList.add("err");
+      debateLivePill.textContent = "推理失敗"; debateLivePill.classList.add("err");
+      conclusionLivePill.textContent = "推理失敗"; conclusionLivePill.classList.add("err");
+      reasonErrorBox.textContent = msg;
+      reasonErrorBox.classList.add("on");
+    } finally {
+      reasonBtn.disabled = false;
+      reasonSpinner.classList.remove("on");
+    }
+  }
+  reasonBtn.addEventListener("click", runReasoning);
+
   submitBtn.addEventListener("click", submitQuery);
   queryInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitQuery();
