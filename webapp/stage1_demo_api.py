@@ -127,8 +127,39 @@ FALLBACK_WINDOW_DAYS = 14
 # Binance /fundingRate 單次查詢上限
 MAX_FUNDING_LIMIT = 1000
 
-# webapp/stage1_demo_api.py -> webapp -> HOYAbit_ai_agent -> 2026-07-雲湧智生黑客松/
-REPORT_HTML_PATH = Path(__file__).resolve().parent.parent.parent / "14_流程圖視覺報告.html"
+REPORT_HTML_NAME = "14_流程圖視覺報告.html"
+# 開發位置：webapp -> HOYAbit_ai_agent -> 2026-07-雲湧智生黑客松/（vault 裡的正本，
+# Ken 平常就是改這一份）
+REPORT_HTML_VAULT = Path(__file__).resolve().parent.parent.parent / REPORT_HTML_NAME
+# repo 內的副本：給 clone 這個 repo 的隊友／部署機用——vault 那份不在這個 repo 裡，
+# 只 clone HOYAbit_ai_agent 的人拿不到它，首頁會 404
+REPORT_HTML_REPO = Path(__file__).resolve().parent.parent / REPORT_HTML_NAME
+
+
+def _resolve_report_html() -> Path | None:
+    """決定首頁要送哪一份報告 HTML。
+
+    順序是**先 vault 正本、後 repo 副本**：開發機上兩份都在，要送正在編輯的那份，
+    不然改了畫面不會變（副本會變成看起來像 bug 的假象）；clone/部署環境只有副本。
+
+    ⚠️ 這是刻意接受的「兩份檔案」——vault 那份是正本，repo 這份是為了讓 repo
+    自己跑得起來的快照，兩邊會漂移。所以下面會在兩份都存在且內容不同時吠一聲，
+    提醒副本該更新了（deploy 前沒同步，demo 機器上就會是舊畫面）。"""
+    if REPORT_HTML_VAULT.exists():
+        if REPORT_HTML_REPO.exists():
+            try:
+                if REPORT_HTML_VAULT.read_bytes() != REPORT_HTML_REPO.read_bytes():
+                    print(
+                        f"⚠ {REPORT_HTML_NAME}：vault 正本與 repo 副本內容不同，"
+                        f"這次送的是 vault 正本。部署前記得把副本同步過去："
+                        f"cp '{REPORT_HTML_VAULT}' '{REPORT_HTML_REPO}'"
+                    )
+            except OSError:
+                pass
+        return REPORT_HTML_VAULT
+    if REPORT_HTML_REPO.exists():
+        return REPORT_HTML_REPO
+    return None
 
 # webapp/stage1_demo_api.py -> webapp -> HOYAbit_ai_agent -> "Stage 3 — Knowledge Layer"/
 KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "Stage 3 — Knowledge Layer"
@@ -602,12 +633,17 @@ def _extract_json(text: str) -> dict:
 
 @app.get("/")
 def index():
-    if not REPORT_HTML_PATH.exists():
-        raise HTTPException(404, f"找不到報告檔案：{REPORT_HTML_PATH}")
+    report_path = _resolve_report_html()
+    if report_path is None:
+        raise HTTPException(
+            404,
+            f"找不到報告檔案，兩個位置都沒有：{REPORT_HTML_VAULT}（vault 正本）／"
+            f"{REPORT_HTML_REPO}（repo 副本）",
+        )
     # 這頁在開發階段會一直改，瀏覽器快取住舊版會讓人以為「改了沒生效」
     # （實際踩過：畫面停在改版前的 Stage 4 單一 factor 版面）。demo 用途不需要
     # 快取，直接關掉，每次重整都拿最新檔案。
-    return FileResponse(REPORT_HTML_PATH, headers={"Cache-Control": "no-store, must-revalidate"})
+    return FileResponse(report_path, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 @app.post("/api/stage1")

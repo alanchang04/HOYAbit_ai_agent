@@ -1,0 +1,960 @@
+<!--
+  對應：[[13流程圖迭代定案v2]]（Stage 1-5 這輪異動）
+  頁面編號 2026-08-02 再改過一次：原本獨立一個區塊的 Knowledge Layer（原
+  Stage 3）併進 Stage 2 卡片內，改成點開「查看 Knowledge Layer」才看得到——
+  它本來就是查表用的背景知識，不是每次都要看的即時數字。原 Stage 4/5 依序
+  遞補成 Stage 3/4，畫面編號連續；程式碼內部的 id 前綴（s3／s4／s5）跟
+  Stage 4/5 對應的實際資料夾名稱（Stage 4 — Dynamic Evidence Weight Engine／
+  Stage 5 — Evidence Card ＋ Prioritization）維持不動，只有畫面上看得到的
+  badge 數字跟標題文字改了，避免動到大量內部管線只為了改個顯示編號。
+  全部為真實可互動 demo，呼叫 HOYAbit_ai_agent/webapp/stage1_demo_api.py：
+    Stage 1 打 Bedrock 判斷 Asset/Horizon/Research Goal（單一 LLM call）
+    Stage 2/3/4（畫面編號）由同一次 /api/stage5 呼叫驅動（避免兩次 LLM 窗口判斷不一致）
+    Knowledge Layer 純查表讀 Stage 3 — Knowledge Layer/{factor}.md，刻意不打 LLM
+  Stage 6-9（13 文件原編號）尚未做進本頁，待後續拍板再補。
+  啟動方式見同目錄 HOYAbit_ai_agent/webapp/stage1_demo_api.py 檔頭註解。
+-->
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence-driven Research Pipeline · Stage 1-5</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f6f5f1;
+    --surface: #ffffff;
+    --surface-2: #fbfaf7;
+    --ink: #16150f;
+    --ink-2: #55534a;
+    --muted: #8c897c;
+    --line: #ddd9cc;
+    --line-strong: #c2bda9;
+    --accent-1: #1f5f4f;   /* Stage 1 — 已可互動 */
+    --accent-1-bg: #e6f1ec;
+    --accent-2: #a15b1f;   /* Stage 2 — 設計骨架 */
+    --accent-2-bg: #f5ead9;
+    --accent-3: #5b3fa1;   /* Stage 3 — 設計骨架 */
+    --accent-3-bg: #ece6f7;
+    --accent-4: #1f5f8f;   /* Stage 4 — 已可互動 */
+    --accent-4-bg: #e3edf5;
+    --accent-5: #7a5230;   /* Stage 5 — 已可互動 */
+    --accent-5-bg: #f2e9df;
+    --danger: #a13f2f;
+    --danger-bg: #f6e6e2;
+    --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #12110d;
+      --surface: #1c1b16;
+      --surface-2: #201f19;
+      --ink: #f3f1e8;
+      --ink-2: #c9c6b7;
+      --muted: #948f7d;
+      --line: #38362c;
+      --line-strong: #4c4938;
+      --accent-1: #5fcf9f;
+      --accent-1-bg: #1c2e26;
+      --accent-2: #e0a25c;
+      --accent-2-bg: #332a1a;
+      --accent-3: #b39cf0;
+      --accent-3-bg: #2a2438;
+      --accent-4: #6fb3e0;
+      --accent-4-bg: #1c2a33;
+      --accent-5: #d3a878;
+      --accent-5-bg: #2e2519;
+      --danger: #e08a78;
+      --danger-bg: #3a2420;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #12110d; --surface: #1c1b16; --surface-2: #201f19; --ink: #f3f1e8; --ink-2: #c9c6b7; --muted: #948f7d;
+    --line: #38362c; --line-strong: #4c4938;
+    --accent-1: #5fcf9f; --accent-1-bg: #1c2e26;
+    --accent-2: #e0a25c; --accent-2-bg: #332a1a;
+    --accent-3: #b39cf0; --accent-3-bg: #2a2438;
+    --accent-4: #6fb3e0; --accent-4-bg: #1c2a33;
+    --accent-5: #d3a878; --accent-5-bg: #2e2519;
+    --danger: #e08a78; --danger-bg: #3a2420;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #f6f5f1; --surface: #ffffff; --surface-2: #fbfaf7; --ink: #16150f; --ink-2: #55534a; --muted: #8c897c;
+    --line: #ddd9cc; --line-strong: #c2bda9;
+    --accent-1: #1f5f4f; --accent-1-bg: #e6f1ec;
+    --accent-2: #a15b1f; --accent-2-bg: #f5ead9;
+    --accent-3: #5b3fa1; --accent-3-bg: #ece6f7;
+    --accent-4: #1f5f8f; --accent-4-bg: #e3edf5;
+    --accent-5: #7a5230; --accent-5-bg: #f2e9df;
+    --danger: #a13f2f; --danger-bg: #f6e6e2;
+    --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+    line-height: 1.55;
+  }
+  code, .mono { font-family: ui-monospace, Consolas, "SFMono-Regular", monospace; }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  header.top { margin-bottom: 28px; }
+  header.top h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header.top .lineage { color: var(--muted); font-size: 12.5px; margin: 0 0 18px; }
+  header.top .lineage code { font-size: 12px; }
+
+  .changelog {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .changelog summary { cursor: pointer; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+  .changelog table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+  .changelog th, .changelog td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .changelog th { color: var(--muted); font-weight: 600; }
+
+  .stack { position: relative; margin-top: 32px; }
+
+  .page { display: block; }
+  .page.hidden { display: none; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 22px 22px 20px; box-shadow: var(--shadow);
+  }
+
+  .query-card textarea {
+    width: 100%; min-height: 110px; resize: vertical;
+    border: 1px solid var(--line-strong); border-radius: 10px; padding: 12px 14px;
+    background: var(--surface-2); color: var(--ink); font-size: 14.5px; font-family: inherit;
+  }
+  .query-card textarea:focus { outline: 2px solid var(--accent-1); outline-offset: 1px; }
+  .query-card label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+
+  .submit-row { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+  button.primary {
+    appearance: none; border: none; border-radius: 999px; cursor: pointer;
+    background: var(--accent-1); color: var(--accent-1-bg); font-size: 14px; font-weight: 600;
+    padding: 10px 22px; transition: opacity .15s ease;
+  }
+  button.primary:hover { opacity: .88; }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  button.ghost {
+    appearance: none; border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--ink-2); font-size: 13px; padding: 8px 16px;
+  }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid var(--line-strong); border-top-color: var(--accent-1);
+    animation: spin .7s linear infinite; display: none;
+  }
+  .spinner.on { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .flow-arrow {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: var(--muted); font-size: 12px; margin: 18px 0;
+  }
+  .flow-arrow .glyph { font-size: 18px; line-height: 1; }
+
+  .error-box {
+    display: none; margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+    background: var(--danger-bg); color: var(--danger); font-size: 13px; white-space: pre-wrap;
+  }
+  .error-box.on { display: block; }
+
+  /* --- Page 2 --- */
+  .echo-question {
+    font-size: 13px; color: var(--muted); margin-bottom: 4px;
+  }
+  .echo-question .q-text {
+    display: block; margin-top: 6px; font-size: 15px; color: var(--ink); font-weight: 600;
+  }
+
+  .stage-card { border-radius: 16px; padding: 20px 22px; margin-top: 18px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .stage-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .stage-badge {
+    width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex: none;
+  }
+  .stage-title { font-size: 14.5px; font-weight: 700; }
+  .stage-tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; margin-left: auto;
+  }
+
+  .s1 { background: var(--accent-1-bg); }
+  .s1 .stage-badge { background: var(--accent-1); color: var(--accent-1-bg); }
+  .s1 .stage-title { color: var(--accent-1); }
+  .s1 .stage-tag { background: var(--accent-1); color: var(--accent-1-bg); }
+
+  .s2 { background: var(--accent-2-bg); }
+  .s2 .stage-badge { background: var(--accent-2); color: var(--accent-2-bg); }
+  .s2 .stage-title { color: var(--accent-2); }
+  .s2 .stage-tag { background: transparent; color: var(--accent-2); border: 1px solid var(--accent-2); }
+
+  .s3 { background: var(--accent-3-bg); }
+  .s3 .stage-badge { background: var(--accent-3); color: var(--accent-3-bg); }
+  .s3 .stage-title { color: var(--accent-3); }
+  .s3 .stage-tag { background: transparent; color: var(--accent-3); border: 1px solid var(--accent-3); }
+
+  .s4 { background: var(--accent-4-bg); }
+  .s4 .stage-badge { background: var(--accent-4); color: var(--accent-4-bg); }
+  .s4 .stage-title { color: var(--accent-4); }
+  .s4 .stage-tag { background: var(--accent-4); color: var(--accent-4-bg); }
+
+  .s5 { background: var(--accent-5-bg); }
+  .s5 .stage-badge { background: var(--accent-5); color: var(--accent-5-bg); }
+  .s5 .stage-title { color: var(--accent-5); }
+  .s5 .stage-tag { background: var(--accent-5); color: var(--accent-5-bg); }
+
+  .field-row { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 10px; }
+  .field { min-width: 140px; }
+  .field .k { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+  .field .v { font-size: 14px; font-weight: 600; }
+  .chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px;
+    background: var(--surface); border: 1px solid var(--line-strong); margin: 2px 4px 2px 0;
+  }
+  .reasoning { font-size: 13px; color: var(--ink-2); margin-top: 10px; border-top: 1px dashed var(--line-strong); padding-top: 10px; }
+
+  .schema-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  /* 一個 factor 佔滿一整列、由上往下堆疊——每個 factor 的欄位在寬版面裡
+     左右對齊比較好讀，不會被擠成窄欄折行。 */
+  .factor-row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+  /* 出處清單：預設收合，避免一長串網址把卡片撐爛 */
+  .ref-box {
+    margin-top: 4px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); padding: 8px 10px;
+  }
+  .ref-box summary {
+    cursor: pointer; font-size: 12px; color: var(--ink-2); font-weight: 600;
+    list-style: revert;
+  }
+  .ref-box[open] summary { margin-bottom: 8px; }
+  .ref-body .lr-note { margin-top: 8px; }
+  .ref-list { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); }
+  .ref-list li { margin-bottom: 5px; line-height: 1.5; }
+  .ref-list a { color: var(--accent-3); text-decoration: none; }
+  .ref-list a:hover { text-decoration: underline; }
+  .ref-tag {
+    display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .02em;
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--muted);
+  }
+  .schema-block {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  }
+  .schema-block h4 { margin: 0 0 8px; font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+  .schema-block ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); }
+  .schema-block li { margin-bottom: 3px; }
+
+  .live-pill {
+    font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+    background: var(--accent-1); color: var(--accent-1-bg);
+  }
+  .live-pill.err { background: var(--danger); color: var(--danger-bg); }
+  .live-result {
+    display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-strong);
+    font-size: 12.5px;
+  }
+  /* 固定寬度標籤欄＋彈性內容欄的兩欄式排版（像 definition list）：
+     卡片改成滿版寬度後，原本左右對齊到底（justify-content: space-between）
+     在短值上會把標籤跟值拉開一大截空白，在長值上又會擠成一團——換成標籤固定
+     寬度、值往右接著寫、需要就自然換行，短值長值都能對齊、不再忽鬆忽緊。 */
+  .live-result .lr-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 7px; }
+  .live-result .lr-row .lr-k { color: var(--muted); flex: 0 0 150px; }
+  .live-result .lr-row .lr-v { font-weight: 500; flex: 1 1 auto; min-width: 0; line-height: 1.6; }
+  .live-result .lr-note { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+  .mini-error { display: none; margin-top: 8px; font-size: 12px; color: var(--danger); }
+
+  .todo-note {
+    margin-top: 14px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: flex-start;
+  }
+  .todo-note .dot { flex: none; margin-top: 5px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .back-row { margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Evidence-driven Research Pipeline</h1>
+    <p class="lineage">
+      承接 <code>13_流程圖迭代定案v2.md</code>（Stage 1-5 這輪異動）／完整迭代脈絡見 <code>07_流程圖迭代定案.md</code>。
+      本頁 Stage 1-5 全部接上真實資料與真實 LLM 呼叫，五個 factor（funding_rate／active_address／cpi／liquidation／panews_sentiment）跑完整條鏈，Statistical／Event／Sentiment 三型都有；Stage 6-9 尚未做進本頁。
+    </p>
+
+    <details class="changelog">
+      <summary>這輪（13 v2）改了什麼——展開看異動總覽</summary>
+      <table>
+        <tr><th>項目</th><th>11 原設計</th><th>13 這輪改動</th></tr>
+        <tr><td>Query Understanding</td><td>獨立層，判斷方式未明說</td><td>併入 Stage 1，明確定義為<b>單一 LLM 判斷</b></td></tr>
+        <tr><td>Stage 1 Evidence Validation</td><td>正式流程第一層</td><td>先暫緩不做（非刪除）</td></tr>
+        <tr><td>Stage 2 Feature Extraction</td><td>對已收集證據做特徵抽取，欄位固定</td><td>改成「去抓資料」，<b>時間尺度由 LLM 依 Horizon 決定</b></td></tr>
+        <tr><td>Stage 3 Knowledge Layer</td><td>固定 library，last_updated 只記錄結果</td><td>新增<b>每日 rolling window 刷新機制</b></td></tr>
+        <tr><td>Stage 4 Dynamic Evidence Weight Engine</td><td>ic 寫死示範值；Modifier 五線索沒範圍沒算法</td><td>ic 改成吃 Horizon 的 <b>rolling_spearman_ic</b>；<code>context_modifier</code> 定範圍 <code>[0.5, 2.0]</code>，砍掉 <code>context</code>，剩四線索各自定義計算依據；Prior Weight 拆<b>三種來源</b>（ic／impact_level／Domain Knowledge）</td></tr>
+        <tr><td>Stage 5 Evidence Card ＋ Prioritization</td><td>Evidence Card 只是組裝層，排序另立 Stage 6（五個輸入）</td><td><b>原 Stage 6 併入</b>——排序輸入收斂成<b>單一 <code>evidence_weight</code></b>（2026-08-02 再次拍板：一律照權重，不因 Prior Weight 來源不同而分組；同日補充拍板<b>比大小時取絕對值</b>——負 ic 是反向訊號不是弱訊號，代價是名次不表達方向），<code>evidence_coverage</code> 不參與排序、定義待拍板</td></tr>
+      </table>
+    </details>
+  </header>
+
+  <div class="stack">
+
+    <!-- ============ Page 1：輸入 ============ -->
+    <section id="page-1" class="page">
+      <div class="card query-card">
+        <label for="query-input">Input Question</label>
+        <textarea id="query-input" placeholder="例如：分析 BTC 未來兩週的走勢，整合價格動能與鏈上活躍度"></textarea>
+
+        <div class="submit-row">
+          <button class="primary" id="submit-btn" type="button">送出 → Stage 1 判斷</button>
+          <span class="spinner" id="spinner"></span>
+        </div>
+
+        <div class="error-box" id="error-box"></div>
+      </div>
+
+      <div class="flow-arrow">
+        <span class="glyph">↓</span>
+        <span>LLM · Stage 1 單一判斷（Asset／Horizon／Research Goal，同一次呼叫）</span>
+      </div>
+    </section>
+
+    <!-- ============ Page 2：結果 ============ -->
+    <section id="page-2" class="page hidden">
+
+      <div class="card">
+        <div class="echo-question">
+          Question
+          <span class="q-text" id="echo-question-text"></span>
+        </div>
+      </div>
+
+      <div class="stage-card s1">
+        <div class="stage-head">
+          <span class="stage-badge">1</span>
+          <span class="stage-title">Stage 1 — LLM 判斷結果</span>
+          <span class="stage-tag" id="backend-tag">live</span>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <div class="k">Asset</div>
+            <div class="v" id="r-asset"></div>
+          </div>
+          <div class="field">
+            <div class="k">Horizon</div>
+            <div class="v" id="r-horizon"></div>
+          </div>
+          <div class="field">
+            <div class="k">Research Goal</div>
+            <div class="v" id="r-goal"></div>
+          </div>
+        </div>
+        <div class="reasoning" id="r-reasoning"></div>
+      </div>
+
+      <div class="stage-card s2">
+        <div class="stage-head">
+          <span class="stage-badge">2</span>
+          <span class="stage-title">Stage 2 — Feature Extraction</span>
+          <span class="stage-tag">4 factors live</span>
+        </div>
+        <div class="factor-row" id="stage2-factors"></div>
+        <div class="todo-note"><span class="dot"></span><span>五個 factor 各自真的去抓真實資料，不是同一套邏輯換名字——funding_rate／active_address 窗口＝天、由 LLM 依 Horizon 現場判斷（不是查表），而且各自有專屬的背景知識 prompt；cpi 窗口＝月，換算後才抓；liquidation 沒有「回看窗口」這個概念，是真的開 WebSocket 監聽固定秒數，percentile／trend 等需要歷史序列的欄位這個 factor 結構性沒有，一律不產生；panews_sentiment 的窗口只決定「往回翻多深」而不是過濾邊界（超出窗口的文章標記為非近期但照樣計入），翻不到窗口底時會標 <code>window_covered=false</code> 並說明只翻到哪天，情緒分數是簡化版關鍵字計分、不是 NLP 模型（<code>nonzero_ratio</code> 就是這套方法的覆蓋率）。active_address 目前只支援 BTC（資料源限制），查其他幣種會顯示原因。每張卡片下方「查看 Knowledge Layer」點開才是原本獨立一個 Stage 3 區塊的內容——Knowledge 本來就是查表用的背景知識，不是每次都要看的即時數字，跟 Stage 2 的即時抓取結果放在一起、預設收合比較合理。五份內容分別讀自 <code>Stage 3 — Knowledge Layer/{factor}.md</code>——Ken 手動研究、附真實學術／產業出處的正式版本，欄位對照 11流程圖模板.md 的 Statistical／Event／Sentiment Knowledge schema（三型不同骨架，不是同一份欄位表）。刻意不對齊結論：funding_rate 產業文獻偏肯定短期訊號，active_address 近期研究反而在講預測力減弱，cpi 學界對通膨關係沒有共識、liquidation 只能即時監聽沒有歷史可驗證、panews_sentiment 的預測力是狀態依存（極端情緒下才顯著）——每份都根據各自的資料現實寫，不是同一套模板換名字。單一事實來源是這些 .md，這支 demo 只是讀檔解析，刻意不打 LLM（Knowledge Layer 本身是 library，不是推理層）。</span></div>
+      </div>
+
+      <div class="stage-card s4">
+        <div class="stage-head">
+          <span class="stage-badge">3</span>
+          <span class="stage-title">Stage 3 — Dynamic Evidence Weight Engine</span>
+          <span class="stage-tag" id="weight-live-pill">計算中…</span>
+        </div>
+        <div class="factor-row" id="stage4-factors"></div>
+        <div class="mini-error" id="weight-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>Prior Weight 有三種來源（13 文件 2026-08-02 拍板，同一個 <code>evidence_weight</code> 概念下的不同填法）：<b>Statistical Factor</b>（funding_rate／active_address）現場真的算 <code>rolling_spearman_ic</code>；<b>Event Factor</b>（cpi）不算 ic——離散事件沒有「每天的值」可跟每天的 forward_return 配對，改讀 Knowledge Layer 的 <code>impact_level</code> 分級；<b>資料源結構性缺歷史序列</b>（liquidation）ic 也算不出來，改用 Domain Knowledge 給有理由的低分。後兩種的數值與理由都寫在 <code>Stage 4 — Dynamic Evidence Weight Engine/{factor}.md</code> 裡（資料夾名稱沿用原編號，內容沒動），程式只負責讀，不自己訂數字。Dynamic Modifier 一律真的打一次 LLM；market_regime／cross_source_consensus 兩條線索還沒接上真實資料源，LLM 會老實當「未知」處理。</span></div>
+      </div>
+
+      <div class="stage-card s5">
+        <div class="stage-head">
+          <span class="stage-badge">4</span>
+          <span class="stage-title">Stage 4 — Evidence Card ＋ Prioritization</span>
+          <span class="stage-tag" id="card-live-pill">組裝中…</span>
+        </div>
+        <div class="factor-row" id="stage5-cards"></div>
+        <div class="mini-error" id="card-live-error"></div>
+        <div class="todo-note"><span class="dot"></span><span>純組裝層，不重新運算——直接呼叫 Stage 2(Fact)／Knowledge Layer(點進 Stage 2 卡片看)／Stage 3(Weight) 的處理函式，包成統一格式卡片。排序（原 Stage 6 併入）照 <code>|evidence_weight|</code> 由大到小——<b>2026-08-02 拍板兩件事</b>：①<b>一律照權重排序</b>，不因 Prior Weight 來源不同（ic 回測值／impact_level 人工分級／Domain Knowledge 理由）而分組或另設規則；②比大小時<b>取絕對值</b>，因為 ic 是相關係數、負值代表<b>反向訊號</b>（factor 越高、後續報酬越低）而不是弱訊號——實測 BTC funding_rate 的 <code>final=-0.55</code> 是五張卡裡強度最高的，照帶號值排卻掉到最後一名。⚠ 代價：<b>名次只表達訊號強度、不表達方向</b>，方向留在卡片的帶號原值與「方向」那一列，下游要判多空讀那兩格、不要從名次推。算不出權重的卡片排最後但<b>不刪除</b>——13 明講「不刪除，只排序」。<code>evidence_coverage</code> 定義還沒拍板，這裡不產生這個欄位假裝有定案。各 factor 的卡片設計說明見 <code>Stage 5 — Evidence Card ＋ Prioritization/{factor}.md</code>。</span></div>
+      </div>
+
+      <div class="back-row">
+        <button class="ghost" id="back-btn" type="button">← 回上一頁</button>
+      </div>
+
+    </section>
+
+  </div>
+</div>
+
+<script>
+  const API_BASE = ""; // 同源相對路徑：由 stage1_demo_api.py 在 http://127.0.0.1:8001/ 提供本頁時最單純
+
+  const queryInput = document.getElementById("query-input");
+  const submitBtn = document.getElementById("submit-btn");
+  const spinner = document.getElementById("spinner");
+  const errorBox = document.getElementById("error-box");
+  const page1 = document.getElementById("page-1");
+  const page2 = document.getElementById("page-2");
+  const backBtn = document.getElementById("back-btn");
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add("on");
+  }
+  function clearError() {
+    errorBox.textContent = "";
+    errorBox.classList.remove("on");
+  }
+
+  async function submitQuery() {
+    const query = queryInput.value.trim();
+    if (!query) {
+      showError("請先輸入問題。");
+      return;
+    }
+    clearError();
+    submitBtn.disabled = true;
+    spinner.classList.add("on");
+
+    try {
+      const res = await fetch(`${API_BASE}/api/stage1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
+      renderResult(data);
+      page1.classList.add("hidden");
+      page2.classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      const firstAsset = Array.isArray(data.asset) ? data.asset[0] : data.asset;
+      // Stage 3 是純查表（讀檔），立刻就能顯示，不用等 Stage 2/4/5 的 API。
+      fetchAllStage3(firstAsset, data.horizon);
+      // Stage 2/4/5 由同一次 /api/stage5 驅動，確保三個區塊的數字一致。
+      if (firstAsset) fetchPipeline(firstAsset, data.horizon);
+    } catch (err) {
+      const msg = String(err.message || err);
+      const isCred = /AWS_SESSION_TOKEN|凭证|憑證|ExpiredToken|UnrecognizedClientException/i.test(msg);
+      showError((isCred ? "⚠ 憑證問題（AWS session token 可能已過期，需要重新產生）：\n" : "呼叫失敗：\n") + msg);
+    } finally {
+      submitBtn.disabled = false;
+      spinner.classList.remove("on");
+    }
+  }
+
+  function renderResult(data) {
+    document.getElementById("echo-question-text").textContent = data.query || "";
+    document.getElementById("backend-tag").textContent = "live · " + (data.backend || "");
+
+    const assetEl = document.getElementById("r-asset");
+    assetEl.innerHTML = "";
+    const assets = Array.isArray(data.asset) ? data.asset : (data.asset ? [data.asset] : []);
+    if (assets.length === 0) {
+      assetEl.textContent = "—";
+    } else {
+      assets.forEach(a => {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = a;
+        assetEl.appendChild(chip);
+      });
+    }
+
+    document.getElementById("r-horizon").textContent = data.horizon || "—";
+    document.getElementById("r-goal").textContent = data.research_goal || "—";
+    document.getElementById("r-reasoning").textContent = data.reasoning ? ("判斷依據：" + data.reasoning) : "";
+  }
+
+  // ---------- 五個 factor 共用的骨架 ----------
+  const FACTOR_IDS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment"];
+  const FACTOR_TYPE_LABEL = {
+    funding_rate: "Statistical",
+    active_address: "Statistical",
+    cpi: "Event",
+    liquidation: "Statistical（資料源缺歷史）",
+    panews_sentiment: "Sentiment（ic 離線算）",
+  };
+
+  function blockSkeleton(prefix, waitingLabel) {
+    return FACTOR_IDS.map(id => `
+      <div class="schema-block" id="${prefix}-${id}-block">
+        <h4>${id}（${FACTOR_TYPE_LABEL[id]}） <span class="live-pill" id="${prefix}-${id}-pill">${waitingLabel}</span></h4>
+        <div class="live-result" id="${prefix}-${id}-result"></div>
+        <div class="mini-error" id="${prefix}-${id}-error"></div>
+      </div>
+    `).join("");
+  }
+
+  // Stage 2 卡片內嵌 Knowledge Layer（原本獨立一個 Stage 3 區塊）：
+  // 用 <details> 點開才看得到——id 跟原本 blockSkeleton("s3", ...) 產生的完全
+  // 一樣（s3-${id}-pill／result／error），fetchStage3Factor／fetchAllStage3
+  // 不用改，照抓照塞，只是塞進去的位置換了。
+  function stage2Skeleton() {
+    return FACTOR_IDS.map(id => `
+      <div class="schema-block" id="s2-${id}-block">
+        <h4>${id}（${FACTOR_TYPE_LABEL[id]}） <span class="live-pill" id="s2-${id}-pill">待抓取…</span></h4>
+        <div class="live-result" id="s2-${id}-result"></div>
+        <div class="mini-error" id="s2-${id}-error"></div>
+        <details class="ref-box" style="margin-top:8px;">
+          <summary>查看 Knowledge Layer <span class="live-pill" id="s3-${id}-pill">待查表…</span></summary>
+          <div class="ref-body live-result" id="s3-${id}-result"></div>
+          <div class="mini-error" id="s3-${id}-error"></div>
+        </details>
+      </div>
+    `).join("");
+  }
+
+  document.getElementById("stage2-factors").innerHTML = stage2Skeleton();
+  document.getElementById("stage4-factors").innerHTML = blockSkeleton("s4", "待計算…");
+
+  function el(prefix, id, kind) { return document.getElementById(`${prefix}-${id}-${kind}`); }
+
+  function blockStart(prefix, id, label) {
+    el(prefix, id, "pill").textContent = label;
+    el(prefix, id, "pill").classList.remove("err");
+    el(prefix, id, "error").style.display = "none";
+    el(prefix, id, "result").style.display = "none";
+  }
+  function blockDone(prefix, id, label, html) {
+    el(prefix, id, "pill").textContent = label;
+    el(prefix, id, "result").innerHTML = html;
+    el(prefix, id, "result").style.display = "block";
+  }
+  function blockFail(prefix, id, label, msg) {
+    el(prefix, id, "pill").textContent = label;
+    el(prefix, id, "pill").classList.add("err");
+    el(prefix, id, "error").textContent = msg;
+    el(prefix, id, "error").style.display = "block";
+  }
+
+  function chipsHtml(list) {
+    if (!list || list.length === 0) return "<span class=\"lr-note\">（無）</span>";
+    return list.map(v => `<span class="chip">${v}</span>`).join("");
+  }
+
+  function valueHtml(v) {
+    if (v === null || v === undefined || v === "") return "<span class=\"lr-note\">（未填，TODO）</span>";
+    return v;
+  }
+
+  function fmt(n, digits) {
+    return (n === null || n === undefined) ? null : Number(n).toFixed(digits === undefined ? 4 : digits);
+  }
+
+  // ---------- Stage 3：純查表，跟 coin/horizon 無關，可以立刻顯示 ----------
+  // 出處清單：預設收合（展開後才看到），連結文字用「這篇/這頁在講什麼」當標題，
+  // 不再把整串生網址攤在版面上——網址本身移到 title 提示與連結目標裡。
+  function refItemHtml(r) {
+    const tag = r.kind ? `<span class="ref-tag">${r.kind.toUpperCase()}</span>` : "";
+    if (!r.url) return `<li>${tag}${r.label}</li>`;
+    return `<li>${tag}<a href="${r.url}" target="_blank" rel="noopener noreferrer" title="${r.url}">${r.label}</a></li>`;
+  }
+
+  function referencesHtml(refs) {
+    if (!refs) return "<div class=\"lr-note\">（無）</div>";
+    const academic = refs.academic || [];
+    const industry = refs.industry || [];
+    const total = academic.length + industry.length;
+    if (total === 0) {
+      const note = refs.note ? `<div class="lr-note">${refs.note}</div>` : "<div class=\"lr-note\">（無）</div>";
+      return note;
+    }
+    return `
+      <details class="ref-box">
+        <summary>References — 學術 ${academic.length} 篇／產業 ${industry.length} 筆（點開看清單，連結另開分頁）</summary>
+        <div class="ref-body">
+          ${academic.length ? `<div class="lr-note">Academic（同儕審查／預印本，點標題開 DOI 或 arXiv 頁面）</div>
+          <ul class="ref-list">${academic.map(refItemHtml).join("")}</ul>` : ""}
+          ${industry.length ? `<div class="lr-note">Industry（交易所／研究機構／媒體的公開說明，點標題開原文）</div>
+          <ul class="ref-list">${industry.map(refItemHtml).join("")}</ul>` : ""}
+          ${refs.note ? `<div class="lr-note">${refs.note}</div>` : ""}
+        </div>
+      </details>
+    `;
+  }
+
+  // Scope 只顯示這次查詢實際問的幣種——知識庫寫的是「這個 factor 支援哪些幣」，
+  // 但畫面上要回答的是「這次問的幣適不適用」，全部列出來反而看不出重點。
+  // 查詢幣種不在支援清單內時（例如 active_address 只支援 BTC）才顯示完整清單，
+  // 讓人看得出來為什麼不適用。Statistical／Event 兩種骨架欄位名不同但邏輯一樣，
+  // 共用這支函式，避免只改一邊（實際踩過：Event 卡片漏了過濾、五個幣全列出來）。
+  // primary_horizon 自 2026-08-02（Option B）起是結構化物件：
+  //   { scale, applicable_days: [下限, 上限], rationale }
+  // Event 型（cpi）沒有這格，改用頂層 applicable_days＋reaction_window／expected_duration。
+  // 這裡統一成一句人看得懂的敘述，並保留可展開的完整理由。
+  function horizonScaleText(ph) {
+    if (!ph) return null;
+    if (typeof ph === "string") return ph;   // 舊格式（散文）仍能顯示，不會壞
+    const days = ph.applicable_days;
+    const range = Array.isArray(days) ? `適用 ${days[0]}~${days[1]} 天` : "";
+    return [ph.scale, range].filter(Boolean).join("，");
+  }
+
+  function horizonRationaleHtml(ph) {
+    if (!ph || typeof ph === "string" || !ph.rationale) return "";
+    return `<div class="lr-note" style="margin-top:4px; white-space:pre-wrap;">${ph.rationale.trim()}</div>`;
+  }
+
+  function scopeAssetsHtml(list, ctx) {
+    const supported = list || [];
+    const coin = (ctx || {}).coin;
+    return chipsHtml(coin && supported.includes(coin) ? [coin] : supported);
+  }
+
+  function knowledgeHtml(k, ctx) {
+    ctx = ctx || {};
+    // panews_sentiment 是 Sentiment Knowledge 骨架（11流程圖模板.md 三型之一）：
+    // 有 platform／data_type／update_frequency／supported_languages，但沒有
+    // persistence／supported_market_regimes／supported_market_types／
+    // optional_inputs／independent。套 Statistical 那組欄位會變成 5 行
+    // 「（未填，TODO）」，同時 4 個真正有內容的欄位完全不顯示——那不是資料缺，
+    // 是 schema 本來就不同，所以這型也要有自己的版面。
+    if (k.category === "sentiment") {
+      return `
+        <div class="lr-row"><span class="lr-k">Factor</span><span class="lr-v">${k.factor_name}（${k.factor_id}／${k.category}）</span></div>
+        <div class="lr-note" style="margin-top:10px;">Source Property</div>
+        <div class="lr-row"><span class="lr-k">Platform</span><span class="lr-v">${valueHtml(k.platform)}</span></div>
+        <div class="lr-row"><span class="lr-k">Data Type</span><span class="lr-v">${valueHtml(k.data_type)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Time Property</div>
+        <div class="lr-row"><span class="lr-k">Horizon（本次查詢已決定）</span><span class="lr-v">${valueHtml(ctx.horizon)}</span></div>
+        <div class="lr-row"><span class="lr-k">適用尺度</span><span class="lr-v">${valueHtml(horizonScaleText(k.primary_horizon))}</span></div>
+        ${horizonRationaleHtml(k.primary_horizon)}
+        <div class="lr-row"><span class="lr-k">Update Frequency</span><span class="lr-v">${valueHtml(k.update_frequency)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Scope</div>
+        <div>${scopeAssetsHtml(k.supported_assets, ctx)}</div>
+        <div class="lr-row" style="margin-top:6px;"><span class="lr-k">Languages</span><span class="lr-v">${valueHtml((k.supported_languages || []).join("／"))}</span></div>
+        <div class="lr-row" style="margin-top:10px;"><span class="lr-k">Required Inputs</span><span class="lr-v">${valueHtml(k.required_inputs)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Relationship</div>
+        <div class="lr-row"><span class="lr-k">Confirms</span><span class="lr-v">${valueHtml(k.confirms)}</span></div>
+        <div class="lr-row"><span class="lr-k">Conflicts</span><span class="lr-v">${valueHtml(k.conflicts)}</span></div>
+        ${referencesHtml(k.references)}
+        <details class="ref-box" style="margin-top:6px;">
+          <summary>版本資訊</summary>
+          <div class="ref-body lr-note">version=${k.version} · last_updated=${k.last_updated}</div>
+        </details>
+      `;
+    }
+    // cpi 是 Event Knowledge 骨架（09_權重改版草案.md 定案），欄位名跟
+    // Statistical Knowledge 完全不同，不能套同一組 k.persistence／
+    // k.supported_market_regimes 之類的欄位，否則全部顯示（未填，TODO）。
+    if (k.category === "event") {
+      return `
+        <div class="lr-row"><span class="lr-k">Factor</span><span class="lr-v">${k.factor_name}（${k.factor_id}／${k.category}）</span></div>
+        <div class="lr-note" style="margin-top:10px;">Event Property</div>
+        <div class="lr-row"><span class="lr-k">Event Type</span><span class="lr-v">${valueHtml(k.event_type)}</span></div>
+        <div class="lr-row"><span class="lr-k">Event Class</span><span class="lr-v">${valueHtml(k.event_class)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Time Property</div>
+        <div class="lr-row"><span class="lr-k">Horizon（本次查詢已決定）</span><span class="lr-v">${valueHtml(ctx.horizon)}</span></div>
+        <div class="lr-row"><span class="lr-k">Reaction Window</span><span class="lr-v">${valueHtml(k.reaction_window)}</span></div>
+        <div class="lr-row"><span class="lr-k">Expected Duration</span><span class="lr-v">${valueHtml(k.expected_duration)}</span></div>
+        <div class="lr-row"><span class="lr-k">適用尺度</span><span class="lr-v">${Array.isArray(k.applicable_days) ? `適用 ${k.applicable_days[0]}~${k.applicable_days[1]} 天（上面兩段的換算，供 Stage 4 數值比對）` : valueHtml(null)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Scope</div>
+        <div>${scopeAssetsHtml(k.affected_assets, ctx)}</div>
+        <div class="lr-row" style="margin-top:6px;"><span class="lr-k">Affected Market</span><span class="lr-v">${valueHtml(k.affected_market)}</span></div>
+        <div class="lr-row" style="margin-top:10px;"><span class="lr-k">Required Fields</span><span class="lr-v">${valueHtml(k.required_fields)}</span></div>
+        <div class="lr-note" style="margin-top:10px;">Relationship</div>
+        <div class="lr-row"><span class="lr-k">Usually Affects</span><span class="lr-v">${valueHtml(k.usually_affects)}</span></div>
+        <div class="lr-row"><span class="lr-k">Related Events</span><span class="lr-v">${valueHtml(k.related_events)}</span></div>
+        ${referencesHtml(k.references)}
+        <details class="ref-box" style="margin-top:6px;">
+          <summary>版本資訊</summary>
+          <div class="ref-body lr-note">version=${k.version} · last_updated=${k.last_updated}</div>
+        </details>
+      `;
+    }
+    return `
+      <div class="lr-row"><span class="lr-k">Factor</span><span class="lr-v">${k.factor_name}（${k.factor_id}／${k.category}）</span></div>
+      <div class="lr-note" style="margin-top:10px;">Time Property</div>
+      <div class="lr-row"><span class="lr-k">Horizon（本次查詢已決定）</span><span class="lr-v">${valueHtml(ctx.horizon)}</span></div>
+      <div class="lr-row"><span class="lr-k">適用尺度</span><span class="lr-v">${valueHtml(horizonScaleText(k.primary_horizon))}</span></div>
+      ${horizonRationaleHtml(k.primary_horizon)}
+      <div class="lr-row"><span class="lr-k">Persistence</span><span class="lr-v">${valueHtml(k.persistence)}</span></div>
+      <div class="lr-note" style="margin-top:10px;">Scope</div>
+      <div>${scopeAssetsHtml(k.supported_assets, ctx)}</div>
+      <div class="lr-row" style="margin-top:6px;"><span class="lr-k">Market Regimes</span><span class="lr-v">${valueHtml(k.supported_market_regimes)}</span></div>
+      <div class="lr-row"><span class="lr-k">Market Types</span><span class="lr-v">${valueHtml(k.supported_market_types)}</span></div>
+      <div class="lr-row" style="margin-top:10px;"><span class="lr-k">Required Inputs</span><span class="lr-v">${valueHtml(k.required_inputs)}</span></div>
+      <div class="lr-note" style="margin-top:10px;">Relationship</div>
+      <div class="lr-row"><span class="lr-k">Confirms</span><span class="lr-v">${valueHtml(k.confirms)}</span></div>
+      <div class="lr-row"><span class="lr-k">Conflicts</span><span class="lr-v">${valueHtml(k.conflicts)}</span></div>
+      <div class="lr-row"><span class="lr-k">Independent</span><span class="lr-v">${valueHtml(k.independent)}</span></div>
+      ${referencesHtml(k.references)}
+      <details class="ref-box" style="margin-top:6px;">
+        <summary>Optional Inputs／版本資訊</summary>
+        <div class="ref-body">
+          <div class="lr-row"><span class="lr-k">Optional Inputs</span><span class="lr-v">${valueHtml(k.optional_inputs)}</span></div>
+          <div class="lr-note" style="margin-top:8px;">version=${k.version} · last_updated=${k.last_updated}</div>
+        </div>
+      </details>
+    `;
+  }
+
+  async function fetchStage3Factor(factorId, ctx) {
+    blockStart("s3", factorId, "查表中…");
+    try {
+      const res = await fetch(`${API_BASE}/api/stage3/${factorId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+      blockDone("s3", factorId, "live · " + data.knowledge.last_updated, knowledgeHtml(data.knowledge, ctx));
+    } catch (err) {
+      blockFail("s3", factorId, "查表失敗", String(err.message || err));
+    }
+  }
+
+  function fetchAllStage3(coin, horizon) {
+    FACTOR_IDS.forEach(id => fetchStage3Factor(id, { coin, horizon }));
+  }
+
+  // ---------- Stage 2 / 4 / 5：由同一次 /api/stage5 呼叫驅動 ----------
+  // 刻意只打一次：Stage 5 內部本來就會呼叫 Stage 2/3/4，如果前端另外再打一次
+  // Stage 2 顯示，兩邊的 LLM 窗口判斷可能給出不同天數，畫面上就會出現「同一個
+  // factor 兩個不同窗口」的矛盾。用同一份回應渲染三個區塊，數字保證一致。
+  const weightLivePill = document.getElementById("weight-live-pill");
+  const weightLiveError = document.getElementById("weight-live-error");
+  const cardLivePill = document.getElementById("card-live-pill");
+  const cardLiveError = document.getElementById("card-live-error");
+  const stage5Cards = document.getElementById("stage5-cards");
+
+  function stage2Html(factorId, f) {
+    if (!f) return "<div class=\"lr-note\">（無資料）</div>";
+    const windowSourceLabel = f.window_source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗）";
+    if (factorId === "liquidation") {
+      return `
+        <div class="lr-row"><span class="lr-k">Listen Window</span><span class="lr-v">${f.listen_seconds} 秒（真的開 WebSocket 監聽）</span></div>
+        <div class="lr-row"><span class="lr-k">Observed Count</span><span class="lr-v">${f.observed_count}</span></div>
+        <div class="lr-row"><span class="lr-k">Observed Notional</span><span class="lr-v">${f.observed_notional}</span></div>
+        <div class="lr-note" style="margin-top:6px;">${f.note || ""}</div>
+        <div class="lr-note">${f.source || ""}</div>
+      `;
+    }
+    if (factorId === "panews_sentiment") {
+      return `
+        <div class="lr-row"><span class="lr-k">Window</span><span class="lr-v">${f.window_days} 天（${windowSourceLabel}）</span></div>
+        <div class="lr-note">${f.window_reasoning || ""}</div>
+        <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Sentiment Score</span><span class="lr-v">${f.sentiment_score}</span></div>
+        <div class="lr-row"><span class="lr-k">Sentiment Std</span><span class="lr-v">${f.sentiment_std}</span></div>
+        <div class="lr-row"><span class="lr-k">Mention Count</span><span class="lr-v">${f.mention_count} 篇（掃描 ${f.articles_scanned} 篇／${f.pages_fetched} 頁）</span></div>
+        <div class="lr-row"><span class="lr-k">Mention Growth</span><span class="lr-v">${f.mention_growth || "（不足兩天，無法計算）"}</span></div>
+        <div class="lr-row"><span class="lr-k">Nonzero Ratio</span><span class="lr-v">${f.nonzero_ratio}（關鍵字覆蓋率）</span></div>
+        <div class="lr-row"><span class="lr-k">非近期（保留計入）</span><span class="lr-v">${f.non_recent_count} 篇</span></div>
+        <div class="lr-note" style="margin-top:6px;">${f.coverage_note || ""}</div>
+        <div class="lr-note">${f.note || ""}</div>
+        <div class="lr-note">${f.source || ""}</div>
+      `;
+    }
+    if (factorId === "cpi") {
+      return `
+        <div class="lr-row"><span class="lr-k">Window</span><span class="lr-v">${f.window_months} 個月（${windowSourceLabel}）</span></div>
+        <div class="lr-note">${f.window_reasoning || ""}</div>
+        <div class="lr-row" style="margin-top:8px;"><span class="lr-k">CPI</span><span class="lr-v">${f.current_value}</span></div>
+        <div class="lr-row"><span class="lr-k">Percentile</span><span class="lr-v">${f.percentile}</span></div>
+        <div class="lr-row"><span class="lr-k">MoM</span><span class="lr-v">${f.mom_pct || "（無）"}</span></div>
+        <div class="lr-row"><span class="lr-k">YoY</span><span class="lr-v">${f.yoy_pct || "（無）"}</span></div>
+        <div class="lr-note">${f.source} · ${f.sample_count} 筆樣本</div>
+      `;
+    }
+    const value = factorId === "funding_rate" ? f.funding : f.current_value;
+    const extra = factorId === "funding_rate" ? `（${f.crowd_label}）` : "";
+    return `
+      <div class="lr-row"><span class="lr-k">Window</span><span class="lr-v">${f.window_days} 天（${windowSourceLabel}）</span></div>
+      <div class="lr-note">${f.window_reasoning || ""}</div>
+      <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Current Value</span><span class="lr-v">${value}</span></div>
+      <div class="lr-row"><span class="lr-k">Percentile</span><span class="lr-v">${f.percentile}${extra}</span></div>
+      <div class="lr-row"><span class="lr-k">Trend</span><span class="lr-v">${f.trend}</span></div>
+      <div class="lr-note">${f.source} · ${f.sample_count} 筆樣本</div>
+      ${f.note ? `<div class="lr-note">${f.note}</div>` : ""}
+    `;
+  }
+
+  const BASIS_LABEL = {
+    rolling_spearman_ic: "rolling_spearman_ic（現場真的算）",
+    impact_level: "impact_level 分級（Event Factor 不算 ic）",
+    domain_knowledge: "Domain Knowledge（資料源結構性缺歷史序列）",
+  };
+
+  function stage4Html(w) {
+    if (!w) return "<div class=\"lr-note\">（無資料）</div>";
+    const pw = w.prior_weight || {};
+    const dm = w.dynamic_modifier || {};
+    // time_horizon_match 是四條線索中唯一「程式真的算得出來」的（Option B 之後），
+    // 單獨顯示分數與比對依據，讓人看得出 modifier 有多少是算的、多少是 LLM 綜合判斷。
+    const thm = dm.time_horizon_match;
+    const modifierSourceLabel = dm.source === "llm" ? "LLM 判斷" : "⚠ fallback（LLM 失敗，中性值 1.0）";
+
+    let priorRows = `
+      <div class="lr-row"><span class="lr-k">Basis</span><span class="lr-v">${BASIS_LABEL[pw.basis] || pw.basis || "（未知）"}</span></div>
+      <div class="lr-row"><span class="lr-k">Prior Weight</span><span class="lr-v">${pw.value === null || pw.value === undefined ? "（算不出來）" : fmt(pw.value)}</span></div>
+    `;
+    if (pw.basis === "rolling_spearman_ic") {
+      priorRows += `
+        <div class="lr-row"><span class="lr-k">IC</span><span class="lr-v">${pw.ic === null || pw.ic === undefined ? "（算不出來）" : fmt(pw.ic)}</span></div>
+        <div class="lr-row"><span class="lr-k">Sample Size</span><span class="lr-v">${pw.sample_size}（horizon=${pw.input_horizon_days} 天，anchor=${pw.anchor_date || "—"}）</span></div>
+      `;
+    }
+    if (pw.impact_level) {
+      priorRows += `<div class="lr-row"><span class="lr-k">Impact Level</span><span class="lr-v">${pw.impact_level}</span></div>`;
+    }
+    if (pw.reason) {
+      priorRows += `<div class="lr-note" style="margin-top:6px; white-space:pre-wrap;">${pw.reason}</div>`;
+    }
+    if (pw.note) {
+      priorRows += `<div class="lr-note" style="margin-top:6px;">${pw.note}</div>`;
+    }
+    if (pw.source_file) {
+      priorRows += `<div class="lr-note">來源：${pw.source_file}</div>`;
+    }
+
+    return `
+      <div class="lr-note">Prior Weight</div>
+      ${priorRows}
+      <div class="lr-note" style="margin-top:12px;">Dynamic Modifier</div>
+      ${thm ? `<div class="lr-row"><span class="lr-k">time_horizon_match（程式算）</span><span class="lr-v">${thm.score === null || thm.score === undefined ? "無法計算" : thm.score.toFixed(2)}${Array.isArray(thm.applicable_days) ? `　查詢 ${thm.query_horizon_days} 天 vs 適用 ${thm.applicable_days[0]}~${thm.applicable_days[1]} 天` : ""}</span></div>
+      <div class="lr-note" style="margin-top:4px;">${thm.note || ""}</div>` : ""}
+      <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Context Modifier</span><span class="lr-v">${dm.context_modifier}（${modifierSourceLabel}）</span></div>
+      <div class="lr-note" style="margin-top:4px; font-size:12.5px; color:var(--ink);">${dm.reasoning || ""}</div>
+      <div class="lr-row" style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--line-strong);">
+        <span class="lr-k">Final Evidence Weight</span>
+        <span class="lr-v">${w.final_evidence_weight === null || w.final_evidence_weight === undefined ? "（無法計算）" : fmt(w.final_evidence_weight)}</span>
+      </div>
+    `;
+  }
+
+  function factHtml(fact) {
+    return Object.entries(fact || {})
+      .map(([k, v]) => `<div class="lr-row"><span class="lr-k">${k}</span><span class="lr-v">${v}</span></div>`)
+      .join("");
+  }
+
+  function stage5CardHtml(card, rank) {
+    const w = card.evidence_weight;
+    const rv = card.ranking_value;
+    const dir = card.weight_direction || {};
+    // 排序照 |weight|，所以名次旁邊顯示的是絕對值；帶號原值另外一行顯示，
+    // 兩個都要看得到——只顯示絕對值會讓「反向訊號」這件事在畫面上消失。
+    return `
+      <div class="schema-block">
+        <h4>#${rank} ${card.evidence_id} <span class="live-pill">${rv === null || rv === undefined ? "無權重（排最後，未刪除）" : "|weight| " + fmt(rv)}</span></h4>
+        <div class="live-result" style="display:block;">
+          <div class="lr-row"><span class="lr-k">Category</span><span class="lr-v">${card.category}</span></div>
+          <div class="lr-note" style="margin-top:8px;">Fact</div>
+          ${factHtml(card.fact)}
+          <div class="lr-row" style="margin-top:8px;"><span class="lr-k">Evidence Weight（帶號原值）</span><span class="lr-v">${w === null || w === undefined ? "（算不出來，見 Stage 4 說明）" : fmt(w)}</span></div>
+          <div class="lr-row"><span class="lr-k">排序用 |weight|</span><span class="lr-v">${rv === null || rv === undefined ? "（無）" : fmt(rv)}</span></div>
+          <div class="lr-row"><span class="lr-k">方向</span><span class="lr-v">${dir.label || "（無）"}</span></div>
+          ${dir.note ? `<div class="lr-note">${dir.note}</div>` : ""}
+          ${card.confidence ? `<div class="lr-row"><span class="lr-k">Confidence</span><span class="lr-v">${card.confidence}（僅顯示，不影響名次）</span></div>` : ""}
+          <div class="lr-row"><span class="lr-k">適用尺度</span><span class="lr-v">${horizonScaleText(card.primary_horizon) || "（無）"}</span></div>
+          <div class="lr-note" style="margin-top:8px;">Related Evidence</div>
+          <div class="lr-row"><span class="lr-k">Confirms</span><span class="lr-v">${card.related_evidence.confirms || "（無）"}</span></div>
+          <div class="lr-row"><span class="lr-k">Conflicts</span><span class="lr-v">${card.related_evidence.conflicts || "（無）"}</span></div>
+          <div class="lr-row"><span class="lr-k">Independent</span><span class="lr-v">${card.related_evidence.independent || "（無）"}</span></div>
+          <div class="lr-note" style="margin-top:8px;">Traceability：${card.traceability || "（無）"}</div>
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-size:12px; color: var(--muted);">查看完整卡片 JSON（含 features／knowledge／weight_detail 全部欄位）</summary>
+            <pre style="margin-top:8px; padding:10px; background:var(--surface-2); border-radius:8px; font-size:11.5px; overflow-x:auto; white-space:pre-wrap; word-break:break-all;">${JSON.stringify(card, null, 2)}</pre>
+          </details>
+        </div>
+      </div>
+    `;
+  }
+
+  async function fetchPipeline(coin, horizon) {
+    FACTOR_IDS.forEach(id => {
+      blockStart("s2", id, "抓取中…");
+      blockStart("s4", id, "計算中…");
+    });
+    weightLivePill.textContent = "計算中…";
+    weightLivePill.classList.remove("err");
+    weightLiveError.style.display = "none";
+    cardLivePill.textContent = "組裝中…（五個 factor 平行跑，約 25-45 秒）";
+    cardLivePill.classList.remove("err");
+    cardLiveError.style.display = "none";
+    stage5Cards.innerHTML = "";
+
+    try {
+      const res = await fetch(`${API_BASE}/api/stage5`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coin, horizon }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+
+      const byFactor = {};
+      (data.evidence_cards || []).forEach(c => { byFactor[c.factor] = c; });
+      const failedByFactor = {};
+      (data.failed_factors || []).forEach(f => { failedByFactor[f.factor] = f.error; });
+
+      // Stage 2 / Stage 4 逐 factor 渲染——資料都來自同一份回應，不會前後不一致
+      FACTOR_IDS.forEach(id => {
+        const card = byFactor[id];
+        if (!card) {
+          const msg = failedByFactor[id] || "這個 factor 沒有出現在回應中";
+          blockFail("s2", id, "抓取失敗", msg);
+          blockFail("s4", id, "計算失敗", msg);
+          return;
+        }
+        blockDone("s2", id, "live", stage2Html(id, card.features));
+        const basis = (card.weight_detail && card.weight_detail.prior_weight && card.weight_detail.prior_weight.basis) || "";
+        blockDone("s4", id, basis ? "live · " + basis : "live", stage4Html(card.weight_detail));
+      });
+
+      weightLivePill.textContent = `${Object.keys(byFactor).length} factors live`;
+      cardLivePill.textContent = `live · ${data.prioritization.output_count} 張卡（依 evidence_weight 排序）`;
+      stage5Cards.innerHTML = (data.evidence_cards || [])
+        .map((c, i) => stage5CardHtml(c, i + 1)).join("");
+      if ((data.failed_factors || []).length) {
+        cardLiveError.textContent = "以下 factor 組裝失敗，未列入排序：\n" +
+          data.failed_factors.map(f => `· ${f.factor}：${f.error}`).join("\n");
+        cardLiveError.style.display = "block";
+      }
+    } catch (err) {
+      const msg = String(err.message || err);
+      FACTOR_IDS.forEach(id => {
+        blockFail("s2", id, "抓取失敗", msg);
+        blockFail("s4", id, "計算失敗", msg);
+      });
+      weightLivePill.textContent = "計算失敗";
+      weightLivePill.classList.add("err");
+      cardLivePill.textContent = "組裝失敗";
+      cardLivePill.classList.add("err");
+      cardLiveError.textContent = msg;
+      cardLiveError.style.display = "block";
+    }
+  }
+  submitBtn.addEventListener("click", submitQuery);
+  queryInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitQuery();
+  });
+  backBtn.addEventListener("click", () => {
+    page2.classList.add("hidden");
+    page1.classList.remove("hidden");
+    clearError();
+  });
+</script>
+</body>
+</html>
