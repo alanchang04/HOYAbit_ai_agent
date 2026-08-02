@@ -264,6 +264,19 @@ def _scan_text(text: str) -> tuple[str | None, list[str], list[str]]:
     return severity, codes, notes
 
 
+def scan_raw_text(text: str) -> tuple[str | None, list[str], list[str]]:
+    """給「還沒被包成 `Evidence` 的原始外部文字」用的偵測入口。
+
+    `scan_injection` 的處置單位是整筆 Evidence，但有些路徑在更早的階段就拿到
+    外部文字——例如 `webapp/stage1_demo_api.py` 的 Stage 2 直接抓 PANews 標題／
+    摘要，那時候還沒有 Evidence 物件。這層薄包裝讓那些路徑不必去 import 私有的
+    `_scan_text`，偵測規則維持同一份（改 `INJECTION_PATTERNS` 兩邊一起生效）。
+
+    回傳與 `_scan_text` 相同：(severity, codes, 人類可讀說明)，無命中時
+    severity 為 None。處置（隔離／標記）由呼叫端依自己的語境決定。"""
+    return _scan_text(text)
+
+
 def scan_injection(evidences: list[Evidence]) -> dict[str, InjectionHit]:
     """掃描全部證據，回傳 {evidence_id: InjectionHit}（無命中者不列入）。"""
     hits: dict[str, InjectionHit] = {}
