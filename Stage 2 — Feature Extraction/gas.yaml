@@ -1,0 +1,65 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（gas）
+# 對應 13_流程圖迭代定案v2.md Stage 2：欄位固定，窗口由 LLM 依 Horizon 決定。
+#
+# 2026-08-02 新增。Ken 拍板「一幣一個幣種專屬 factor」，ETH 選 gas。
+#
+# 端點（免 key，公開，⚠️ 是 CSV 匯出不是 JSON API）：
+#   GET https://etherscan.io/chart/gasprice?output=csv
+#   跟 pipeline/fetch_onchain_history.py 打的是同一支（該檔已在用，這裡是把它
+#   正式升格成一個有完整 Stage 2-5 規格的 factor，不是新接一個來源）。
+#   回傳欄位：Date(UTC) / UnixTimeStamp / Value (Wei)
+#   ⚠️ 欄位值帶雙引號，解析前要先去引號（fetch_onchain_history.py 已踩過）。
+#
+# ⚠️ 2026-08-02 實測：回 4021 筆，涵蓋 2015-07-30 ~ 2026-08-01，最新值
+#    598132802 Wei（= 0.598 Gwei）。這是所有 factor 裡原始序列最長的一個。
+#
+# ⚠️ **但長歷史不等於大回測樣本**——這件事在 Stage 4 才會咬人，所以這裡先講：
+#    ic 要拿 factor 序列跟**價格序列**對齊算，而本專案的價格基準是主辦方共同
+#    CSV（raw_data/price/ETH/ETH_daily_ohlcv.csv），只有 1888 筆（2021-06-01 起）。
+#    交集之後實際可用樣本掉到 1874——4021 天裡有 2100 多天沒有對應價格可比。
+#    這不是 bug，是兩個資料源涵蓋範圍不同的必然結果，Stage 4 已如實記錄。
+
+feature:
+  factor: gas
+  endpoint: https://etherscan.io/chart/gasprice
+  samples_per_day: 1          # 日頻
+  params:
+    output: csv               # ⚠️ 唯一參數。**沒有窗口參數**——一次就是回全部 4021 筆，
+                              # window 只用來決定「取尾端幾筆進後續計算」，不影響請求本身
+  unit_conversion: value_gwei = value_wei / 1e9    # 原始欄位是 Wei，後續全部用 Gwei
+
+  # Raw
+  current_value: series[-1]
+  previous_value: series[-2]
+  delta: current_value - previous_value
+
+  # Relative
+  percentile: percentile_rank(current_value, series)
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])
+  slope_7d: least_squares_slope(series[-7:])
+  slope_30d: least_squares_slope(series)
+
+  # Momentum
+  roc_1d: (current_value - series[-2]) / series[-2] * 100
+  roc_7d: (current_value - series[-8]) / series[-8] * 100 if len(series) > 8 else null
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: 1 - len(series) / window
+  sample_size: len(series)
+
+# ⚠️ 已知資料特性：gas 價格的歷史分布**極度不穩定**——2021 年 NFT/DeFi 熱潮期的
+# 日均 gas 是現在的兩個數量級以上（實測最新 0.598 Gwei）。這代表：
+#   ① 跨越 EIP-1559（2021-08）與 L2 大規模分流之後的序列，前後段不是同一個分布，
+#      拿 4021 天全段算 percentile 會讓現值永遠落在極低百分位，看起來像「史上最冷」，
+#      但那其實是結構性改變不是當下訊號 → **window 由 LLM 依 Horizon 決定這件事，
+#      對這個 factor 比對其他 factor 更關鍵**，不要無腦拉滿
+#   ② z_score 同理，長窗口下會被舊資料的大變異壓平

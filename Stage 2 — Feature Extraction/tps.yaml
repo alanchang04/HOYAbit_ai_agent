@@ -1,0 +1,59 @@
+# Stage 2 — Feature Extraction，Snapshot Factor 骨架（tps）
+# 第四型（Snapshot），比照 orderbook_depth：**沒有 window 參數**——不是回看多久，
+# 就是「現在這一段」。2026-08-02 新增，Ken 拍板「一幣一個」，SOL 選 tps。
+#
+# 端點（免 key，公開，JSON-RPC POST）：
+#   POST https://api.mainnet-beta.solana.com
+#   {"jsonrpc":"2.0","id":1,"method":"getRecentPerformanceSamples","params":[720]}
+#   跟 pipeline/fetch_onchain.py 的 `_fetch_solana()` 同一支方法（那支只取 5 個窗）。
+#
+# ⚠️ 2026-08-02 實測的硬限制（這是這個 factor 的核心事實，不是附註）：
+#   - params 上限 **720**，超過回 {"code":-32602,"message":"Invalid limit; max 720"}
+#   - 每窗 samplePeriodSecs = 60 秒 → 720 窗 = **12 小時，就是全部能回看的極限**
+#   - 本次實測只拿到 421 窗（約 7 小時），代表節點保留的窗數還會少於上限
+#   - 單窗欄位：numTransactions / numNonVoteTransactions / numSlots /
+#              samplePeriodSecs / slot
+#   → **沒有任何歷史序列可言**。這個 factor 結構性算不出 ic，Stage 4 直接走
+#     domain_knowledge，不是「還沒算」是「算不了」。
+
+feature:
+  factor: tps
+  endpoint: https://api.mainnet-beta.solana.com
+  method: getRecentPerformanceSamples
+  params:
+    limit: 720                # ⚠️ 硬上限，寫死不由 LLM 給——window 對這個 factor 沒有意義
+  window_policy: not_applicable   # 同 orderbook_depth：Snapshot 型不吃 Horizon
+
+  # 換算：每窗 TPS = numTransactions / samplePeriodSecs
+  tps_series: "[s.numTransactions / s.samplePeriodSecs for s in samples]"
+  # ⚠️ numTransactions 含投票交易（Solana 共識機制產生的，佔比很高）。
+  # numNonVoteTransactions 才是「使用者實際發起的交易」，兩個都要存，
+  # 報告引用時要講清楚用哪一個——只講 TPS 不說含不含投票會誤導
+  tps_non_vote_series: "[s.numNonVoteTransactions / s.samplePeriodSecs for s in samples]"
+
+  # Raw
+  current_value: tps_series[-1]
+  previous_value: tps_series[-2]
+  delta: current_value - previous_value
+
+  # Relative（母體＝這 12 小時內的窗，不是歷史）
+  percentile: percentile_rank(current_value, tps_series)
+  z_score: (current_value - mean(tps_series)) / population_std(tps_series)
+  # ⚠️ 這兩格的母體只有幾小時，跟 hash_rate/gas 的「相對五年歷史」完全不是同一件事，
+  # 卡片顯示時必須標明母體範圍，不能只寫「百分位 87」
+
+  # Statistics
+  rolling_mean: mean(tps_series)
+  rolling_std: population_std(tps_series)
+  rolling_max: max(tps_series)
+  rolling_min: min(tps_series)
+
+  # Quality
+  sample_size: len(samples)     # 實測 421，不是請求的 720
+  coverage_hours: len(samples) * samplePeriodSecs / 3600
+  missing_ratio: null           # 端點不提供缺值標記，無法區分「沒資料」與「節點沒保留」
+
+# ⚠️ 這個 factor 真正的敘事價值在**尾部事件**（網路壅塞／宕機），不在日常數字。
+# SOL 的特有題材是「網路穩定性／宕機」（見 02改_資料網格.html），一個平穩的
+# 3000 TPS 幾乎不帶資訊；有價值的是「現在掉到多少」或「有沒有斷」。
+# 12 小時窗口剛好足夠偵測「當下是否異常」，但不足以說「相對歷史異常」。

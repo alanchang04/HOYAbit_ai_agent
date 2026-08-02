@@ -1,0 +1,61 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（momentum，示範：RSI14 動量指標）
+#
+# 跟 funding_rate／active_address 同一種「完整骨架」——有真正的歷史時間序列，
+# percentile／trend／rolling_* 全部算得出來，不是 price／orderbook_depth 那種
+# 快照型。差別在資料來源：這裡**完全不打外部 API**，純本地計算，用的是賽事
+# 提供的共同基準資料集 data/{coin}_daily_ohlcv.csv（跟 Stage 4 算其他 factor
+# 的 forward_return 同一份檔案），算法直接重用 agent/collectors/price.py 的
+# `_rsi14`（不重寫第二份，避免兩處算法漂移）。
+#
+# 端點：無（本地計算，零網路成本，不會因額度或連線問題失敗）。
+# 「抓多長」由 LLM 依 Horizon 判斷出 window（天），跟 funding_rate／active_address
+# 共用同一支 `_resolve_window_days_via_llm`；差別是這裡的 window 只決定「要看幾天
+# 的 RSI14」，不是「要抓幾天的原始價格」——RSI14 本身還需要額外 14 天種子資料
+# 才能算出第一個值，window 天數以外的部分是計算過程用的，不計入 sample_size。
+
+feature:
+  factor: momentum
+  endpoint: null              # 本地計算，無外部端點
+  samples_per_day: 1          # 日頻——跟 active_address 同一個頻率，不是 funding_rate 的 8 小時一筆
+  params:
+    lookback_days: "{window}"  # window 天的 RSI14 序列；實際讀取的收盤價會多抓 14 天當種子
+
+  # Raw
+  current_value: series[-1]              # 最新一筆 RSI14（0~100）
+  previous_value: series[-2]             # 前一筆（前一天）
+  delta: current_value - previous_value
+
+  # Relative
+  percentile: percentile_rank(current_value, series)   # <= 現值 的比例，母體＝這次抓取的整段窗口
+  z_score: (current_value - mean(series)) / population_std(series)
+
+  # Trend
+  slope: least_squares_slope(series[-3:])                      # 最近 3 天
+  slope_7d: least_squares_slope(series[-7 * samples_per_day:])  # 最近 7 天
+  slope_30d: least_squares_slope(series)                        # 全窗口
+
+  # Momentum
+  roc_1d: (current_value - series[-1 - samples_per_day]) / series[-1 - samples_per_day] * 100
+  roc_7d: (current_value - series[-1 - 7 * samples_per_day]) / series[-1 - 7 * samples_per_day] * 100
+  # ⚠️ RSI14 本身值域是 [0, 100]，roc 是「RSI 這個分數的變化率」，不是價格報酬率——
+  # 讀這兩格時要記得單位是「RSI 分數的百分比變化」，不是「價格漲跌幅」
+
+  # Statistics
+  rolling_mean: mean(series)
+  rolling_std: population_std(series)
+  rolling_max: max(series)
+  rolling_min: min(series)
+
+  # Quality
+  missing_ratio: null   # 本地計算的固定資料集，不像外部 API 會有「抓到多少筆」的不確定性，
+                         # 拿不到資料時直接回 502（見 Stage 2 momentum 端點），不是部分缺漏
+  sample_size: len(series)
+
+  # 這個 factor 特有（其他 factor 沒有）：超買／超賣分級標籤
+  rsi_zone: "超買（RSI>=70）／超賣（RSI<=30）／中性"   # 實作在 webapp/stage1_demo_api.py 的
+                                                        # stage2_momentum()，門檻是產業慣例，
+                                                        # 非本專案回測門檻，純描述性分級
+
+# ⚠️ 已知限制：本地 CSV 是賽事提供的靜態資料集，五幣都停在同一天（不是即時更新）。
+# 這代表 RSI14 現值反映的是資料集最後一天的市況，不是「現在這一刻」——跟
+# funding_rate／active_address 即時抓取的性質不同，見 Stage 3 momentum.md。

@@ -928,6 +928,7 @@ def _real_reasoning(
         build_step_d_prompt(
             coin, question, question_type, facts, cross_validation, inference,
             coin2=coin2, debate=debate, evidences=evidences, coins=coins_with_evidence,
+            applicable_categories=applicable_categories,
         ),
         "step_d_conclusion",
         deadline=deadline,

@@ -1,0 +1,72 @@
+# Stage 2 — Feature Extraction，幣種模板（SOL）
+#
+# 這份是「這個幣種要抓哪些 factor」，同資料夾其他 .yaml 是「一個 factor 怎麼抓」。
+# LLM 先讀這份決定跑哪些端點，再各自去讀對應的 factor 規格檔拿欄位與公式。
+#
+# ⚠️ 目前只是文件，程式還沒讀它（2026-08-02 拍板：只寫模板、不動程式）。
+# ⚠️ not_applicable 記的是「資料源／概念上拿不到」（事實），不是「選擇不抓」。
+#
+# 2026-08-02 v2：加入該幣的幣種專屬 factor（Ken 拍板「一幣一個」），
+# 五個候選端點全部實打過，實測結果直接寫在各 factor 的 measured_2026_08_02 欄。
+
+coin: SOL
+name: Solana
+chain: solana
+perp_symbol: SOLUSDT
+coingecko_id: solana
+factor_count: 7
+
+factors:
+  - factor: funding_rate
+    spec: funding_rate.yaml
+    endpoint: https://fapi.binance.com/fapi/v1/fundingRate
+    params: {symbol: SOLUSDT, limit: "{{window * 3}}"}
+    samples_per_day: 3
+
+  - factor: price
+    spec: price.yaml
+    endpoint: https://api.coingecko.com/api/v3/simple/price
+    params: {ids: solana}
+    note: 失敗退 CryptoCompare /data/pricemultifull 備援
+
+  - factor: cpi
+    spec: cpi.yaml
+    endpoint: https://fred.stlouisfed.org/graph/fredgraph.csv
+    params: {id: CPIAUCSL}
+    scope: global              # ⚠️ 總經資料，五幣共用同一份序列，抓回來的數字完全相同
+
+  - factor: panews_sentiment
+    spec: panews_sentiment.yaml
+    endpoint: https://universal-api.panewslab.com/articles
+    keywords_ref: pipeline/fetch_media_kol_mentions.py COIN_KEYWORDS[SOL]
+    note: ⚠️ 關鍵字表五幣都有定義，但只有 BTC 做過實測
+
+  - factor: momentum           # 2026-08-02 由另一條線取代原本的 liquidation
+    spec: momentum.yaml
+    endpoint: null             # ⚠️ 本地計算，零網路成本——唯一一個不打外部端點的 factor
+    params: {lookback_days: "{{window}}"}
+    samples_per_day: 1
+    source_data: data/{coin}_daily_ohlcv.csv（主辦方共同基準資料集）
+    algorithm_ref: agent/collectors/price.py `_rsi14`（不重寫第二份，避免算法漂移）
+    note: 實際讀取的收盤價會多抓 14 天當 RSI 種子，那 14 天不計入 sample_size
+
+  - factor: orderbook_depth
+    spec: orderbook_depth.yaml
+    endpoint: https://fapi.binance.com/fapi/v1/depth
+    params: {symbol: SOLUSDT, limit: 1000}
+    note: Snapshot 型，沒有 window 參數
+
+  - factor: tps                  # ⭐ 2026-08-02 新增的 SOL 幣種專屬 factor
+    spec: tps.yaml
+    endpoint: https://api.mainnet-beta.solana.com
+    method: getRecentPerformanceSamples
+    params: {limit: 720}         # ⚠️ 硬上限，超過回 -32602
+    window_policy: not_applicable
+    measured_2026_08_02: |-
+      ✅ HTTP 200，實得 421 窗（約 7 小時），最新窗 3040.4 TPS
+      ⚠️ 上限 720 窗 × 60 秒 = 12 小時，就是全部能回看的極限
+
+not_applicable:
+  - {factor: etf,            reason: "bitbo.io 只追蹤美國現貨 BTC ETF，沒有涵蓋 SOL 的對應免費資料源"}
+  - {factor: active_address, reason: "blockchain.info 只涵蓋 BTC UTXO 鏈。SOL 要同類指標得另找 Solana 鏈上資料源"}
+  - {factor: hash_rate,      reason: "⚠️ 概念不成立——SOL 不是 PoW 鏈"}

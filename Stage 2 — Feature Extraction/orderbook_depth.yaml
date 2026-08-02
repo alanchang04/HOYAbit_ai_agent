@@ -1,0 +1,83 @@
+# Stage 2 — Feature Extraction，**Snapshot Factor 骨架**（orderbook_depth）
+# 這是第四型 feature（前三型：Statistical／Event／Sentiment），2026-08-02 新增。
+#
+# ⚠️ 為什麼要新開一型，而不是塞回 Statistical：
+#   Statistical 骨架的核心是「同一個 factor 的歷史時間序列」——percentile 要母體、
+#   trend/slope 要前後比較、Stage 4 的 rolling_spearman_ic 要 factor_value(t) 逐日
+#   配對 forward_return。盤口深度**沒有這個東西**：REST `/fapi/v1/depth` 只回傳
+#   「此時此刻」的掛單簿，Binance 沒有提供歷史盤口快照的端點（不是我們沒抓，是
+#   查不到）。硬套 Statistical 骨架的結果就是 liquidation 那份的樣子——一整排 null。
+#   與其把一個完整的資料源描述成「缺一堆欄位」，不如承認它是**另一種 feature**：
+#   它測的是「當下的市場狀態」，本來就不該有時間序列欄位。
+#
+# 跟 liquidation 的關係（兩者都沒有歷史，但缺的性質不同）：
+#   liquidation      → 這個現象**有**歷史，是資料源不給查（REST 已停用）
+#                       ＋這個環境連合約 WebSocket 也收不到（見該份 2026-08-02 註記）
+#   orderbook_depth  → 盤口深度**本質上就是當下狀態**，「歷史盤口」是另一種資料
+#                       （需要自己逐秒錄下來），不是同一個端點少給了東西
+#
+# 端點（免 key，公開，REST——實測本環境合約 REST 全通，只有 WebSocket 不通）：
+#   GET https://fapi.binance.com/fapi/v1/depth?symbol={symbol}&limit=1000
+#   回傳買賣各 1000 檔 [價格, 數量]。實測 BTCUSDT：1000 檔涵蓋範圍約 ±25bps
+#   （±25bps 與 ±50bps 的加總相同，代表最遠檔位還沒到 50bps）——這個涵蓋範圍
+#   本身會隨行情變動，所以下面有 book_span_bps 如實記錄「這次的 1000 檔看到多遠」。
+#
+# ⚠️ 這個 factor 沒有 `window` 這個參數：不是「回看多久」也不是「聽多久」，
+#   就是「現在這一瞬間」。LLM 依 Horizon 判斷窗口的那套邏輯對它完全不適用——
+#   跟 liquidation 的 listen_seconds 又不一樣（那個至少還有「多久」可以調）。
+
+feature:
+  factor: orderbook_depth
+  endpoint: https://fapi.binance.com/fapi/v1/depth
+  params:
+    symbol: "{symbol}"
+    limit: 1000                # 檔數上限，非「窗口」；Binance 允許 5/10/20/50/100/500/1000
+
+  # Raw（唯一真的有數字的區塊，全部由端點現算，見 provided）
+  snapshot_at: str(datetime.utcnow())        # 快照時間戳——這型 factor 唯一的「時間」概念
+  mid_price: (best_bid + best_ask) / 2
+  best_bid: bids[0][0]
+  best_ask: asks[0][0]
+  spread_bps: (best_ask - best_bid) / mid_price * 10000
+
+  # Depth（掛了多少量在多近的地方）
+  bid_depth_10bps: sum(qty for price, qty in bids if (mid_price - price) / mid_price <= 0.0010)
+  ask_depth_10bps: sum(qty for price, qty in asks if (price - mid_price) / mid_price <= 0.0010)
+  bid_depth_25bps: sum(qty for price, qty in bids if (mid_price - price) / mid_price <= 0.0025)
+  ask_depth_25bps: sum(qty for price, qty in asks if (price - mid_price) / mid_price <= 0.0025)
+  depth_imbalance_10bps: (bid_depth_10bps - ask_depth_10bps) / (bid_depth_10bps + ask_depth_10bps)
+
+  # Impact（吃穿要多少錢——這是「流動性」最實際的問法）
+  slippage_buy_10_bps: 用市價買 10 BTC 需要吃到的平均價，相對 mid_price 的 bps
+  slippage_sell_10_bps: 同上，賣方向
+
+  # Quality
+  book_span_bps: (最遠檔位距離 mid_price 的 bps)   # 1000 檔實際看到多遠，隨行情變動
+  levels_returned: len(bids)                       # 實際回傳檔數，不足 limit 時要看得出來
+  sample_size: 1                                   # 一次執行＝一張快照，不是多筆樣本（比照 liquidation.yaml 的宣告）
+
+  # 結構性不存在（整格不產生，不塞 null 假裝「這次剛好沒算出來」）
+  # ——原因見檔頭：這型 factor 沒有同一 factor 的歷史時間序列可用
+  percentile: null
+  z_score: null
+  slope: null
+  slope_7d: null
+  slope_30d: null
+  roc_1d: null
+  roc_7d: null
+  rolling_mean: null
+  rolling_std: null
+  rolling_max: null
+  rolling_min: null
+  missing_ratio: null
+
+# ⚠️ 已知限制，先寫在這裡免得之後被當成 bug：
+#   1. **快照會抖**：盤口是毫秒級變動的東西，同一分鐘打兩次會拿到不同數字。這不是
+#      資料不穩定，是這個 factor 的本質。要平滑就得自己連續取樣求平均，那等於自建
+#      時間序列（見第 3 點）。
+#   2. **看得到的不等於吃得到**：掛單可以隨時撤（spoofing／冰山單），深度數字是
+#      「宣稱的流動性」不是「保證能成交的流動性」。市場微結構文獻對這件事有共識，
+#      引用哪幾篇留給 Stage 3 references 補。
+#   3. **要有歷史只能自己存**：Binance 沒有歷史盤口端點。如果這個 agent 要長期跑，
+#      從今天開始每次執行都把快照寫進 raw_data/，幾個月後就有自己的序列可以算 IC——
+#      這是唯一能把它升級成 Statistical 型的路，黑客松期間來不及，先記錄。

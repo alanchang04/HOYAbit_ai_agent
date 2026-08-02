@@ -5,7 +5,7 @@ API：
 - /api/stage1：Stage 1「單一 LLM 判斷 Asset/Horizon/Research Goal」。horizon 是
   自由文字，讓 LLM 自己判斷、自己決定怎麼表達，不綁死在固定選項裡。
 - /api/stage2/funding_rate、/api/stage2/active_address、/api/stage2/cpi、
-  /api/stage2/liquidation、/api/stage2/panews_sentiment：Stage 2 Feature
+  /api/stage2/panews_sentiment、/api/stage2/orderbook_depth：Stage 2 Feature
   Extraction，五個 factor 各自真的去抓真實資料，不是同一套邏輯換個名字——五份
   `Stage 2 — Feature Extraction/*.yaml` 骨架彼此差異很大（Statistical／Event／
   Sentiment 三型都有），抓取邏輯照著各自的結構走：
@@ -18,10 +18,13 @@ API：
     - cpi：FRED 公開 CSV（`fredgraph.csv?id=CPIAUCSL`，免 key，月頻、全幣種
       通用）。窗口單位是「月」不是「天」——重用日頻窗口判斷結果再換算成月，
       不是另外設計一套月頻 LLM prompt
-    - liquidation：Binance USDⓈ-M `!forceOrder@arr` WebSocket，**真的**開
-      連線監聽固定秒數（不是查歷史——舊版查歷史清算單的 REST API 已停用，
-      這是 Stage 2 liquidation.yaml 本身記錄的結構性限制）。percentile／
-      trend／slope 等需要歷史序列的欄位這個 factor 结構性沒有，一律不產生
+    - orderbook_depth：Binance USDⓈ-M `/fapi/v1/depth`（免 key，limit=1000），
+      第四型（Snapshot）——**沒有 window 這個參數**，不是回看多久也不是聽多久，
+      就是「現在這一瞬間」的盤口。percentile／trend／slope 等需要歷史序列的
+      欄位這型結構性沒有，一律不產生（當下狀態沒有母體可比）
+      ※ 這格原本是 liquidation（WebSocket 監聽清算單）。2026-08-02 實測發現本環境
+        對合約 WebSocket 握手會成功但收不到任何 frame，那個 observed_count=0 是
+        假的觀測值不是真的沒事件；該 factor 已於同日整個移除，改用 REST 看盤口深度
     - panews_sentiment：PANews 分頁端點（`universal-api.panewslab.com/articles`，
       免 key），一批一批往回翻到蓋滿 window 為止（受 PANEWS_MAX_PAGES 上限約束，
       被上限擋住時 `window_covered=false` 並在 coverage_note 講明只翻到哪天）。
@@ -30,7 +33,7 @@ API：
       的 COIN_KEYWORDS，不另外維護第二份。⚠ window 在這個 factor 只決定「往回
       抓多深」，不是過濾邊界：超出窗口的文章標記為非近期但照樣計入
 - /api/stage3/{factor_id}：Stage 3 Knowledge Layer，通用一支路由服務全部
-  factor（funding_rate／active_address／cpi／liquidation／panews_sentiment）。內容讀自
+  factor（funding_rate／active_address／cpi／panews_sentiment／etf／price／orderbook_depth）。內容讀自
   `Stage 3 — Knowledge Layer/{factor_id}.md`——Ken 手動研究、附真實學術／
   產業出處的正式版本，單一事實來源是那份 .md，這支 API 只是讀檔解析，不重複
   維護第二份副本。**刻意不打 LLM**：07/13 原文都明講 Stage 3 本身是固定
@@ -98,6 +101,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from agent.collectors.coin_map import get_coin_info
+from agent.collectors.price import _rsi14
 from agent.collectors.derivatives import (
     FAPI_BASE,
     FUNDING_INTERVAL_HOURS,
@@ -197,7 +201,22 @@ CARD_DIR = Path(__file__).resolve().parent.parent / "Stage 5 — Evidence Card �
 # webapp/stage1_demo_api.py -> webapp -> HOYAbit_ai_agent -> data/
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-KNOWN_FACTORS = ["funding_rate", "active_address", "cpi", "liquidation", "panews_sentiment", "etf", "price"]
+KNOWN_FACTORS = [
+    "funding_rate",
+    "active_address",
+    "cpi",
+    "panews_sentiment",
+    "etf",
+    "price",
+    # 第四型（Snapshot）：當下盤口狀態。沒有歷史序列、也沒有「window」這個參數——
+    # 不是回看多久、也不是聽多久，就是「現在這一瞬間」。2026-08-02 新增，起因是實測
+    # 發現本環境收不到合約 WebSocket 的任何 frame，liquidation 的 0 是假的觀測值。
+    "orderbook_depth",
+    # RSI14 動量指標：純本地計算（data/{coin}_daily_ohlcv.csv），跟 funding_rate／
+    # active_address 同一種「有 percentile／trend／可現場算 ic」的完整 Statistical
+    # Factor，算法直接重用 agent/collectors/price.py 的 `_rsi14`，不重寫第二份。
+    "momentum",
+]
 
 
 # 學術出處的識別碼 → 可點擊的網址
@@ -1128,95 +1147,6 @@ async def stage2_cpi(req: Stage2CPIRequest):
     }
 
 
-LIQUIDATION_MAX_LISTEN_SECONDS = 20  # 防呆上限，避免 demo request 掛太久
-
-
-class Stage2LiquidationRequest(BaseModel):
-    coin: str
-    listen_seconds: int = 8
-
-
-@app.post("/api/stage2/liquidation")
-async def stage2_liquidation(req: Stage2LiquidationRequest):
-    """Stage 2 Feature Extraction 的 liquidation 版本：真的開 WebSocket 監聽，
-    不是查歷史——Binance 舊版查歷史清算單的 REST API 已停用，只剩即時推送頻道
-    （見 Stage 2 liquidation.yaml 的結構性限制說明）。percentile／trend／
-    slope／rolling_* 這類需要歷史時間序列的欄位這個 factor 結構性沒有，一律
-    不產生，不編造假的歷史推算值——**哪幾格不產生現在是讀 yaml 讀出來的**
-    （那份檔案裡明寫 null 的就是），不是程式裡的 if。"""
-    coin = req.coin.upper()
-    symbol = PERP_SYMBOL.get(coin)
-    if symbol is None:
-        raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
-
-    spec = load_feature_spec("liquidation")
-    ws_url = spec["endpoint"]
-    listen_seconds = max(1, min(req.listen_seconds, LIQUIDATION_MAX_LISTEN_SECONDS))
-    events: list[dict] = []
-
-    try:
-        async with websockets.connect(ws_url, open_timeout=10) as ws:
-            # window_start 要在連線建立「之後」才開始算，不然 WebSocket handshake
-            # 花的時間會被算進「監聽窗口」，讓 window_end-window_start 跟
-            # listen_seconds 對不上、看起來像 bug。
-            window_start = datetime.now(timezone.utc)
-            loop = asyncio.get_event_loop()
-            deadline = loop.time() + listen_seconds
-            while True:
-                remaining = deadline - loop.time()
-                if remaining <= 0:
-                    break
-                try:
-                    msg = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                except asyncio.TimeoutError:
-                    break
-                payload = json.loads(msg)
-                order = payload.get("o", {})
-                if order.get("s") == symbol:
-                    events.append(order)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"Liquidation WebSocket 監聽失敗：{exc}") from exc
-
-    window_end = datetime.now(timezone.utc)
-    observed_notional = sum(float(o.get("q", 0)) * float(o.get("ap", 0)) for o in events)
-
-    # 這四格是 WebSocket 監聽的產物，不是從序列算出來的；yaml 其餘明寫 null 的欄位
-    # （percentile／slope／roc／rolling_*／z_score／missing_ratio）會整格不產生
-    features, feature_report = compute_series_features(
-        "liquidation",
-        spec,
-        [],
-        provided={
-            "window_start": window_start.isoformat(),
-            "window_end": window_end.isoformat(),
-            "observed_count": len(events),
-            "observed_notional": round(observed_notional, 2),
-        },
-    )
-
-    return {
-        "coin": coin,
-        "factor": "liquidation",
-        "listen_seconds": listen_seconds,
-        "window_start": window_start.isoformat(),
-        "window_end": window_end.isoformat(),
-        "observed_count": len(events),
-        "observed_notional": f"{observed_notional:,.2f}",
-        "percentile": None,
-        "trend": None,
-        "features": features,
-        "feature_spec": feature_report,
-        "note": (
-            "結構性限制（見 Stage 2 liquidation.yaml）：Binance 舊版查歷史清算單的 REST API 已停用，"
-            "只剩即時推送頻道，這裡是真的開 WebSocket 監聽固定秒數、統計窗口內剛好發生的清算單，不是"
-            "查歷史。observed_count=0 不代表沒有清算風險，只代表這段短窗口沒有觀測到——單一交易對在"
-            f"{listen_seconds} 秒內經常觀測不到事件是正常現象，不是程式錯誤。percentile／trend／slope"
-            "等需要歷史序列的欄位這個 factor 結構性沒有，一律不產生。"
-        ),
-        "source": f"Binance USDⓈ-M forceOrder WebSocket {ws_url}",
-    }
-
-
 class Stage2PriceRequest(BaseModel):
     coin: str
     horizon: str | None = None  # 不影響抓取內容（快照跟 Horizon 無關），只是跟其他 factor
@@ -1303,6 +1233,83 @@ async def stage2_price(req: Stage2PriceRequest):
             "即時快照，不是回看窗口的統計量——沒有 percentile／trend／slope 等需要歷史序列的欄位，"
             "一律不產生（見 Stage 2 price.yaml）。要看更長趨勢請看 agent/collectors/price.py 的五檔"
             "粒度區間統計或技術指標，不是這支端點的範圍。"
+        ),
+        "features": features,
+        "feature_spec": feature_report,
+    }
+
+
+def _rsi_series(closes_by_date: dict[str, float], min_points: int) -> tuple[list[str], list[float]] | tuple[None, None]:
+    """從 date→close 字典算出 RSI14 逐日序列（由舊到新）。RSI14 每個點需要往前
+    14 天的收盤價當種子，所以要有 `min_points + 14` 天資料才能湊出 `min_points`
+    個 RSI 值。跟 agent/collectors/price.py 的 `_rsi14` 共用同一個算法，這裡只是
+    把它捲成一條時間序列（那份檔案只算「當下」這一個點）。"""
+    dates = sorted(closes_by_date)
+    if len(dates) < min_points + 14:
+        return None, None
+    closes = [closes_by_date[d] for d in dates]
+    rsi_dates = [dates[i] for i in range(14, len(dates))]
+    rsi_values = [_rsi14(closes[i - 14 : i + 1]) for i in range(14, len(closes))]
+    return rsi_dates, rsi_values
+
+
+class Stage2MomentumRequest(BaseModel):
+    coin: str
+    horizon: str | None = None
+
+
+@app.post("/api/stage2/momentum")
+async def stage2_momentum(req: Stage2MomentumRequest):
+    """Stage 2 Feature Extraction 的 momentum 版本：RSI14 動量指標，純本地計算
+    （data/{coin}_daily_ohlcv.csv 這份賽事共同基準資料集），不打任何外部 API，
+    不會因網路或額度失敗。算法直接重用 agent/collectors/price.py 的 `_rsi14`，
+    不重寫第二份——那支 collector 算的是「這次的技術面摘要」（單一時間點），
+    這裡把同一個算法捲成一條時間序列，接進 Stage 2-6 的完整 Statistical Factor
+    骨架（有 percentile／trend／可現場算 rolling_spearman_ic，跟 funding_rate
+    同一個等級，不是 price／orderbook_depth 那種快照型）。"""
+    coin = req.coin.upper()
+    if PERP_SYMBOL.get(coin) is None:
+        raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
+
+    spec = load_feature_spec("momentum")
+    window_days, window_reasoning, window_source = await _resolve_window_days_via_llm(req.horizon, "momentum")
+
+    try:
+        closes_by_date = _load_price_series(coin)
+    except FileNotFoundError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+    _, rsi_values_full = _rsi_series(closes_by_date, window_days)
+    if rsi_values_full is None:
+        raise HTTPException(
+            502,
+            f"本地價格資料不足以算 {window_days} 天窗口的 RSI14（RSI14 本身還需要額外 14 天種子資料）。",
+        )
+    rsi_values = rsi_values_full[-window_days:]
+
+    current = rsi_values[-1]
+    percentile = percentile_rank(current, rsi_values)
+    rsi_zone = "超買" if current >= 70 else "超賣" if current <= 30 else "中性"
+    features, feature_report = compute_series_features(
+        "momentum", spec, rsi_values, expected_count=window_days
+    )
+
+    return {
+        "coin": coin,
+        "factor": "momentum",
+        "horizon": req.horizon,
+        "window_days": window_days,
+        "window_source": window_source,
+        "window_reasoning": window_reasoning,
+        "current_value": f"{current:.1f}",
+        "percentile": f"{percentile:.0f}th",
+        "trend": f"{_series_trend(rsi_values)}（{window_days}-day window）",
+        "rsi_zone": rsi_zone,
+        "sample_count": len(rsi_values),
+        "source": f"本地技術指標計算（data/{coin}_daily_ohlcv.csv，RSI14 逐日重算，非外部資料）",
+        "note": (
+            f"目前為{rsi_zone}區間（RSI≥70 通常視為超買、≤30 視為超賣的產業慣例門檻，"
+            "見 Stage 3 momentum.md 的 Wilder 1978 出處）——這是描述性分級，不是買賣訊號。"
         ),
         "features": features,
         "feature_spec": feature_report,
@@ -1680,6 +1687,122 @@ async def stage2_etf(req: Stage2ETFRequest):
     }
 
 
+class Stage2OrderbookRequest(BaseModel):
+    coin: str
+    # 刻意沒有 horizon／window：這型 factor 沒有「窗口」這個參數（見 Stage 2 yaml 檔頭）
+
+
+def _depth_within(levels: list[tuple[float, float]], mid: float, bps: float) -> float:
+    """加總距離中價 bps 以內的掛單量。買賣兩側共用（距離取絕對值）。"""
+    return sum(qty for price, qty in levels if abs(price - mid) / mid <= bps / 10000)
+
+
+def _slippage_bps(levels: list[tuple[float, float]], mid: float, target_qty: float) -> float | None:
+    """吃掉 target_qty 顆的平均成交價相對中價差幾 bps——「吃穿要多少錢」的操作型定義。
+    盤口深度不夠吃滿時回 None（不外插、不假裝吃得到），呼叫端要如實顯示。"""
+    filled = 0.0
+    cost = 0.0
+    for price, qty in levels:
+        take = min(qty, target_qty - filled)
+        cost += take * price
+        filled += take
+        if filled >= target_qty:
+            avg = cost / filled
+            return abs(avg - mid) / mid * 10000
+    return None
+
+
+@app.post("/api/stage2/orderbook_depth")
+async def stage2_orderbook_depth(req: Stage2OrderbookRequest):
+    """Stage 2 Feature Extraction 的 orderbook_depth 版本（第四型：Snapshot）。
+
+    打 REST `/fapi/v1/depth` 拿當下盤口——**不是聽的**。這個 factor 是 2026-08-02
+    實測之後補的：本環境對 `fstream.binance.com`（合約 WebSocket）握手會成功但收不到
+    任何 frame（連每秒推送的 markPrice 對照組都是 0），所以 liquidation 的
+    `observed_count=0` 不是「這段窗口沒清算」，是那條管道根本沒在送資料。合約 REST
+    則完全正常，於是改用「看」的：盤口深度就是字面意義的流動性。
+
+    ⚠️ 這型沒有 window 參數，也沒有 percentile／trend——當下狀態沒有母體可比。
+    要有母體只能自己逐次把快照存起來（見 Stage 2 orderbook_depth.yaml 檔尾），
+    那時它就變成 Statistical 型了，不是這一型。"""
+    coin = req.coin.upper()
+    symbol = PERP_SYMBOL.get(coin)
+    if symbol is None:
+        raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
+
+    spec = load_feature_spec("orderbook_depth")
+    params = render_params(spec.get("params"), symbol=symbol)
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            resp = await client.get(spec["endpoint"], params=params)
+            resp.raise_for_status()
+            book = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"Binance 盤口深度抓取失敗：{exc}") from exc
+
+    bids = [(float(p), float(q)) for p, q in book.get("bids", [])]
+    asks = [(float(p), float(q)) for p, q in book.get("asks", [])]
+    if not bids or not asks:
+        raise HTTPException(502, "Binance 回傳的盤口是空的")
+
+    snapshot_at = datetime.now(timezone.utc)
+    best_bid, best_ask = bids[0][0], asks[0][0]
+    mid = (best_bid + best_ask) / 2
+    bid_10, ask_10 = _depth_within(bids, mid, 10), _depth_within(asks, mid, 10)
+    bid_25, ask_25 = _depth_within(bids, mid, 25), _depth_within(asks, mid, 25)
+    imbalance = (bid_10 - ask_10) / (bid_10 + ask_10) if (bid_10 + ask_10) else None
+    # 1000 檔實際看到多遠——這個範圍會隨行情變動，寫死「±25bps」會是假的
+    span_bps = max(abs(bids[-1][0] - mid), abs(asks[-1][0] - mid)) / mid * 10000
+
+    features, feature_report = compute_series_features(
+        "orderbook_depth",
+        spec,
+        [],  # 沒有序列可傳——這正是這型 factor 的定義
+        provided={
+            "snapshot_at": snapshot_at.isoformat(),
+            "mid_price": round(mid, 2),
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "spread_bps": round((best_ask - best_bid) / mid * 10000, 4),
+            "bid_depth_10bps": round(bid_10, 4),
+            "ask_depth_10bps": round(ask_10, 4),
+            "bid_depth_25bps": round(bid_25, 4),
+            "ask_depth_25bps": round(ask_25, 4),
+            "depth_imbalance_10bps": round(imbalance, 4) if imbalance is not None else None,
+            "slippage_buy_10_bps": _slippage_bps(asks, mid, 10),
+            "slippage_sell_10_bps": _slippage_bps(bids, mid, 10),
+            "book_span_bps": round(span_bps, 2),
+            "levels_returned": len(bids),
+        },
+    )
+
+    return {
+        "coin": coin,
+        "factor": "orderbook_depth",
+        "snapshot_at": snapshot_at.isoformat(),
+        "mid_price": f"{mid:,.2f}",
+        "spread_bps": f"{(best_ask - best_bid) / mid * 10000:.3f}",
+        "bid_depth_10bps": f"{bid_10:,.2f}",
+        "ask_depth_10bps": f"{ask_10:,.2f}",
+        "depth_imbalance_10bps": f"{imbalance:+.1%}" if imbalance is not None else None,
+        "levels_returned": len(bids),
+        "book_span_bps": f"{span_bps:.1f}",
+        "percentile": None,
+        "trend": None,
+        "features": features,
+        "feature_spec": feature_report,
+        "note": (
+            "第四型（Snapshot）：這是「現在這一瞬間」的盤口，不是回看窗口也不是監聽窗口——"
+            "所以沒有 window 參數、也沒有 percentile／trend（當下狀態沒有母體可比）。"
+            f"1000 檔實際涵蓋到 ±{span_bps:.1f}bps，這個範圍隨行情變動，不是固定值。"
+            "另外要記得：掛單可以隨時撤（spoofing／冰山單），深度是「宣稱的流動性」"
+            "不是「保證吃得到的流動性」——slippage 那兩格是照現有掛單試算的上界。"
+        ),
+        "source": f"Binance USDⓈ-M {spec['endpoint']}（limit={params.get('limit')}）",
+    }
+
+
 @app.get("/api/stage3/{factor_id}")
 def stage3_factor(factor_id: str):
     """Stage 3 Knowledge Layer：純查表，不打 LLM。內容讀自
@@ -1701,8 +1824,8 @@ def stage3_factor(factor_id: str):
 # ---------------------------------------------------------------------------
 
 # 每個 factor 的「歷史序列從哪來」差很多，Prior Weight 要算 IC 就得逐 factor
-# 取回可跟價格對齊的時間序列。liquidation 沒有歷史可查（見 Stage 2/3 文件），
-# 這是結構性限制，不是這裡偷懶不做。
+# 取回可跟價格對齊的時間序列。orderbook_depth（Snapshot 型）本質上沒有歷史序列、
+# etf 的資料源只給近 9-10 天，這些是結構性限制，不是這裡偷懶不做。
 ACTIVE_ADDRESS_IC_COINS = {"BTC"}
 
 
@@ -1754,9 +1877,25 @@ async def _factor_history_before(
             raise RuntimeError("blockchain.info 回傳空序列")
         return series, "blockchain.info 每日活躍地址數（日頻）"
 
-    # cpi（Event Factor）／liquidation（資料源結構性缺歷史）／panews_sentiment
-    # （ic 是離線算好寫進 .md 的）都不走現場算 ic 這條路徑，Prior Weight 一律
-    # 由 Stage 4 的 .md 檔案給（見 `_resolve_prior_weight`），所以不會走到這裡。
+    if factor_id == "momentum":
+        # 跟 funding_rate／active_address 不同：不用另外打 API 抓「anchor 之前」的
+        # 區間——RSI 本來就是從本地 CSV（跟 anchor_date 同一份資料集）算出來的，
+        # 這份資料集本身就停在 anchor_date，不會有「未來」資料混進來，直接對全歷史
+        # 算 RSI 序列即可，`_compute_rolling_spearman_ic` 會自己配對得出來的 forward
+        # return，超出範圍的日期自然配不出樣本、不會被誤用。
+        closes_by_date = _load_price_series(coin)
+        rsi_dates, rsi_values = _rsi_series(closes_by_date, 1)
+        if rsi_values is None:
+            return None, "本地價格資料不足 15 天（RSI14 需要的最低天數），無法算出任何 RSI 值。"
+        return dict(zip(rsi_dates, rsi_values)), (
+            f"本地 RSI14（data/{coin}_daily_ohlcv.csv 全歷史逐日重算，日頻，"
+            "跟 anchor_date 用同一份資料集，不用另外抓）"
+        )
+
+    # cpi（Event Factor）／liquidation・orderbook_depth（Snapshot 型無歷史序列）／
+    # panews_sentiment（ic 是離線算好寫進 .md 的）／price（本質上無歷史序列可回測）
+    # 都不走現場算 ic 這條路徑，Prior Weight 一律由 Stage 4 的 .md 檔案給
+    # （見 `_resolve_prior_weight`），所以不會走到這裡。
     raise ValueError(f"{factor_id} 不適用 rolling_spearman_ic（不該呼叫到這裡）")
 
 
@@ -1849,7 +1988,7 @@ _TREND_WORDS = {"Increasing": "up", "Decreasing": "down", "Flat": "flat"}
 
 def _trend_direction(stage2: dict | None) -> str | None:
     """從 Stage 2 輸出抽出方向（up／down／flat）。抽不到就回 None——代表這個
-    factor 結構性沒有 trend（liquidation 只有單次監聽窗、cpi 月頻樣本太少），
+    factor 結構性沒有 trend（orderbook_depth 只有當下快照、cpi 月頻樣本太少），
     不是抓取失敗。"""
     if not stage2:
         return None
@@ -2063,7 +2202,7 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
        現場真的算，ic 就是 Prior Weight 的值
     2. `impact_level`——Event Factor（cpi）：**不算 ic**（離散事件沒有「每天的值」
        可以跟每天的 forward_return 配對），值直接讀 Stage 4 .md 的分級映射
-    3. `domain_knowledge`——資料源結構性缺歷史序列（liquidation）：ic 算不出來，
+    3. `domain_knowledge`——結構性沒有歷史序列（orderbook_depth／price）：ic 算不出來，
        值一樣讀 Stage 4 .md，附上為什麼給這個數字的理由
 
     後兩種的值跟理由都寫在 `Stage 4 — Dynamic Evidence Weight Engine/*.md` 裡，
@@ -2073,7 +2212,7 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
     值是**離線算好寫進 .md** 的，不是這裡現場算——因為它的 factor_value(t) 是
     逐日情緒分數，要重算得先把整段歷史文章抓回來重新計分（demo 單次請求做不到），
     而且當初算 ic=0.051 的那支離線腳本沒有留下來。這種情況一樣走「讀 .md」這條路，
-    只是 note 要講清楚它跟 cpi/liquidation 的 null 不是同一回事。"""
+    只是 note 要講清楚它跟 cpi/orderbook_depth 的 null 不是同一回事。"""
     weight_md = _load_weight_md(factor_id)
     md_prior = (weight_md or {}).get("prior_weight") or {}
 
@@ -2133,7 +2272,7 @@ async def _resolve_prior_weight(factor_id: str, coin: str, horizon_days: int) ->
                     f"這個 factor 的 ic 是**離線算好寫進 .md** 的（{example_run.get('computed_value')}，"
                     f"樣本數 {example_run.get('sample_size')}），不是本次現場計算——它的 factor_value(t) "
                     "是逐日情緒分數，重算得先把整段歷史文章抓回來重新計分，單次 demo 請求做不到；"
-                    "當初那支離線腳本也沒有留下來（見 Stage 4 .md）。這跟 cpi／liquidation 的 "
+                    "當初那支離線腳本也沒有留下來（見 Stage 4 .md）。這跟 cpi／orderbook_depth 的 "
                     "ic=null 不是同一回事：那兩個是結構性沒有 ic 可算，這個是算過但沒接進即時流程。"
                 )
                 if offline_ic
@@ -2211,6 +2350,11 @@ async def _compute_stage4(
             "媒體報導是準即時的（快訊近乎即時），這次抓的是當下最新分頁；但要注意這個 factor 的"
             "freshness 門檻應該比日頻／月頻的 factor 更嚴格——幾小時前的敘事就可能已經過時"
         )
+    elif factor_id == "orderbook_depth":
+        freshness_note = (
+            "盤口快照就是這次打 API 的當下，freshness 恆等於「剛剛」——但反過來說它也**最快過期**"
+            "（Stage 3 的 validity_window 是秒級）。這兩件事要分開看：資料很新 ≠ 這個判斷還有效多久"
+        )
     else:
         freshness_note = "資料是這次請求當下即時打 API 拿到的，非常新鮮"
     # cross_source_consensus 只有在「同一次查詢裡有其他 factor 的卡片」時才算得出來——
@@ -2271,7 +2415,7 @@ async def stage4_factor(factor_id: str, req: Stage4FundingRequest):
     """Stage 4 Dynamic Evidence Weight Engine，四個 factor 共用一支路由。
     Prior Weight 真的算 rolling_spearman_ic（各 factor 自己的歷史序列 × 本地
     CSV 價格的 forward return）；Dynamic Modifier 真的打一次 LLM。
-    liquidation 沒有歷史序列可用，IC 會回 null 並說明是結構性限制。"""
+    沒有歷史序列可用的 factor（orderbook_depth／price）IC 會回 null 並說明是結構性限制。"""
     if factor_id not in KNOWN_FACTORS:
         raise HTTPException(404, f"未知 factor：{factor_id}（目前支援：{', '.join(KNOWN_FACTORS)}）")
     coin = req.coin.upper()
@@ -2303,14 +2447,17 @@ async def _stage2_fact_for(factor_id: str, coin: str, horizon: str | None) -> di
         return await stage2_active_address(Stage2ActiveAddressRequest(coin=coin, horizon=horizon))
     if factor_id == "cpi":
         return await stage2_cpi(Stage2CPIRequest(horizon=horizon))
-    if factor_id == "liquidation":
-        return await stage2_liquidation(Stage2LiquidationRequest(coin=coin, listen_seconds=6))
     if factor_id == "panews_sentiment":
         return await stage2_panews_sentiment(Stage2PanewsRequest(coin=coin, horizon=horizon))
     if factor_id == "etf":
         return await stage2_etf(Stage2ETFRequest(coin=coin, horizon=horizon))
     if factor_id == "price":
         return await stage2_price(Stage2PriceRequest(coin=coin, horizon=horizon))
+    if factor_id == "orderbook_depth":
+        # 沒有 horizon 參數可傳——這型 factor 沒有窗口概念
+        return await stage2_orderbook_depth(Stage2OrderbookRequest(coin=coin))
+    if factor_id == "momentum":
+        return await stage2_momentum(Stage2MomentumRequest(coin=coin, horizon=horizon))
     raise ValueError(f"未知 factor：{factor_id}")
 
 
@@ -2326,11 +2473,12 @@ async def _build_evidence_card(
     卡片檔改了程式不會跟著改，兩邊哪天不一致沒人會發現。
 
     幾個原本靠 if 表達、現在讀檔讀出來的例子：
-    - liquidation 的 fact 只有三格，**沒有 percentile／trend**（不是放 null）
+    - orderbook_depth 的 fact 沒有 percentile／trend（不是放 null）——當下狀態沒有母體
     - cpi 走 Event Knowledge，`primary_horizon` 對應到 `reaction_window`、
       `persistence` 對應到 `expected_duration`（卡片檔用 `→ 欄位名` 記這件事）
-    - liquidation 的 traceability 帶一段「單次觀察窗，非統計訊號」的降級處理說明，
-      那段文字是 Stage 2 liquidation.yaml 指定要寫在卡片上的，照抄不改寫
+    - 卡片檔可以在 traceability 底下帶一段 note（規格檔指定要寫在卡片上的說明），
+      程式照抄不改寫——這個機制原本是 liquidation 的「單次觀察窗，非統計訊號」
+      降級條款在用，該 factor 移除後機制保留，之後有需要的 factor 一樣能用
 
     下面幾個 key 是**執行期才有的東西**，卡片檔不會有（也不該有）：weight_detail
     （這次的計算過程）、confidence、ranking_value／weight_direction（排序用）。"""
@@ -2466,7 +2614,7 @@ async def _stage5_impl(req: Stage5FundingRequest) -> dict:
     拍板取絕對值，理由見 `prioritization.note` 與 `_weight_direction()`）。
 
     `evidence_coverage` 定義 13 還沒拍板，不產生這個欄位假裝有定案。
-    算不出 evidence_weight 的卡片（例如 liquidation 結構性沒有歷史序列）不會被
+    算不出 evidence_weight 的卡片不會被
     刪除——13 明講排序「不刪除，只排序」——只是排在有權重的卡片後面，並在
     卡片裡保留說不出數字的原因。"""
     coin = req.coin.upper()
@@ -2585,7 +2733,7 @@ _RELATION_SPLIT = re.compile(r"[＋+、]")
 def _parse_related_factor_names(raw: str | None) -> list[str]:
     """從一段 confirms／conflicts／independent 的自然語言字串解析出前導識別碼。
     例：「funding_rate ＋ open_interest（未平倉量）」→ ["funding_rate", "open_interest"]。
-    像 liquidation.conflicts 那種「（無已知穩定的矛盾對象...）」開頭就是全形括號的，
+    像 conflicts 寫成「（無已知穩定的矛盾對象...）」這種開頭就是全形括號的，
     解析出空字串，這裡過濾掉——不當成一個「有關係但沒卡片」的項目，因為那句話
     本來就不是在指涉任何 factor。"""
     if not raw:
@@ -2615,7 +2763,7 @@ def _build_evidence_graph(cards: list[dict]) -> dict:
     - edges：兩端都在這批卡片裡的關係
     - referenced_but_no_card：Stage 3 Knowledge 提到、但這批查詢沒有對應卡片的
       關聯 factor（例：funding_rate 的 confirms=open_interest，這批只查了
-      funding_rate/active_address/cpi/liquidation 四個，open_interest 不在裡面）——
+      funding_rate/active_address/cpi 等已註冊的 factor，open_interest 不在裡面）——
       這種關係「是真的」，只是這次沒有一起分析，不能略過不提，也不能編一個假節點
     """
     by_factor = {c["factor"]: c for c in cards}
@@ -2677,7 +2825,7 @@ async def stage6_graph(req: Stage5FundingRequest):
       `related_events`）跟 Statistical／Sentiment Knowledge 的 `confirms`／
       `conflicts`／`independent` 不是同一組 key，Stage 5 組裝時對 cpi 讀不到，
       這是已知的 schema 落差，這裡不繞過去湊一條邊——但 cpi 不一定是孤立節點，
-      別的卡片（例如 liquidation.independent）可能反過來指向它
+      別的卡片的 independent／confirms 可能反過來指向它
     """
     with _capture_log() as run_log:
         # 直接呼叫實作而非端點函式：端點那層會再包一次 execution_log 進回應，
@@ -2747,12 +2895,12 @@ async def stage6_graph(req: Stage5FundingRequest):
 
 SOURCE_TYPE_BY_FACTOR = {
     "funding_rate": SourceType.DERIVATIVES,
-    "liquidation": SourceType.DERIVATIVES,
     "active_address": SourceType.ONCHAIN,
     "cpi": SourceType.MACRO,
     "panews_sentiment": SourceType.NEWS,
     "etf": SourceType.MACRO,  # 最接近的既有分類，非精確匹配，見上方說明
     "price": SourceType.PRICE,  # 唯一一個精確匹配：SourceType 本來就有 PRICE 這一類
+    "momentum": SourceType.PRICE,  # RSI14 是價格衍生的技術指標，跟 price 同一類
 }
 
 _DEBATE_RELATION_TO_CARD_KEY = {"supports": "confirms", "conflicts": "conflicts", "independent": "independent"}
@@ -2765,50 +2913,64 @@ def _fact_summary_text(card: dict) -> str:
     return f"{card.get('factor')}：" + "；".join(f"{k}={v}" for k, v in fact.items())
 
 
-def _cards_to_evidences(cards: list[dict], coin: str) -> tuple[list[Evidence], dict[str, str]]:
+def _cards_to_evidences(cards_by_coin: dict[str, list[dict]]) -> tuple[list[Evidence], dict[str, str]]:
     """把 Stage 5 Evidence Card 轉成 Evidence 物件，回傳 (evidences, id_map)——
     id_map 是 {原本的 evidence_id: 新配的 ev-NNN}，前端顯示辯論逐字稿時要用它
     把 ev-001 對回 FUNDING_RATE_BTC 這種可讀名稱。
 
-    liquidation 目前資料源只有單次 6 秒觀察窗，不具統計代表性、無方向性資訊量
-    （2026-08-02 Ken 確認：「這沒辦法當一個證據」）——在這裡整組排除，不進交叉
-    驗證／辯論鏈；Stage 5/6 卡片本身仍照樣呈現，只是不會被當成推理輸入。
+    輸入是 **{幣種: 卡片清單}**（2026-08-02 改）。比較題會一次餵進兩個以上幣種的
+    卡片，每筆 Evidence 必須帶自己的 coin——推理鏈的 `coins_with_evidence` 就是
+    從 `Evidence.coin` 推出來的（見 agent/reasoning/pipeline.py），全部蓋成同一個
+    幣會讓它以為只有一個幣種有證據，比較框架就整個失效。
+
+    ⚠️ 關係圖必須**逐幣各建一張再合併**：`_build_evidence_graph` 內部用
+    `{card["factor"]: card}` 當索引，兩個幣的卡片混在一起時 funding_rate 這種
+    同名 factor 會互相覆蓋，畫出 FUNDING_RATE_SOL --supports--> ACTIVE_ADDRESS_BTC
+    這種根本不存在的跨幣關係。關係是「同一個幣的證據之間」的關係，不跨幣。
+
+    （2026-08-02 起 liquidation 已整個移除，原本在這裡把它排除掉的過濾也一併拿掉——
+    factor 不存在了，就沒有「要不要當證據」的問題。）
     """
-    cards = [c for c in cards if c.get("factor") != "liquidation"]
-    id_map = {c["evidence_id"]: f"ev-{i:03d}" for i, c in enumerate(cards, start=1)}
-    graph = _build_evidence_graph(cards)  # 複用 Stage 6 已經做好的關係解析，不重寫一次
+    all_cards = [c for cards in cards_by_coin.values() for c in cards]
+    id_map = {c["evidence_id"]: f"ev-{i:03d}" for i, c in enumerate(all_cards, start=1)}
 
     related_by_source: dict[str, dict[str, list[str]]] = {
-        c["evidence_id"]: {"confirms": [], "conflicts": [], "independent": []} for c in cards
+        c["evidence_id"]: {"confirms": [], "conflicts": [], "independent": []} for c in all_cards
     }
-    for edge in graph["edges"]:
-        key = _DEBATE_RELATION_TO_CARD_KEY[edge["relation"]]
-        related_by_source[edge["from"]][key].append(id_map[edge["to"]])
+    for cards in cards_by_coin.values():
+        graph = _build_evidence_graph(cards)  # 複用 Stage 6 已經做好的關係解析，不重寫一次
+        for edge in graph["edges"]:
+            key = _DEBATE_RELATION_TO_CARD_KEY[edge["relation"]]
+            related_by_source[edge["from"]][key].append(id_map[edge["to"]])
 
     evidences: list[Evidence] = []
-    for card in cards:
-        weight = card.get("ranking_value")
-        source_weight = max(0.0, min(1.0, float(weight))) if weight is not None else 0.5
-        weight_reason = ((card.get("weight_detail") or {}).get("prior_weight") or {}).get("reason") or ""
-        evidences.append(Evidence(
-            id=id_map[card["evidence_id"]],
-            coin=coin,
-            source=str(card.get("traceability") or card.get("factor") or "（未知來源）"),
-            fetched_at=now_iso(),
-            content_reference=_fact_summary_text(card),
-            related_claim=str(card.get("factor") or ""),
-            source_type=SOURCE_TYPE_BY_FACTOR.get(card.get("factor"), SourceType.MACRO),
-            source_weight=source_weight,
-            weight_reason=weight_reason,
-            related_evidence=related_by_source[card["evidence_id"]],
-        ))
+    for coin, cards in cards_by_coin.items():
+        for card in cards:
+            weight = card.get("ranking_value")
+            source_weight = max(0.0, min(1.0, float(weight))) if weight is not None else 0.5
+            weight_reason = ((card.get("weight_detail") or {}).get("prior_weight") or {}).get("reason") or ""
+            evidences.append(Evidence(
+                id=id_map[card["evidence_id"]],
+                coin=coin,
+                source=str(card.get("traceability") or card.get("factor") or "（未知來源）"),
+                fetched_at=now_iso(),
+                content_reference=_fact_summary_text(card),
+                related_claim=str(card.get("factor") or ""),
+                source_type=SOURCE_TYPE_BY_FACTOR.get(card.get("factor"), SourceType.MACRO),
+                source_weight=source_weight,
+                weight_reason=weight_reason,
+                related_evidence=related_by_source[card["evidence_id"]],
+            ))
     return evidences, id_map
 
 
 class Stage789Request(BaseModel):
     query: str
     coin: str
-    evidence_cards: list[dict]
+    evidence_cards: list[dict] = []
+    # 比較題專用：{幣種: 卡片清單}。有帶這格就走多幣種比較路徑（`coin` 仍是主幣，
+    # 對應推理鏈的 coin 參數），沒帶就照舊只跑 `evidence_cards` 那一個幣。
+    cards_by_coin: dict[str, list[dict]] | None = None
 
 
 @app.post("/api/stage789")
@@ -2823,19 +2985,47 @@ async def stage789(req: Stage789Request):
     這是目前這支 demo 最重的一次呼叫：Step A(1 次 LLM) + Step B(1 次) + 最多兩輪
     辯論（正方最多 2 次＋反方最多 2 次）+ Step D(1 次) = 最多 7 次 LLM 呼叫，
     沒有設 deadline（demo 用途不做 15 分鐘賽制的時間預算控制），實測可能要數十秒。
+
+    **比較題（帶 `cards_by_coin`）**：把兩個以上幣種的卡片一次餵進**同一條**推理鏈，
+    並傳 `coin2` —— 既有推理鏈本來就有完整的比較模式，不需要另外寫一套：
+      - `classify_question_type()` 讀題目文字判出 `comparison`
+      - 有 coin2 時辯論框架自動變成「正方挺 coin／反方挺 coin2」（prompts.py）
+      - Step A/B/D 的 prompt 會告知證據帶 coin 欄位，要求分幣種摘要與比對
+      - `coins_with_evidence` 從 `Evidence.coin` 推，三個以上幣種也涵蓋得到
+    這就是正式 pipeline 的 `agent/orchestrator.py` 處理比較題的做法（那邊還會另外
+    算雙幣相對指標 `agent/collectors/relative.py`，這支 demo 的 factor 集合沒有
+    跨幣指標，所以比較完全建立在各幣自己的證據上——這個限制會回報給前端顯示）。
     """
     coin = req.coin.upper()
     if PERP_SYMBOL.get(coin) is None:
         raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
     if not req.query.strip():
         raise HTTPException(400, "缺少原始查詢問題（query）——Step B 的題型判斷、Step C 的辯論框架都需要它")
-    if not req.evidence_cards:
-        raise HTTPException(400, "evidence_cards 是空的，沒有證據可以進行推理鏈")
+
+    # 統一成 {幣種: 卡片} 的形狀：舊呼叫端只帶 evidence_cards，等價於單一幣種一組
+    cards_by_coin: dict[str, list[dict]] = (
+        {c.upper(): cards for c, cards in (req.cards_by_coin or {}).items() if cards}
+        if req.cards_by_coin
+        else ({coin: req.evidence_cards} if req.evidence_cards else {})
+    )
+    if not cards_by_coin:
+        raise HTTPException(400, "沒有任何 Evidence Card，無法進行推理鏈")
+    for c in cards_by_coin:
+        if PERP_SYMBOL.get(c) is None:
+            raise HTTPException(400, f"不支援的幣種：{c}（支援：{', '.join(PERP_SYMBOL)}）")
+    if coin not in cards_by_coin:
+        raise HTTPException(400, f"主幣 {coin} 不在 cards_by_coin（{'／'.join(cards_by_coin)}）裡")
+    # run_reasoning 的 coin2 只裝得下一個幣（三個以上靠 Evidence.coin 推出的
+    # coins_with_evidence 涵蓋），這裡取主幣以外的第一個當對打方
+    others = [c for c in cards_by_coin if c != coin]
+    coin2 = others[0] if others else None
 
     with _capture_log() as run_log:
         _log(
             "stage789_received",
-            f"coin={coin}，{len(req.evidence_cards)} 張 Evidence Card 進推理鏈",
+            (f"coin={coin}" + (f"／coin2={coin2}" + (f"（另有 {'／'.join(others[1:])}）" if len(others) > 1 else "") if coin2 else ""))
+            + f"，{sum(len(v) for v in cards_by_coin.values())} 張 Evidence Card 進推理鏈"
+            + ("（比較題：多幣種同一條鏈）" if coin2 else ""),
             phase="reason",
             layer="S7_9_reasoning",
         )
@@ -2845,7 +3035,7 @@ async def stage789(req: Stage789Request):
             phase="reason",
             layer="S7_9_reasoning",
         ):
-            evidences, id_map = _cards_to_evidences(req.evidence_cards, coin)
+            evidences, id_map = _cards_to_evidences(cards_by_coin)
 
         settings = get_settings()
         try:
@@ -2862,12 +3052,14 @@ async def stage789(req: Stage789Request):
                 phase="reason",
                 layer="S7_9_reasoning",
             ):
-                # applicable_categories＝這批 demo 六個 factor 實際映射到的四類（見
-                # SOURCE_TYPE_BY_FACTOR），不是完整六類。2026-08-02 Ken 指出：price／
-                # social 對這批 factor 集合是結構性不涵蓋，不是「該補資料但沒補」，
-                # 不該套用同一套扣分公式（confidence.py 的 docstring 有完整說明）。
+                # applicable_categories＝這批 demo 的 factor 實際映射到的類別（見
+                # SOURCE_TYPE_BY_FACTOR），可能是完整六類的子集。2026-08-02 Ken 指出：
+                # 沒被任何 factor 映射到的類別對這批 factor 集合是結構性不涵蓋，
+                # 不是「該補資料但沒補」，不該套用同一套扣分公式
+                # （confidence.py 的 docstring 有完整說明；隨 KNOWN_FACTORS／
+                # SOURCE_TYPE_BY_FACTOR 增減，這裡自動跟著算，不用手動維護類別清單）。
                 result = await asyncio.to_thread(
-                    run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None,
+                    run_reasoning, coin, req.query, evidences, False, llm_client, None, coin2, None, None,
                     set(SOURCE_TYPE_BY_FACTOR.values()),
                 )
         except Exception as exc:  # noqa: BLE001
@@ -2888,6 +3080,16 @@ async def stage789(req: Stage789Request):
 
         return {
             "coin": coin,
+            "coin2": coin2,
+            "coins": list(cards_by_coin),
+            # 這支 demo 的 factor 集合沒有任何跨幣指標（正式 pipeline 的
+            # agent/collectors/relative.py 才有），比較完全建立在各幣自己的證據上——
+            # 這是結構性限制，要顯示出來，不能讓人以為系統算過兩幣的相對強弱
+            "comparison_note": (
+                "本次比較只基於各幣自己的證據（每幣同一組 factor），"
+                "沒有納入跨幣相對指標（相對強弱／跨幣費率差等）——那組 collector 在正式 "
+                "pipeline 才有，這支 demo 的 factor 集合不含。"
+            ) if coin2 else None,
             "question": req.query,
             "backend": settings.llm_backend,
             "question_type": result.question_type,
