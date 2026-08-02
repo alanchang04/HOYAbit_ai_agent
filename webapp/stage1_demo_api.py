@@ -79,10 +79,13 @@ API：
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import contextvars
 import csv
 import json
 import math
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -472,6 +475,101 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------- Execution Log ----------
+# 命題文件把 `execution_log.jsonl` 列為交付項目之一（「每一步驟的執行紀錄」）。
+# 正式 pipeline 走 `agent/logging_utils.ExecutionLogger` 寫檔；這支 demo API 是
+# 無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成
+# **每個請求各自收集、隨回應一起回傳**，前端跨 stage 累積後統一呈現並可下載成
+# 同格式的 .jsonl。欄位刻意對齊 `agent/schemas.LogEntry`（ts／phase／action／
+# detail／status／layer／metrics），這樣兩邊的紀錄是同一種東西、可以並排比對。
+#
+# 用 contextvars 而不是傳參數：stage5 會在同一個 async 呼叫樹裡跑 asyncio.gather
+# 併發呼叫五個 factor 的 stage2/3/4，逐層傳 logger 要改動十幾個函式簽名；
+# contextvar 在 asyncio 下每個 task 自帶副本，天然安全。
+_run_log: contextvars.ContextVar[list | None] = contextvars.ContextVar("demo_run_log", default=None)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _log(
+    action: str,
+    detail: str = "",
+    status: str = "ok",
+    phase: str = "collect",
+    layer: str | None = None,
+    metrics: dict | None = None,
+) -> None:
+    """記一筆執行紀錄。沒有在 `_capture_log()` 區塊裡時靜默略過（單獨呼叫某個
+    helper 做測試時不該因為沒有 log 容器就爆掉）。"""
+    entries = _run_log.get()
+    if entries is None:
+        return
+    entries.append(
+        {
+            "ts": _now_iso(),
+            "phase": phase,
+            "action": action,
+            "detail": detail,
+            "status": status,
+            "layer": layer,
+            "metrics": metrics or {},
+        }
+    )
+
+
+@contextlib.contextmanager
+def _capture_log():
+    """開一個收集區塊；離開時還原，避免污染其他請求。
+
+    **巢狀時沿用外層那一份**：`/api/stage6` 內部會直接呼叫 `stage5_all()`
+    （同一個 process，不是再發一次 HTTP），若兩層各開一份，Stage 2-5 的紀錄
+    會留在內層那份、跟著 stage5 的回應被丟掉，stage6 的 log 只剩下建圖那幾行。
+    合併成同一條時間軸才看得出「這次查詢從頭到尾做了什麼」。
+    """
+    existing = _run_log.get()
+    if existing is not None:
+        yield existing
+        return
+    entries: list = []
+    token = _run_log.set(entries)
+    try:
+        yield entries
+    finally:
+        _run_log.reset(token)
+
+
+@contextlib.contextmanager
+def _timed(action: str, detail: str = "", phase: str = "collect", layer: str | None = None):
+    """量一段工作的耗時並記錄；拋例外時記成 error 再往上拋（不吞例外）。
+
+    耗時是 execution log 最有價值的欄位之一——命題有 15 分鐘硬性上限，
+    「哪一層吃掉多少秒」是事後檢討與現場判斷要不要降級的依據。
+    """
+    started = time.monotonic()
+    try:
+        yield
+    except BaseException as exc:  # noqa: BLE001 - 記錄後原樣拋出
+        _log(
+            action,
+            f"{detail}｜失敗：{type(exc).__name__}: {exc}" if detail else f"失敗：{type(exc).__name__}: {exc}",
+            status="error",
+            phase=phase,
+            layer=layer,
+            metrics={"elapsed_ms": round((time.monotonic() - started) * 1000)},
+        )
+        raise
+    else:
+        _log(
+            action,
+            detail,
+            phase=phase,
+            layer=layer,
+            metrics={"elapsed_ms": round((time.monotonic() - started) * 1000)},
+        )
+
 SYSTEM_PROMPT = """你是加密貨幣研究助理的 Query Understanding 模組。
 針對使用者輸入的自然語言問題，用「同一次」判斷抽取三個欄位——這三個欄位是同一次
 LLM 判斷的產物，不是三次獨立呼叫：
@@ -670,32 +768,55 @@ def stage1(req: Stage1Request):
     if not query:
         raise HTTPException(400, "問題不能是空的")
 
-    settings = get_settings()
-    try:
-        client = build_llm_client(settings)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}"
-        ) from exc
+    with _capture_log() as run_log:
+        settings = get_settings()
+        _log(
+            "stage1_received",
+            f"query 長度 {len(query)} 字，backend={settings.llm_backend}",
+            phase="collect",
+            layer="S1_query_understanding",
+        )
+        try:
+            client = build_llm_client(settings)
+        except Exception as exc:  # noqa: BLE001
+            _log("llm_client_init", f"失敗：{exc}", status="error", layer="S1_query_understanding")
+            raise HTTPException(
+                500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}"
+            ) from exc
 
-    try:
-        raw = client.converse(SYSTEM_PROMPT, query, max_tokens=1024)
-        result = _extract_json(raw)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            502,
-            f"LLM 呼叫或解析失敗（backend={settings.llm_backend}）：{exc}。"
-            f"若 backend=bedrock，常見原因是 AWS_SESSION_TOKEN 過期，需要重新產生。",
-        ) from exc
+        try:
+            with _timed(
+                "stage1_llm_judgment",
+                "單一 LLM 呼叫判斷 Asset／Horizon／Research Goal",
+                phase="reason",
+                layer="S1_query_understanding",
+            ):
+                raw = client.converse(SYSTEM_PROMPT, query, max_tokens=1024)
+                result = _extract_json(raw)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                502,
+                f"LLM 呼叫或解析失敗（backend={settings.llm_backend}）：{exc}。"
+                f"若 backend=bedrock，常見原因是 AWS_SESSION_TOKEN 過期，需要重新產生。",
+            ) from exc
 
-    return {
-        "query": query,
-        "backend": settings.llm_backend,
-        "asset": result.get("asset"),
-        "horizon": result.get("horizon"),
-        "research_goal": result.get("research_goal"),
-        "reasoning": result.get("reasoning"),
-    }
+        _log(
+            "stage1_resolved",
+            f"asset={result.get('asset')}, horizon={result.get('horizon')}, "
+            f"goal={result.get('research_goal')}",
+            phase="reason",
+            layer="S1_query_understanding",
+        )
+
+        return {
+            "query": query,
+            "backend": settings.llm_backend,
+            "asset": result.get("asset"),
+            "horizon": result.get("horizon"),
+            "research_goal": result.get("research_goal"),
+            "reasoning": result.get("reasoning"),
+            "execution_log": run_log,
+        }
 
 
 async def _resolve_window_days_via_llm(horizon: str | None, factor_id: str) -> tuple[int, str, str]:
@@ -2215,10 +2336,37 @@ async def _build_evidence_card(
     （這次的計算過程）、confidence、ranking_value／weight_direction（排序用）。"""
     # Stage 5 會先把全部 factor 的 Stage 2 跑完再進來（才有同批方向可比），
     # 這裡沒帶就自己抓——單獨呼叫時仍然可用。
+    # ⚠️ 計時只包住「真的去抓」那條路：批次預抓時這裡是 no-op，硬包一層會在
+    # Execution Log 上留下一筆 0ms 的假抓取紀錄，讓人以為每張卡都各抓了一次。
     if stage2 is None:
-        stage2 = await _stage2_fact_for(factor_id, coin, horizon)
-    knowledge = stage3_factor(factor_id)["knowledge"]
-    stage4 = await _compute_stage4(factor_id, coin, horizon, horizon_days, batch_directions)
+        with _timed(
+            f"stage2_fetch:{factor_id}",
+            f"{coin} 真實資料抓取（Feature Extraction）",
+            phase="collect",
+            layer="S2_feature_extraction",
+        ):
+            stage2 = await _stage2_fact_for(factor_id, coin, horizon)
+    with _timed(
+        f"stage3_knowledge:{factor_id}",
+        "讀 Stage 3 — Knowledge Layer/*.md（查表，不打 LLM）",
+        phase="collect",
+        layer="S3_knowledge",
+    ):
+        knowledge = stage3_factor(factor_id)["knowledge"]
+    with _timed(
+        f"stage4_weight:{factor_id}",
+        "Prior Weight ＋ LLM Dynamic Modifier",
+        phase="reason",
+        layer="S4_weight_engine",
+    ):
+        stage4 = await _compute_stage4(factor_id, coin, horizon, horizon_days, batch_directions)
+    _log(
+        f"stage4_weight_result:{factor_id}",
+        f"evidence_weight={stage4.get('final_evidence_weight')}",
+        phase="reason",
+        layer="S4_weight_engine",
+        metrics={"evidence_weight": stage4.get("final_evidence_weight")},
+    )
 
     card, card_report = build_evidence_card(
         factor_id,
@@ -2298,6 +2446,18 @@ def _weight_direction(stage4: dict) -> dict:
 
 @app.post("/api/stage5")
 async def stage5_all(req: Stage5FundingRequest):
+    """Stage 5 端點：開一個 execution log 收集區塊，實作在 `_stage5_impl()`。
+
+    拆兩層是為了讓 `/api/stage6` 能在自己的收集區塊裡直接呼叫 `_stage5_impl()`，
+    把 Stage 2-5 的紀錄併進同一條時間軸（見 `_capture_log()` 的巢狀說明）。
+    """
+    with _capture_log() as run_log:
+        result = await _stage5_impl(req)
+        result["execution_log"] = run_log
+        return result
+
+
+async def _stage5_impl(req: Stage5FundingRequest) -> dict:
     """Stage 5 Evidence Card ＋ Prioritization：組裝層，不重新運算——直接呼叫
     Stage 2/3/4 的處理函式（同一個 process 內直接呼叫，不是另外發 HTTP request），
     把五個 factor 各自的 Fact／Knowledge／Weight 組成統一格式卡片，再依
@@ -2312,9 +2472,28 @@ async def stage5_all(req: Stage5FundingRequest):
     coin = req.coin.upper()
     if PERP_SYMBOL.get(coin) is None:
         raise HTTPException(400, f"不支援的幣種：{coin}（支援：{', '.join(PERP_SYMBOL)}）")
+    _log(
+        "stage5_received",
+        f"coin={coin}, horizon={req.horizon!r}",
+        phase="collect",
+        layer="S5_evidence_card",
+    )
     # 沒帶 horizon_days 就用中性的「自由文字 Horizon → 天數」換算（不是退回固定 14 天，
     # 那會讓 time_horizon_match 不管問幾年都以為在問兩週）。
-    horizon_days, _ = await _resolve_effective_horizon_days(req.horizon, req.horizon_days)
+    with _timed(
+        "resolve_horizon_days",
+        "Horizon 自由文字 → 天數（LLM 判斷）",
+        phase="reason",
+        layer="S5_evidence_card",
+    ):
+        horizon_days, _ = await _resolve_effective_horizon_days(req.horizon, req.horizon_days)
+    _log(
+        "horizon_days_resolved",
+        f"horizon_days={horizon_days}",
+        phase="reason",
+        layer="S5_evidence_card",
+        metrics={"horizon_days": horizon_days},
+    )
 
     # 兩段式：先把所有 factor 的 Stage 2 跑完，才有「同批其他 factor 今天往哪走」
     # 可以拿來比 —— cross_source_consensus 必須在 Stage 4 打 LLM **之前**就備好，
@@ -2359,6 +2538,15 @@ async def stage5_all(req: Stage5FundingRequest):
         cards,
         key=lambda c: (c["ranking_value"] is not None, c["ranking_value"] or 0),
         reverse=True,
+    )
+    _log(
+        "stage5_prioritized",
+        f"{len(cards_sorted)} 張卡片依 |evidence_weight| 排序完成"
+        + (f"，{len(failed)} 個 factor 失敗（已列在 failed_factors）" if failed else ""),
+        status="ok" if not failed else "skipped",
+        phase="reason",
+        layer="S5_evidence_card",
+        metrics={"cards": len(cards_sorted), "failed": len(failed)},
     )
 
     return {
@@ -2491,18 +2679,43 @@ async def stage6_graph(req: Stage5FundingRequest):
       這是已知的 schema 落差，這裡不繞過去湊一條邊——但 cpi 不一定是孤立節點，
       別的卡片（例如 liquidation.independent）可能反過來指向它
     """
-    stage5_result = await stage5_all(req)
-    graph = _build_evidence_graph(stage5_result["evidence_cards"])
-    return {
-        "coin": stage5_result["coin"],
-        "horizon": stage5_result["horizon"],
-        "graph": graph,
-        "note": (
-            f"{len(graph['edges'])} 條邊（兩端都在這批卡片裡）、"
-            f"{len(graph['referenced_but_no_card'])} 條關係指向這批沒有分析的 factor、"
-            f"{sum(1 for n in graph['nodes'] if n['isolated'])} 個孤立節點。"
-        ),
-    }
+    with _capture_log() as run_log:
+        # 直接呼叫實作而非端點函式：端點那層會再包一次 execution_log 進回應，
+        # 這裡只需要卡片本身，紀錄靠共用的收集區塊自然併進來。
+        stage5_result = await _stage5_impl(req)
+        with _timed(
+            "stage6_build_graph",
+            "依 Stage 3 Knowledge 的 confirms／conflicts／independent 建圖（不重新判斷關係）",
+            phase="reason",
+            layer="S6_evidence_graph",
+        ):
+            graph = _build_evidence_graph(stage5_result["evidence_cards"])
+        isolated = sum(1 for n in graph["nodes"] if n["isolated"])
+        _log(
+            "stage6_graph_built",
+            f"{len(graph['nodes'])} 節點／{len(graph['edges'])} 邊／"
+            f"{len(graph['referenced_but_no_card'])} 條指向未分析 factor／{isolated} 個孤立節點",
+            phase="reason",
+            layer="S6_evidence_graph",
+            metrics={
+                "nodes": len(graph["nodes"]),
+                "edges": len(graph["edges"]),
+                "referenced_but_no_card": len(graph["referenced_but_no_card"]),
+                "isolated_nodes": isolated,
+            },
+        )
+        return {
+            "coin": stage5_result["coin"],
+            "horizon": stage5_result["horizon"],
+            "evidence_cards": stage5_result["evidence_cards"],
+            "graph": graph,
+            "note": (
+                f"{len(graph['edges'])} 條邊（兩端都在這批卡片裡）、"
+                f"{len(graph['referenced_but_no_card'])} 條關係指向這批沒有分析的 factor、"
+                f"{isolated} 個孤立節點。"
+            ),
+            "execution_log": run_log,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -2619,39 +2832,74 @@ async def stage789(req: Stage789Request):
     if not req.evidence_cards:
         raise HTTPException(400, "evidence_cards 是空的，沒有證據可以進行推理鏈")
 
-    evidences, id_map = _cards_to_evidences(req.evidence_cards, coin)
-
-    settings = get_settings()
-    try:
-        llm_client = build_llm_client(settings)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}") from exc
-
-    try:
-        # applicable_categories＝這批 demo 六個 factor 實際映射到的四類（見
-        # SOURCE_TYPE_BY_FACTOR），不是完整六類。2026-08-02 Ken 指出：price／
-        # social 對這批 factor 集合是結構性不涵蓋，不是「該補資料但沒補」，
-        # 不該套用同一套扣分公式（confidence.py 的 docstring 有完整說明）。
-        result = await asyncio.to_thread(
-            run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None,
-            set(SOURCE_TYPE_BY_FACTOR.values()),
+    with _capture_log() as run_log:
+        _log(
+            "stage789_received",
+            f"coin={coin}，{len(req.evidence_cards)} 張 Evidence Card 進推理鏈",
+            phase="reason",
+            layer="S7_9_reasoning",
         )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"推理鏈執行失敗（backend={settings.llm_backend}）：{exc}") from exc
+        with _timed(
+            "adapter_cards_to_evidences",
+            "Stage 5 卡片 → Evidence（推理鏈的輸入格式）",
+            phase="reason",
+            layer="S7_9_reasoning",
+        ):
+            evidences, id_map = _cards_to_evidences(req.evidence_cards, coin)
 
-    return {
-        "coin": coin,
-        "question": req.query,
-        "backend": settings.llm_backend,
-        "question_type": result.question_type,
-        "id_map": id_map,
-        "facts": result.facts,
-        "cross_validation": result.cross_validation,
-        "inference": result.inference,
-        "debate": result.debate,
-        "conclusion": result.conclusion,
-        "confidence_score": result.confidence_score,
-        "confidence_breakdown": result.confidence_breakdown,
-        "primary_horizon": result.primary_horizon,
-        "primary_horizon_basis": result.primary_horizon_basis,
-    }
+        settings = get_settings()
+        try:
+            llm_client = build_llm_client(settings)
+        except Exception as exc:  # noqa: BLE001
+            _log("llm_client_init", f"失敗：{exc}", status="error", layer="S7_9_reasoning")
+            raise HTTPException(500, f"LLM client 初始化失敗（backend={settings.llm_backend}）：{exc}") from exc
+
+        try:
+            with _timed(
+                "run_reasoning",
+                "Step A 事實層 → B 交叉驗證 → C1/C2 辯論（最多 2 輪）→ D 結論＋信心分數"
+                "（最多 7 次 LLM 呼叫）",
+                phase="reason",
+                layer="S7_9_reasoning",
+            ):
+                # applicable_categories＝這批 demo 六個 factor 實際映射到的四類（見
+                # SOURCE_TYPE_BY_FACTOR），不是完整六類。2026-08-02 Ken 指出：price／
+                # social 對這批 factor 集合是結構性不涵蓋，不是「該補資料但沒補」，
+                # 不該套用同一套扣分公式（confidence.py 的 docstring 有完整說明）。
+                result = await asyncio.to_thread(
+                    run_reasoning, coin, req.query, evidences, False, llm_client, None, None, None, None,
+                    set(SOURCE_TYPE_BY_FACTOR.values()),
+                )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"推理鏈執行失敗（backend={settings.llm_backend}）：{exc}") from exc
+
+        _log(
+            "stage789_done",
+            f"題型={result.question_type}，辯論 {(result.debate or {}).get('round_count', 0)} 輪，"
+            f"信心 {result.confidence_score}",
+            phase="reason",
+            layer="S7_9_reasoning",
+            metrics={
+                "confidence_score": result.confidence_score,
+                "debate_rounds": (result.debate or {}).get("round_count", 0),
+                "facts": len(result.facts),
+            },
+        )
+
+        return {
+            "coin": coin,
+            "question": req.query,
+            "backend": settings.llm_backend,
+            "question_type": result.question_type,
+            "id_map": id_map,
+            "facts": result.facts,
+            "cross_validation": result.cross_validation,
+            "inference": result.inference,
+            "debate": result.debate,
+            "conclusion": result.conclusion,
+            "confidence_score": result.confidence_score,
+            "confidence_breakdown": result.confidence_breakdown,
+            "primary_horizon": result.primary_horizon,
+            "primary_horizon_basis": result.primary_horizon_basis,
+            "execution_log": run_log,
+        }

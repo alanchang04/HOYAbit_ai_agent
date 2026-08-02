@@ -87,6 +87,8 @@
     --accent-8-bg: #f5e2e8;
     --accent-9: #2f3f8f;   /* Stage 9（畫面編號 8）— 結論層＋信心分數，已可互動 */
     --accent-9-bg: #e2e5f5;
+    --accent-log: #4a4740;  /* Execution Log — 中性灰，不跟任何 stage 搶色 */
+    --accent-log-bg: #eeece4;
     --danger: #a13f2f;
     --danger-bg: #f6e6e2;
     --shadow: 0 1px 2px rgba(22,21,15,0.06), 0 8px 24px rgba(22,21,15,0.05);
@@ -120,6 +122,8 @@
       --accent-8-bg: #331c26;
       --accent-9: #8a97e0;
       --accent-9-bg: #1c1f33;
+      --accent-log: #b8b4a6;
+      --accent-log-bg: #24231d;
       --danger: #e08a78;
       --danger-bg: #3a2420;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
@@ -564,6 +568,23 @@
   }
   .todo-note .dot { flex: none; margin-top: 5px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
+  .slog { background: var(--accent-log-bg); }
+  .slog .stage-badge { background: var(--accent-log); color: var(--accent-log-bg); }
+  .slog .stage-title { color: var(--accent-log); }
+  .slog .stage-tag { background: var(--accent-log); color: var(--accent-log-bg); }
+  .log-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.log-table th, table.log-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.log-table th { position: sticky; top: 0; background: var(--surface-2); font-size: 11px; color: var(--muted); z-index: 1; }
+  table.log-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .log-status { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; font-weight: 700; }
+  .log-ok { background: var(--accent-1-bg); color: var(--accent-1); }
+  .log-error { background: var(--danger-bg); color: var(--danger); }
+  .log-skipped { background: var(--accent-2-bg); color: var(--accent-2); }
+  .log-layer { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .log-ms { text-align: right; font-variant-numeric: tabular-nums; }
+
   .back-row { margin-top: 22px; }
 </style>
 </head>
@@ -806,6 +827,27 @@
         <div class="todo-note"><span class="dot"></span><span>對應 Step D＋L5 三維信心分數。<code>limitations</code>／<code>invalidation_conditions</code> 是報告本來就該有的自我修正機制——寫清楚「什麼情況下這個結論會被推翻」，不是自信滿滿講死。</span></div>
       </div>
 
+      <div class="stage-card slog">
+        <div class="stage-head">
+          <span class="stage-badge">📋</span>
+          <span class="stage-title">Execution Log</span>
+          <span class="stage-tag" id="log-pill">紀錄中…</span>
+        </div>
+        <div class="log-toolbar">
+          <button class="ghost" id="log-download-btn" type="button">下載 execution_log.jsonl</button>
+          <span id="log-summary" style="font-size:11.5px; color:var(--muted);"></span>
+        </div>
+        <div class="log-table-wrap">
+          <table class="log-table">
+            <thead>
+              <tr><th>時間 (UTC)</th><th>階段</th><th>動作</th><th>說明</th><th>狀態</th><th style="text-align:right;">耗時</th></tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+        <div class="todo-note"><span class="dot"></span><span>命題文件把 <code>execution_log.jsonl</code> 列為交付項目（每一步驟的執行紀錄）。這支 demo API 是無狀態的、一個 stage 一個 HTTP 端點，沒有「一次執行」的檔案可寫，所以改成<b>每個請求各自收集、隨回應一起回傳</b>，這裡跨 stage 累積（Stage 1／Stage 2-5／Stage 6-8 三段）後統一呈現，按上方按鈕可下載成 <code>.jsonl</code>。欄位刻意對齊正式 pipeline 的 <code>agent/schemas.LogEntry</code>（<code>ts</code>／<code>phase</code>／<code>action</code>／<code>detail</code>／<code>status</code>／<code>layer</code>／<code>metrics</code>），兩邊是同一種紀錄、可並排比對。<code>elapsed_ms</code> 是這裡最有價值的欄位——命題有 15 分鐘硬性上限，「哪一層吃掉多少秒」是事後檢討與現場要不要降級的依據。⚠ 累計工作時間會大於實際牆鐘時間，因為五個 factor 是併發跑的。</span></div>
+      </div>
+
       <div class="back-row">
         <button class="ghost" id="back-btn" type="button">← 回上一頁</button>
       </div>
@@ -817,6 +859,74 @@
 
 <script>
   const API_BASE = ""; // 同源相對路徑：由 stage1_demo_api.py 在 http://127.0.0.1:8001/ 提供本頁時最單純
+
+  // ---------- Execution Log（跨 stage 累積）----------
+  // 三段各自回傳自己的 execution_log：Stage 1、Stage 2-5、Stage 6-8。
+  // 這裡累積成一條時間軸，並可下載成跟正式 pipeline 同格式的 .jsonl。
+  const logPill = document.getElementById("log-pill");
+  const logTbody = document.getElementById("log-tbody");
+  const logSummary = document.getElementById("log-summary");
+  const logDownloadBtn = document.getElementById("log-download-btn");
+  let executionLog = [];
+
+  function escLog(t) {
+    return String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function renderExecutionLog() {
+    if (!executionLog.length) {
+      logTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">尚無紀錄</td></tr>';
+      logSummary.textContent = "";
+      logPill.textContent = "尚無紀錄";
+      return;
+    }
+    logTbody.innerHTML = executionLog.map(e => {
+      const ms = (e.metrics && e.metrics.elapsed_ms != null) ? e.metrics.elapsed_ms : null;
+      const cls = e.status === "error" ? "log-error" : (e.status === "skipped" ? "log-skipped" : "log-ok");
+      return `<tr>
+        <td class="mono">${escLog((e.ts || "").replace("T", " ").replace("Z", ""))}</td>
+        <td class="mono">${escLog(e.phase)}${e.layer ? `<div class="log-layer">${escLog(e.layer)}</div>` : ""}</td>
+        <td class="mono">${escLog(e.action)}</td>
+        <td>${escLog(e.detail)}</td>
+        <td><span class="log-status ${cls}">${escLog(e.status)}</span></td>
+        <td class="log-ms mono">${ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms")}</td>
+      </tr>`;
+    }).join("");
+    const errs = executionLog.filter(e => e.status === "error").length;
+    const totalMs = executionLog.reduce((a, e) => a + ((e.metrics && e.metrics.elapsed_ms) || 0), 0);
+    logSummary.textContent =
+      `${executionLog.length} 筆・累計工作時間 ${(totalMs / 1000).toFixed(1)}s（各層併發，非牆鐘總時長）`
+      + (errs ? `・${errs} 筆錯誤` : "");
+    logPill.textContent = `${executionLog.length} 筆` + (errs ? `・${errs} 錯誤` : "");
+    logPill.classList.toggle("err", errs > 0);
+  }
+
+  function appendExecutionLog(entries) {
+    if (!Array.isArray(entries) || !entries.length) return;
+    executionLog = executionLog.concat(entries);
+    renderExecutionLog();
+  }
+
+  function logClientError(action, msg) {
+    // 前端看到的失敗也要進紀錄，否則 log 會停在最後一次成功的 stage，
+    // 看不出後面究竟是沒跑還是跑掉了。
+    appendExecutionLog([{
+      ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      phase: "collect", action, detail: msg, status: "error", layer: null, metrics: {},
+    }]);
+  }
+
+  logDownloadBtn.addEventListener("click", () => {
+    if (!executionLog.length) return;
+    const blob = new Blob(
+      [executionLog.map(e => JSON.stringify(e)).join("\n") + "\n"],
+      { type: "application/x-ndjson" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "execution_log.jsonl"; a.click();
+    URL.revokeObjectURL(url);
+  });
 
   const queryInput = document.getElementById("query-input");
   const submitBtn = document.getElementById("submit-btn");
@@ -864,6 +974,8 @@
         throw new Error(detail);
       }
       renderResult(data);
+      executionLog = [];              // 新問題從頭累積，不混上一題的紀錄
+      appendExecutionLog(data.execution_log);
       page1.classList.add("hidden");
       page2.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1692,6 +1804,8 @@
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
 
+      appendExecutionLog(data.execution_log);
+
       const byFactor = {};
       (data.evidence_cards || []).forEach(c => { byFactor[c.factor] = c; });
       const failedByFactor = {};
@@ -1737,6 +1851,7 @@
       cardLivePill.classList.add("err");
       cardLiveError.textContent = msg;
       cardLiveError.style.display = "block";
+      logClientError("stage2_5_request_failed", msg);
       graphLivePill.textContent = "無法畫圖（Stage 5 失敗）";
       graphLivePill.classList.add("err");
     }
@@ -2012,6 +2127,8 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+
+      appendExecutionLog(data.execution_log);
 
       // 三個區塊都包一層 .live-result（display:block 蓋掉預設 display:none）——
       // 裡面用到的 .lr-row／.lr-note 樣式規則是寫成 `.live-result .lr-row` 這種
