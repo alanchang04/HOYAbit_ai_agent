@@ -1,0 +1,99 @@
+# Stage 2 — Feature Extraction，**Sentiment Factor 骨架**（panews_sentiment）
+# 對應 09_權重改版草案.md「Sentiment Factor Interpreter」（全新，原本完全沒設計，
+# 這份是第一次落地）；對應 13_流程圖迭代定案v2.md Stage 2：window 由 LLM 依
+# Stage 1 判斷出的 Horizon 決定，這裡不寫死抓多久以前的資料，只記錄端點跟公式。
+#
+# 端點（免 key，公開，支援分頁回溯歷史）：
+#   GET https://universal-api.panewslab.com/articles?take={page_size}&skip={offset}
+#   09_權重改版草案.md 實測過 BTC 標籤可回溯到 2023-01-14；本次示範只抓了
+#   skip=0~6000（約 47 天），沒有拉到 09 說的完整歷史深度，見下方「這次示範
+#   的已知落差」。
+#
+# ⚠️ `window` 不等於 Horizon，LLM 判斷時要留調整空間：
+#   Ken 提醒的重點——如果 Stage 1 判斷出 Horizon=3個月，不代表相關新聞只會
+#   落在過去 3 個月內。可能有一則影響現在市場的關鍵新聞是 5 個月前發的（例如
+#   某個監管訴訟、某次駭客事件），影響延續到現在，但發布時間點在「3個月」這個
+#   窗口之外——如果 LLM 只機械式地把 window 設成等於 horizon，會把這則新聞
+#   漏掉。這不是新問題，`raw_data/_meta/window_policy.md` 的 News 政策已經
+#   踩過同一個坑並訂正過：XRP 實測抓到的新聞實際跨度近 3 個月，遠超原本設的
+#   14 天窗口，硬濾會讓整批新聞變空，最後改成「超過窗口的標記『⚠️非近期』，
+#   不濾除，照樣留著」（見 `agent/collectors/news.py` 的 `_recency_note`）。
+#   這裡沿用同一個原則：LLM 決定的 `window` 只決定「预设抓多深」，不是硬性
+#   過濾邊界——真正判斷「這則舊新聞現在還相不相關」需要靠 Stage 3 Knowledge
+#   的重大事件判斷（例如 event_type=監管訴訟這種持續性事件本來就该不受
+#   window 限制），或交給 Stage 8 辯論層讀到帶時間戳的證據自己判斷還算不算數，
+#   不能在 Stage 2 抓取這一步就用 window 把它濾掉。
+#
+# ⚠️ 跟既有 pipeline/fetch_media_kol_mentions.py 的關係：那支腳本用的是 PANews
+# RSS（`panewslab.com/rss.xml`），只有近期快照（NEWS 型約 17 小時、NORMAL 型
+# 約 5 天），沒有歷史回溯能力；這份用的是 09 實測過的 `universal-api` 分頁端點，
+# 兩者是不同資料源，後者才能做本層需要的歷史特徵抽取（trend／momentum／
+# rolling stats），前者適合當「當下一個時間點」的即時證據（用途不同，不是其中
+#一個要取代另一個）。
+
+feature:
+  factor: panews_sentiment
+  endpoint: https://universal-api.panewslab.com/articles
+  params:
+    take: 100                    # 分頁大小，實測用值，非需要調整的參數
+    skip_range: "0~{window}"     # window 由 LLM 依 Stage 1 Horizon 決定「预设抓多深」，不是硬性過濾邊界，見上方說明
+  coin_filter: 關鍵字比對 title+desc（比照 pipeline/fetch_media_kol_mentions.py 的 COIN_KEYWORDS／COIN_EXCLUDE_KEYWORDS 表，同一份規則）
+  recency_note: 比照 agent/collectors/news.py 的 _recency_note 設計——單篇文章的 publishedAt
+    超出 window 對應的日期範圍時，標記「⚠️非近期」而非直接排除，該篇是否仍該計入
+    sentiment_score／mention_count 的判斷交給下游（Stage 3 事件持續性判斷／Stage 8
+    辯論層），Stage 2 這一步不做硬性過濾
+
+  # sentiment_score 怎麼算，見下方「⚠️ Sentiment Score 方法論」，這裡先給欄位定義
+  sentiment_score: mean(daily_lexicon_score for day in window)
+  sentiment_std: population_std(daily_lexicon_score for day in window)
+  mention_count: count(matched_articles in window)
+  mention_growth: (mention_count[-1] - mention_count[-2]) / mention_count[-2]   # 最近一天 vs 前一天
+
+  # 這三個 quality/噪音相關欄位這次示範**沒有算**，見下方「這次示範的已知落差」
+  engagement_count: null         # PANews API 有 metric.views／comments／favorites／reactions，這次示範沒有加總，欄位定義但值留空
+  repost_count: null             # PANews 是媒體報導不是社群平台，沒有「轉發」概念，這格可能整個不適用，待確認
+  unique_author_count: null      # API 有 authorId，可以算，這次示範沒做
+  bot_ratio: null                # 不適用：PANews 是媒體編輯發布，不是使用者原創貼文，沒有 bot 帳號的概念——這點跟 Twitter/Reddit 類 Sentiment 來源不同
+  spam_ratio: null               # 同上，編輯審核過的媒體內容，spam 疑慮遠低於原始社群貼文
+  language_entropy: null         # 這次抓的是 lang=zh 單一語言版本，不適用；若要算需同時抓多語言版本
+  duplicate_ratio: null          # PANews 常見同一則快訊在 NEWS／NORMAL 兩個 feed 都出現，這個比例待算，這次示範沒做
+
+# ⚠️ Sentiment Score 方法論——這次是簡化版，不是正式方案：
+#   這次用中文利多／利空關鍵字表做逐篇計分（bull_count - bear_count）/(bull_count + bear_count)，
+#   命中任一詞則非零，無命中記 0。這是**臨時的簡化代理**，不是最終設計，理由：
+#   1. 跟 pipeline/fetch_media_kol_mentions.py 的既有原則衝突——那支腳本明確決定
+#      「不做規則式看多看空分類」，因為完整句子丟給 LLM 判斷立場比關鍵字計數準
+#      （見該檔案 header 註解）。這裡為了要有一個可以逐日聚合、拿去跑 IC 回測的
+#      連續數值，暫時用關鍵字計分頂著，這跟既有程式碼的哲學是有衝突的，需要 Ken
+#      拍板：Stage 2 這種要拿去做統計回測的用途，跟 Stage 5/Debate 那種要給
+#      LLM 讀完整句子判斷立場的用途，能不能接受用不同方法（這裡量化、那裡質化）？
+#   2. 命中率不高：實測 1095 篇 BTC 相關文章裡只有 538 篇（49.1%）命中任一關鍵字，
+#      代表這套詞表覆蓋率普通，一半文章的立場資訊完全沒被這套方法捕捉到
+#   3. 更嚴謹的做法應該是接一個真的 NLP 情緒模型（例如 FinBERT 類金融情緒模型，
+#      或針對中文加密貨幣新聞微調過的模型），這次沒有現成模型可用，先誠實記錄
+#      這個缺口，不是忘記做
+#
+# ⚠️ 這次示範的已知落差（跟 09 文件實測過的深度比）：
+#   09 文件說這個端點 BTC 標籤可回溯到 2023-01-14，這次示範只抓了 skip=0~6000
+#   （real run：2026-06-16~2026-08-02，47 天，1095 篇 BTC 相關文章，538 篇
+#   關鍵字命中非零分），沒有拉到完整歷史深度——47 天的樣本數對 Stage 4 要做的
+#   IC 回測來說明顯不夠（active_address 那份用了 1807 天才有像樣的統計檢定力），
+#   這裡的數字只能當「方法論可行性示範」看，不能當「這個 factor 有沒有預測力」
+#   的正式結論，Stage 4 會再講一次這個限制。
+#
+# ⚠️ 2026-08-02 接進 demo（webapp/stage1_demo_api.py，`/api/stage2/panews_sentiment`）
+#   ——三件跟這份骨架有落差、要講清楚的事：
+#   1. **詞表是重建的，不是原本那份**：上面記錄的離線示範（1095 篇、命中率 0.491）
+#      用的腳本沒有留下來，demo 裡的利多／利空詞表是照這份方法論重新寫的，
+#      所以命中率對不上（實測 BTC 約 0.68-0.71）。要對得上數字，得先把當初那份
+#      詞表補進版控——這是「方法論一致、詞表不同」，不是實作跑錯。
+#   2. **分頁深度改成「翻到蓋滿 window 為止」**：不是照 skip_range 一次估算頁數。
+#      實測第一頁只跨幾小時，用它推密度會低估（估 107 篇/天、實際約 136 篇/天），
+#      估出來的頁數蓋不滿 window 卻又沒觸及上限，看起來像抓夠了其實沒有。改成
+#      一批一批往回翻，直到最舊一篇早於 window 起點，或碰到 PANEWS_MAX_PAGES=30
+#      上限（3000 篇，約 22 天）。被上限擋住時回傳 `window_covered: false` 並在
+#      `coverage_note` 明講只翻到哪一天，不靜靜截斷。
+#   3. **mention_growth 的最近一天通常沒過完**：照這份 yaml 的定義（最近一天 vs
+#      前一天）算出來常是 -70%~-90%，那是統計窗口不完整，不是輿論真的退燒。
+#      demo 沒有偷偷改成「比前兩個完整日」去美化數字，而是照定義算、在 note 裡標明。
+

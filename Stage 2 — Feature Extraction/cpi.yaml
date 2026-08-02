@@ -36,3 +36,33 @@ feature:
   next_release:
     reference_month: "2026-07"
     release_date: "2026-08-12"
+
+# ---------------------------------------------------------------------------
+# 數值來源（2026-08-02 補）
+# ---------------------------------------------------------------------------
+# 為什麼要多這一段：上面的 `feature:` 改成 Event Factor 骨架之後，這份檔案就只剩
+# 「事件何時公布」，沒有「這次公布的數字是多少」。但 Stage 5 cpi.md 的 fact 明確要
+# current_value／mom_pct／yoy_pct／percentile 四格（來源標「← Stage 2」），程式又必須
+# 有個地方讀得到 FRED 的端點——不補這段，CPI 就會是四個 factor 裡唯一「端點還寫死在
+# 程式裡」的一個，Stage 2 讀規格檔這件事就缺一角。
+#
+# 刻意**不**併回上面的 `feature:`：那裡是 Event 骨架，混進 Statistical 欄位就等於把
+# 2026-08-02 的重新分類又推翻掉。分成兩塊的語意是明確的——
+#   feature:      這個事件本身的性質（何時公布、幾個來源確認、影響幾個標的）
+#   value_source: 這次公布的數字（要另外去 FRED 抓）
+# Event Factor 特有的形狀，另外三個 Statistical factor 沒有這一段。
+value_source:
+  endpoint: https://fred.stlouisfed.org/graph/fredgraph.csv
+  params:
+    id: CPIAUCSL              # FRED 的 CPI 指數序列（月頻，免 key，全幣種通用不用逐幣抓）
+  window_unit: month          # ⚠ 窗口單位是「月」不是「天」——LLM 的日頻窗口判斷結果換算成月，
+                              # 不另外設計一套月頻 prompt
+  fields:
+    current_value: series[-1]                                  # 最新一期指數值
+    percentile: percentile_rank(current_value, series)         # 母體＝窗口內的月值。⚠ CPI 指數長期
+                                                               # 單調上升，現值幾乎永遠落在高分位，
+                                                               # 這格算得出數字但讀起來會誤導
+                                                               # （Stage 5 cpi.md 已標同一件事）
+    mom_pct: (series[-1] - series[-2]) / series[-2] * 100       # 月增率
+    yoy_pct: (series[-1] - series[-13]) / series[-13] * 100     # 年增率。⚠ 需要 13 期，窗口通常不夠長，
+                                                               # 所以這格固定用「完整序列」算，不受窗口影響
