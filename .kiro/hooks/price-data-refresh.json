@@ -3,14 +3,14 @@
   "hooks": [
     {
       "name": "refresh-price-history-on-session-start",
-      "description": "Refresh complete Coinbase daily candles, use Binance for missing days, and rebuild derived price CSVs.",
+      "description": "Refresh complete Coinbase daily candles, use Binance for missing days, and rebuild derived price CSVs. 交付版預設關閉（enabled=false）：這支 hook 會對外抓網路約 180 秒，並改寫已進版控的 raw_data/price/*.csv，評審 clone 後一開專案就會看到 dirty worktree。價格缺口不依賴它——agent 執行時 price.py 會自行補齊（load_verified_extension_cache + 網路 gap-fill），這支只是預先暖快取。開發時要用請改成 true，或手動執行 python pipeline/update_price_history.py。",
       "trigger": "SessionStart",
       "action": {
         "type": "command",
         "command": "python pipeline/update_price_history.py"
       },
       "timeout": 180,
-      "enabled": true
+      "enabled": false
     }
   ]
 }

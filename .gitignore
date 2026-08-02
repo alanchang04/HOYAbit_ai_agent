@@ -223,3 +223,32 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ──────────────────────────────────────────────────────────────
+# 本專案特有：確保評審 clone 下來不會夾帶本機殘留
+# ──────────────────────────────────────────────────────────────
+
+# 編輯器／AI 工具的本機設定（.kiro/ 是刻意進版控的使用證據，不在此列）
+.vscode/
+.claude/
+
+# 與本專案無關的第三方範例程式：AWS AgentCore CustomerSupport sample。
+# 它自己帶一個 .git（巢狀 repo，本機約 822 MB／3 萬檔），
+# 一旦被 git add -A 收進來會汙染整個 repo，這裡明確擋掉。
+CustomerSupport/
+
+# 簡報工作區（deck 原稿與素材，非程式交付物；命題要求的簡報另行提交）
+pitch/
+pitch_assets/
+
+# 簡報／提案的本機工作稿（正式內容見 PITCH_REFERENCE.md）
+10_AWS架構圖.drawio
+10_AWS架構圖.md
+12_提案大綱分析.md
+
+# 主辦方提供的命題附件：非本隊成果，且內容與版控中的 data/ 完全重複
+# （5 個 OHLCV CSV 經 MD5 比對與 data/ byte-identical）。
+# 保留在本機作為原始參照，但不進版控——評審手上本來就有這兩份。
+# 基準價格資料仍以 data/*.csv 進版控，程式讀的是那一份。
+(HOYA BIT) 命題數據集 - 2026 雲湧智生：臺灣生成式 AI 應用黑客松競賽/
+(HOYA BIT) 命題文件 - 2026 雲湧智生：臺灣生成式 AI 應用黑客松競賽.pdf

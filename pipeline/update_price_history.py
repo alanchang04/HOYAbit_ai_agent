@@ -24,7 +24,14 @@ from itertools import permutations
 from pathlib import Path
 from typing import Any, Iterable
 
-import httpx
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover - 只在未安裝依賴的環境走到
+    # 這支腳本會被 .kiro/hooks/price-data-refresh.json 以裸 `python` 啟動。
+    # 若該 python 不是本專案的 venv（評審 clone 後最常見的情況），httpx 會缺，
+    # 直接 import 會噴 traceback，看起來像專案壞了。改成延後回報：模組仍可 import
+    # （tests/test_update_price_history.py 需要），真的要跑才在 main() 友善退出。
+    httpx = None  # type: ignore[assignment]
 
 COINS = ("BTC", "ETH", "SOL", "BNB", "XRP")
 CSV_FIELDS = ("date", "open", "high", "low", "close", "volume")
@@ -388,6 +395,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if httpx is None:
+        # 缺依賴不是錯誤情境，只是這台 python 沒裝：安靜跳過並說明怎麼補。
+        # 回傳 0 讓 SessionStart hook 不被判為失敗——價格缺口 agent 執行時
+        # 會由 price.py 自行補齊，這支腳本只是預先暖快取。
+        print(
+            "[skip] 未安裝 httpx，跳過價格歷史更新。\n"
+            "       需要時請用專案 venv 執行："
+            "python -m pip install -r requirements.txt",
+            file=sys.stderr,
+        )
+        return 0
     try:
         update_price_history(args.as_of, rebuild_derived=not args.skip_derived)
     except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:

@@ -67,7 +67,7 @@
 - App Runner 所需 IAM role（ECR 存取角色＋Bedrock 呼叫用 instance role）已建立
 
 ### Stage 7：爬蟲證據的 prompt injection 防護（2026-08-01）
-> 完整記錄見 **`SECURITY_prompt_injection.md`**，以下只列重點。
+> 完整記錄見 **`docs/SECURITY_prompt_injection.md`**，以下只列重點。
 
 - 動機：`news`／`social` 抓的是任何人都能發布的公開內容（Reddit 標題與作者名、
   RSS title/summary、第三方 `og:description`），改版前原封不動流進四個下游邊界。
@@ -320,12 +320,12 @@
     與「這幾題反方本來就有理」。BTC 近一年 -44%、跌破 MA60／MA120、近 10 日破前低，
     用它測正方本來就不公平。
 
-14. **裁判機制實測與 15 分鐘上限硬保證（2026-08-01 完成，見 `JUDGE_TEST_REPORT.md`
-    與 `HANDOFF_judge-deadline.md`）**：以命題文件三種範例題型實跑 Bedrock，
+14. **裁判機制實測與 15 分鐘上限硬保證（2026-08-01 完成，見 `docs/JUDGE_TEST_REPORT.md`
+    與 `docs/archive/HANDOFF_judge-deadline.md`）**：以命題文件三種範例題型實跑 Bedrock，
     結果 commit 於 `35b0939`（裁判機制）與 `e8e3020`（時間上限）。
 
     **上方待辦 9／12 的「只有結構推論、沒有輸出實證」諸項已用真實輸出回答**
-    （逐條見 `JUDGE_TEST_REPORT.md` §6）：
+    （逐條見 `docs/JUDGE_TEST_REPORT.md` §6）：
     - 12③ **結案**：`af3cd3e` 的修正有效，正值確實會出現（探針實測 +3）。
     - 9①／12⑤ **疑慮方向錯了**：反方一次都沒行使過收斂權，六輪 `has_new_points`
       全 `True`。「濫用收斂權」不成立；真正的傾向是它幾乎不用（累計 8 輪觸發 1 次）。

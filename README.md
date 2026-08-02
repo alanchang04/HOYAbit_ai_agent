@@ -3,17 +3,43 @@
 多源資訊信任提煉系統：針對指定幣種與題目，在時限內蒐集價格／鏈上／新聞／社群／總經資料，
 產出具備分層推理（事實 → 交叉驗證 → 推論 → 結論）與可回溯證據的市場分析報告。
 
-> **目前版本：v1.1（可回退的正式展示版）**。六類真實 collector、信源權重／去重、
-> 正反方多輪辯論、可解釋信心、Web UI、Docker、AWS Bedrock 與 EC2 公開部署均已實測。
-> v2 將依 `11流程圖模板.md` 另行開發；本 README 描述的是目前可用的 v1.1。
+> **目前版本：v3（決賽交付版）**。六類真實 collector、信源權重／去重、提示注入防護、
+> 正反方多輪辯論、可解釋信心、Evidence Validation 稽核、Structured Features／Knowledge／
+> Evidence Graph sidecar、Web UI、Docker、AWS Bedrock 與 EC2 公開部署均已實測，
+> 918 個 pytest 測試通過。
+>
+> 版本沿革與設計依據見 [`docs/README.md`](docs/README.md)；
+> v3 的 Stage 分層架構評估見 `docs/design/10_v3提案評估回覆.md`。
+
+## 文件導覽
+
+| 想知道什麼 | 看這裡 |
+|---|---|
+| 怎麼安裝與跑起來 | 本檔以下各節 |
+| 目前完成度與已知待辦 | `STATUS.md` |
+| 五類資料來源設計、`data/` 與 `raw_data/` 的分工 | `DATA_SOURCES.md` |
+| 三種題型的真實 Bedrock 實跑結果 | `docs/JUDGE_TEST_REPORT.md` |
+| 外部文字的提示注入防護設計 | `docs/SECURITY_prompt_injection.md` |
+| 架構迭代與設計沿革 | `docs/design/`（索引見 `docs/README.md`） |
+| 開發過程紀錄（需求／設計／任務三件套與引導檔） | `.kiro/specs/`、`.kiro/steering/` |
 
 ## 安裝
+
+需要 Python 3.11 以上。
 
 ```bash
 py -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
 cp .env.example .env   # 之後依需求填入 API key / Bedrock 設定
 ```
+
+`.env` 只有 `LLM_BACKEND` 與對應後端的設定是必要的；collector 的 API key 皆為選用，
+缺少時該來源會被標記 skipped 並在報告中揭露，不會中斷流程。
+
+> `.kiro/hooks/price-data-refresh.json` 預設關閉。它會對外抓網路約 180 秒並改寫
+> `raw_data/price/` 下已進版控的 CSV，clone 後不該自動觸發。價格缺口不依賴它——
+> `agent/collectors/price.py` 執行時會自行補齊。要預先暖快取請手動執行
+> `python pipeline/update_price_history.py`。
 
 ## 執行
 
@@ -204,20 +230,47 @@ agent/
     gemini_client.py         # Gemini 實作（開發階段暫代後端）
     prompts.py               # 四步推理 prompt 模板、題型分支、正反方 framing
     pipeline.py               # 四步推理鏈組裝（含辯論與 fallback）
-  filters/validation.py     # 統一 Evidence Validation Result
+    grounding.py             # 事實層 grounding 稽核，擋幻覺數值流入辯論鏈
+    consistency.py           # 跨段落一致性校正
+    confidence.py            # 可解釋信心分數
+  filters/
+    validation.py            # 統一 Evidence Validation Result
+    injection.py             # 外部文字的提示注入防護（純程式、零 LLM）
+    dedup.py / content.py / source_weights.py / signal_importance.py
   research/                # Structured Features／Knowledge Lite／Evidence Graph sidecar
-  report/                 # report.md 組裝與 evidence 對應檢查
+  report/
+    builder.py               # report.md 組裝與 evidence 對應檢查
+    view_builder.py          # report_view.json（四面板資料來源）
+    html_export.py           # standalone 離線閱讀版 HTML
+  integrity.py             # 完整性三態（INTACT / PARTIAL / DEGRADED）
   fixtures/               # --dry-run 用假資料
 webapp/
   app.py                    # FastAPI：與 CLI 共用 run_pipeline()
-  templates/                # index.html（表單）、result.html（報告顯示）
+  stage1_demo_api.py        # Stage 分層 demo API（讀下方 Stage 規格檔）
+  stage_specs.py            # Stage 2／5 規格檔讀取層
+  templates/                # index.html（表單）、result.html（報告顯示）、view.html（四面板）
   static/style.css
-data/                      # 主辦方提供之 5 幣種 Daily OHLCV 共同基準資料
+Stage 2 — Feature Extraction/          # ← 這五個目錄是 demo 的 runtime 規格檔，
+Stage 3 — Knowledge Layer/             #   不是設計草稿。stage_specs.py 與
+Stage 4 — Dynamic Evidence Weight Engine/  #   stage1_demo_api.py 直接讀它們，
+Stage 5 — Evidence Card ＋ Prioritization/ #   「.md/.yaml 是單一事實來源，
+Stage 6 — Evidence Graph/              #   程式只負責讀」
+14_流程圖視覺報告.html      # Stage 分層 demo 的首頁（由 stage1_demo_api.py 提供）
+data/                      # 主辦方提供之 5 幣種 Daily OHLCV 共同基準資料（不可變）
+raw_data/                  # price/ 是已驗證的延伸快取（agent 會讀）；
+                            # 其餘子目錄為 pipeline/ 的產出，設計說明見 DATA_SOURCES.md
+static/                    # source_reputation.json／signal_importance.json／knowledge_lite.json
+pipeline/                  # 離線資料準備腳本（不在 agent 執行路徑上）
+docs/                      # 說明文件（索引見 docs/README.md）
+  design/                    # 架構迭代與設計沿革
+  archive/                   # 歷史快照與內部交接，僅供追溯
 scripts/
   test_collectors.py       # 獨立驗證腳本：單獨執行六類真實 collector
   check_llm.py              # 驗證目前 LLM_BACKEND 是否能連線
-tests/                     # pytest：schema、collector 失敗隔離、report-evidence 對應、
-                            # OHLCV/技術指標邏輯、推理鏈辯論與 fallback、comparison 雙幣種
+tests/                     # pytest 918 項：schema、collector 失敗隔離、report-evidence 對應、
+                            # OHLCV/技術指標邏輯、推理鏈辯論與 fallback、comparison 雙幣種、
+                            # 合規紅線、注入防護、Stage sidecar、HTML 語法
+.kiro/                     # Kiro 使用證據：specs 三件套、steering 引導檔、hooks
 main.py                    # CLI 進入點（--coin / --coin2 / --question / --dry-run）
 Dockerfile / .dockerignore  # Web UI 與 CLI 共用同一個 image
 ```

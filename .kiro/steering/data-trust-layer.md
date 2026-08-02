@@ -3,7 +3,7 @@ inclusion: fileMatch
 fileMatchPattern: "agent/filters/*"
 ---
 
-# 資料層信任評分規範（R12，設計權威：Ken《07_流程圖迭代定案.md》）
+# 資料層信任評分規範（R12，設計權威：Ken《docs/design/07_流程圖迭代定案.md》）
 
 改動 `agent/filters/` 下任何檔案前必讀。對應規格：`.kiro/specs/trust-refinement-upgrade/`
 （requirements.md R12／design.md §3.9／tasks.md Phase 7）。
