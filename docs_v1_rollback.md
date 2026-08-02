@@ -18,6 +18,22 @@
 `v1.0`／`v1.1`／`v1.2`／`v1.2-final` 都是 **annotated tag**，內容不可變。就算 `main` 被 v2 寫爛、分支被刪，
 `git checkout v1.2-final` 永遠拿得回這份程式碼與當時的 `raw_data/`（資料已納入版控）。
 
+## 獨立 Live Demo（與共用機器分開，2026-08-02 新建）
+
+`i-0f7f925714b7e2b30`（52.33.16.251）是共用機器，之後可能被切換部署別的版本／分支。
+為了讓 v1.2-final 有一個**不會被之後任何操作影響**的展示網址，另外開了一台獨立機器：
+
+| 項目 | 值 |
+|---|---|
+| 展示網址 | http://35.91.6.73/ |
+| Instance ID | `i-009224c9a0802fa4d`（Name tag: `hoyabit-v1.2-final-demo`） |
+| Region | us-west-2 |
+| 部署內容 | 固定跑 `v1.2-final`（clone 時直接 `--branch v1.2-final`，不是共用機器那種可切換 ref 的部署方式） |
+| 管理方式 | 同樣走 SSM（沒開 22 port／無 key pair），跟共用機器共用同一個 IAM instance profile（`hoyabit-agent-instance-profile`）與 security group（`sg-049e054aa0dfa3723`，僅開 80 port） |
+| 已驗證 | SSM 確認 `git describe --tags` 回報 `v1.2-final`、`systemctl is-active hoyabit` = active、機器內與外部 curl 皆回 HTTP 200 |
+
+這台機器**不會自動跟著 `release/v1` 更新**——它是釘死在 v1.2-final 這個 commit 的獨立快照，之後若要更新版本，需要手動重跑一次部署（目前沒有腳本化，需要重新走一次 launch，或視需要幫它補一支類似 `deploy_ec2.py` 但指向 `i-009224c9a0802fa4d` 的腳本）。
+
 **`release/v1` 是保護分支，之後除非是同等級的唯讀／可隔離降級小修正，否則不應再有新東西直接推上來**——新的開發（尤其 v2 相關）一律走獨立分支，merge 前要先確認過，不要重演這次「兩個人各自直接推同一條保護分支」的情況。
 
 ## 三道退路（由輕到重）
