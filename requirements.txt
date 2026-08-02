@@ -5,6 +5,7 @@ httpx>=0.27
 websockets>=13.0  # 清算流 prototype（fetch_liquidation_flow.py）用，訂閱 Binance forceOrder
 feedparser>=6.0
 beautifulsoup4>=4.12  # BNB Chain／Ripple Insights 官方源沒有 RSS，退階用 HTML 解析
+PyYAML>=6.0  # Stage 2/3/4/5 規格檔（*.yaml 與 *.md 的 yaml 區塊）是單一事實來源，webapp/stage_specs.py 讀它
 fastapi>=0.111
 uvicorn[standard]>=0.30
 jinja2>=3.1
