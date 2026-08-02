@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -90,6 +91,28 @@ REAL_RUN_COOLDOWN_SECONDS = 300
 _last_real_run_by_ip: dict[str, float] = {}
 _cooldown_lock = threading.Lock()
 
+# 冷卻豁免名單：現場／評審端的對外 NAT IP。
+#
+# 為什麼需要這個：cooldown 是「每個 IP」計算的，用意是擋自動化連打。但評審多半
+# 共用同一組會場出口 IP——五分鐘限一次會變成「所有評審加起來五分鐘只能跑一次」，
+# 把防濫用機制變成擋住正常使用者的東西。
+#
+# **只豁免 cooldown，不豁免全站單一併發鎖**（`_acquire_run_slot`）：那道不是防濫用，
+# 是真的資源限制——一次真實執行 4-6 分鐘、7 次 Bedrock 呼叫，多人同時跑會互相
+# 拖慢甚至撞上 15 分鐘上限。豁免它反而會讓現場更容易出事。
+#
+# 可用 `REAL_RUN_COOLDOWN_EXEMPT_IPS`（逗號分隔）追加，不必改程式碼重新部署。
+_DEFAULT_EXEMPT_IPS = {
+    "60.250.15.18", "60.250.15.19",
+    "60.250.15.34", "60.250.15.35", "60.250.15.36",
+    "60.250.15.50", "60.250.15.51", "60.250.15.52",
+}
+COOLDOWN_EXEMPT_IPS = _DEFAULT_EXEMPT_IPS | {
+    ip.strip()
+    for ip in os.getenv("REAL_RUN_COOLDOWN_EXEMPT_IPS", "").split(",")
+    if ip.strip()
+}
+
 
 def _client_ip(request: Request) -> str:
     """取請求來源 IP。目前直接對外沒有反向代理，client.host 就是真實來源。"""
@@ -99,6 +122,12 @@ def _client_ip(request: Request) -> str:
 def _check_real_run_allowed(ip: str) -> str | None:
     """真實執行的冷卻檢查。可執行回 None，否則回要顯示給使用者的理由。"""
     now = time.monotonic()
+    if ip in COOLDOWN_EXEMPT_IPS:
+        # 仍然記錄時間戳：豁免的是「被擋」，不是「不留紀錄」——之後若要回頭看
+        # 現場實際打了幾次，這個字典是唯一的依據。
+        with _cooldown_lock:
+            _last_real_run_by_ip[ip] = now
+        return None
     with _cooldown_lock:
         last = _last_real_run_by_ip.get(ip)
         if last is not None and (now - last) < REAL_RUN_COOLDOWN_SECONDS:
