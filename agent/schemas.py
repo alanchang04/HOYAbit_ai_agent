@@ -213,6 +213,13 @@ class EvidenceDraft(BaseModel):
     persistence: Persistence = Persistence.MEDIUM
     decay: DecayPattern = DecayPattern.SLOW
 
+    # Evidence Graph：跟其他證據的關係（對應 13_流程圖迭代定案v2.md Stage 6）。
+    # 只存「id 指到 id」的關係，不含市場方向；三個 key 固定為 supports／conflicts／independent，
+    # 缺的 key 視為空清單。由 knowledge layer 或後製步驟決定性填入，不由辯論層現場推斷
+    # ——辯論當下才推斷關係，等於又製造一次 Ken v3 提案要防的錨定（辯論前就先有預判）。
+    # 有預設值以維持向後相容：舊 evidence.json 無此欄位仍可載入（R2-9）。
+    related_evidence: dict[str, list[str]] = Field(default_factory=dict)
+
     @field_validator("fetched_at")
     @classmethod
     def _validate_iso8601(cls, v: str) -> str:

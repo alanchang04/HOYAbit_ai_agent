@@ -299,6 +299,17 @@ DEBATE_WEIGHT_RULE = (
 )
 
 
+# 辯論層的關係圖意識規則（對應 13_流程圖迭代定案v2.md Stage 6 Evidence Graph）。
+# 沒有這條，辯論會把「證據關係圖」裡標成 supports 的幾筆證據當成互相獨立的佐證疊加信心，
+# 或是忽略掉標成 conflicts 的證據沒有處理——兩者都會讓論證看起來比實際上更有支撐。
+DEBATE_GRAPH_RULE = (
+    "若證據關係圖顯示多筆證據彼此 supports（本質上是同一件事的不同說法），"
+    "不可把它們當成互相獨立的佐證疊加信心，只能算一組訊號。"
+    "若你引用的證據與另一筆證據 conflicts，必須正面處理這個矛盾（說明為何仍採信你引用的那筆），"
+    "不可略過不提。"
+)
+
+
 # 辯論層的立場堅持規則。**正反方共用同一份文字**，不對稱的誠實要求會讓裁判讀到
 # 語氣不對等的兩段論證，進而系統性偏袒語氣篤定的那方——那是修辭差異，不是論據差異。
 #
@@ -385,6 +396,45 @@ def _weight_index_section(evidences: list[Evidence] | None) -> str:
     """把索引包成 prompt 區塊；沒有證據可列時整段省略（降級不中斷，R6-1）。"""
     index = format_evidence_weight_index(evidences)
     return f"\n{index}\n" if index else ""
+
+
+def format_evidence_graph(evidences: list[Evidence] | None) -> str:
+    """辯論層專用的證據關係索引（對應 13_流程圖迭代定案v2.md Stage 6 Evidence Graph）。
+
+    只列「有關係」的證據，且只列一次（`related_evidence` 是雙向宣告，A.confirms 含 B
+    時不強制 B.conflicts 也要含 A，但索引本身不去重跑雙向推導——避免顯示出來源資料
+    沒明講過的關係）。跟 `format_evidence_weight_index` 同理：只給關係，不重貼 content，
+    省 prompt 長度。
+    """
+    if not evidences:
+        return ""
+    by_id = {e.id: e for e in evidences}
+    lines = []
+    for e in evidences:
+        if is_quarantined(e):
+            continue
+        rel = e.related_evidence or {}
+        for relation, target_ids in (
+            ("supports", rel.get("confirms", [])),
+            ("conflicts", rel.get("conflicts", [])),
+            ("independent", rel.get("independent", [])),
+        ):
+            for target_id in target_ids:
+                if target_id not in by_id or is_quarantined(by_id[target_id]):
+                    continue
+                lines.append(f"- {e.id} ── {relation} ──▶ {target_id}")
+    if not lines:
+        return ""
+    return (
+        "證據關係圖（哪些證據互相印證、互相矛盾、彼此獨立；不含市場方向）：\n"
+        + "\n".join(lines)
+    )
+
+
+def _evidence_graph_section(evidences: list[Evidence] | None) -> str:
+    """把關係圖包成 prompt 區塊；沒有關係資料可列時整段省略（降級不中斷，R6-1）。"""
+    graph = format_evidence_graph(evidences)
+    return f"\n{graph}\n" if graph else ""
 
 
 # 事實層的逐字轉錄規則（grounding）。2026-08 實測發現 Step A 會在「摘要」的名義下
@@ -496,12 +546,16 @@ def build_step_b_prompt(
 
 原始證據清單（供比對細節）：
 {_format_evidence_list(evidences, question_type, primary_horizon)}
-
+{_evidence_graph_section(evidences)}
 請執行【交叉驗證層】分析，輸出**三段**：
 1. consistent_signals：多個獨立來源指向同一方向的一致訊號。
    若多筆證據其實引用同一篇文章或同一原始資料，請註明「非獨立來源」以避免重複計算可信度。
+   若上方附有「證據關係圖」，圖中標示 supports 的證據對，屬既有知識庫紀錄的既定關係，
+   應直接反映進這裡，不需重新論證；圖裡沒有列出的關係仍要你自行判斷，不可因為圖不完整
+   就略過其餘證據間的一致性。
 2. contradictions：**真正的矛盾訊號**。只有「同一 horizon 帶內」{contradiction_scope}的
    方向衝突才算矛盾。{contradiction_caveat}
+   同理，證據關係圖中標示 conflicts 的證據對，只要落在上述範圍內，必須列入這裡，不可省略。
 {structural_instruction}
 
 另外輸出 direction_matrix：各 source_type 對市場方向的表態。
@@ -568,10 +622,11 @@ def build_step_c_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-{_weight_index_section(evidences)}
+{_weight_index_section(evidences)}{_evidence_graph_section(evidences)}
 請執行【推論層】分析：根據以上事實與交叉驗證結果，提出 1-3 個市場狀態假設。
 每個假設都必須同時列出支持它的 evidence id 與反對/削弱它的 evidence id（若真的沒有反對證據可留空陣列，但不可省略欄位）。
 {DEBATE_WEIGHT_RULE}
+{DEBATE_GRAPH_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -608,13 +663,14 @@ def build_step_c1_bull_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-{_weight_index_section(evidences)}
+{_weight_index_section(evidences)}{_evidence_graph_section(evidences)}
 規則：
 1. 只能使用上面提供的事實與證據，不可引入未出現的資訊或杜撰數據。
 2. 必須引用 evidence id 支撐你的論點。
 3. {DEBATE_ADVOCACY_RULE}
 4. {DEBATE_WEIGHT_RULE}
-5. {DEBATE_LENGTH_RULE}
+5. {DEBATE_GRAPH_RULE}
+6. {DEBATE_LENGTH_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -662,7 +718,7 @@ def build_step_c1_bull_rebuttal_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-{_weight_index_section(evidences)}
+{_weight_index_section(evidences)}{_evidence_graph_section(evidences)}
 先前的辯論紀錄：
 {format_debate_transcript(rounds)}
 
@@ -686,7 +742,8 @@ def build_step_c1_bull_rebuttal_prompt(
    不是叫你另外自曝其短——沒被打中的弱點不必主動交出來。）
 4. {DEBATE_REBUTTAL_STANDARD}
 5. {DEBATE_WEIGHT_RULE}
-6. {DEBATE_LENGTH_RULE}
+6. {DEBATE_GRAPH_RULE}
+7. {DEBATE_LENGTH_RULE}
 
 請只輸出以下 JSON 格式：
 {{
@@ -725,7 +782,7 @@ def build_step_c2_bear_prompt(
     # 第 2 輪起，反方要面對「正方的修正是否已經回應了我的批評」這個判斷，
     # 標準與正方共用（見 DEBATE_REBUTTAL_STANDARD 的註解：不對稱的讓步要求會讓
     # 裁判讀到語氣不對等的兩段論證）。第 1 輪沒有前輪可判定，不掛。
-    rebuttal_standard_rule = f"\n6. {DEBATE_REBUTTAL_STANDARD}\n" if rounds else ""
+    rebuttal_standard_rule = f"\n7. {DEBATE_REBUTTAL_STANDARD}\n" if rounds else ""
     return f"""題目：{question}
 幣種：{coin}{f'／{coin2}' if coin2 else ''}
 
@@ -734,7 +791,7 @@ def build_step_c2_bear_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-{_weight_index_section(evidences)}{transcript_section}
+{_weight_index_section(evidences)}{_evidence_graph_section(evidences)}{transcript_section}
 正方分析師本輪（第 {round_no} 輪）的論證如下：
 {bull_argument}
 
@@ -755,7 +812,8 @@ def build_step_c2_bear_prompt(
 3. {DEBATE_ADVOCACY_RULE}
 4. {DEBATE_WEIGHT_RULE}
    批評正方時同樣適用：指出正方「證據薄弱」前，先確認他引用的是高權重還是低權重證據。
-5. {DEBATE_LENGTH_RULE}
+5. {DEBATE_GRAPH_RULE}
+6. {DEBATE_LENGTH_RULE}
    critique 與 argument 分別計算，不是合計 600 字。
 {rebuttal_standard_rule}
 請只輸出以下 JSON 格式：
@@ -978,7 +1036,7 @@ def build_step_d_prompt(
 
 交叉驗證層：
 {json.dumps(_cross_validation_for_prompt(cross_validation), ensure_ascii=False, indent=2)}
-{_weight_index_section(evidences)}
+{_weight_index_section(evidences)}{_evidence_graph_section(evidences)}
 {_format_inference_section(inference, debate)}
 {_format_debate_section(debate)}
 請執行【結論層】分析：綜合以上所有層次，給出最終市場判斷。
