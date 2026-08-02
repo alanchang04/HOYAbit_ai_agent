@@ -31,7 +31,11 @@ evidence:
   related_evidence:                  # = Stage 3 Knowledge 的 confirms／conflicts／independent
     confirms: [price]
     conflicts: [active_address]      # ⚠️ 單向關係：active_address 卡片自己的 conflicts 指向 price，不是指回 etf，Stage 6 Graph 不會畫出雙向邊，見 Stage 3 etf.md 說明
-    independent: [liquidation]
+    independent: null                # ⚠️ 2026-08-02 訂正：原本是 [liquidation]，但該 factor 當日
+                                     # 已被 momentum（RSI14）取代、卡片不再存在，這條邊會指向空節點。
+                                     # **不改指 momentum**——momentum 是純價格函數，而 Stage 3 引的
+                                     # SSRN 6592830 記載 ETF 流量與價格是雙向回饋迴圈，宣稱兩者獨立
+                                     # 會跟自己引的文獻矛盾。改 null 的完整理由見 Stage 3 etf.md
 
   traceability: bitbo.io ETF flow 頁面（HTML table 解析，非 JSON API，見 Stage 2 已知限制）
 

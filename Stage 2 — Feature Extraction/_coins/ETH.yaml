@@ -1,0 +1,72 @@
+# Stage 2 — Feature Extraction，幣種模板（ETH）
+#
+# 這份是「這個幣種要抓哪些 factor」，同資料夾其他 .yaml 是「一個 factor 怎麼抓」。
+# LLM 先讀這份決定跑哪些端點，再各自去讀對應的 factor 規格檔拿欄位與公式。
+#
+# ⚠️ 目前只是文件，程式還沒讀它（2026-08-02 拍板：只寫模板、不動程式）。
+# ⚠️ not_applicable 記的是「資料源／概念上拿不到」（事實），不是「選擇不抓」。
+#
+# 2026-08-02 v2：加入該幣的幣種專屬 factor（Ken 拍板「一幣一個」），
+# 五個候選端點全部實打過，實測結果直接寫在各 factor 的 measured_2026_08_02 欄。
+
+coin: ETH
+name: Ethereum
+chain: evm
+perp_symbol: ETHUSDT
+coingecko_id: ethereum
+factor_count: 7
+
+factors:
+  - factor: funding_rate
+    spec: funding_rate.yaml
+    endpoint: https://fapi.binance.com/fapi/v1/fundingRate
+    params: {symbol: ETHUSDT, limit: "{{window * 3}}"}
+    samples_per_day: 3
+
+  - factor: price
+    spec: price.yaml
+    endpoint: https://api.coingecko.com/api/v3/simple/price
+    params: {ids: ethereum}
+    note: 失敗退 CryptoCompare /data/pricemultifull 備援
+
+  - factor: cpi
+    spec: cpi.yaml
+    endpoint: https://fred.stlouisfed.org/graph/fredgraph.csv
+    params: {id: CPIAUCSL}
+    scope: global              # ⚠️ 總經資料，五幣共用同一份序列，抓回來的數字完全相同
+
+  - factor: panews_sentiment
+    spec: panews_sentiment.yaml
+    endpoint: https://universal-api.panewslab.com/articles
+    keywords_ref: pipeline/fetch_media_kol_mentions.py COIN_KEYWORDS[ETH]
+    note: ⚠️ 關鍵字表五幣都有定義，但只有 BTC 做過實測
+
+  - factor: momentum           # 2026-08-02 由另一條線取代原本的 liquidation
+    spec: momentum.yaml
+    endpoint: null             # ⚠️ 本地計算，零網路成本——唯一一個不打外部端點的 factor
+    params: {lookback_days: "{{window}}"}
+    samples_per_day: 1
+    source_data: data/{coin}_daily_ohlcv.csv（主辦方共同基準資料集）
+    algorithm_ref: agent/collectors/price.py `_rsi14`（不重寫第二份，避免算法漂移）
+    note: 實際讀取的收盤價會多抓 14 天當 RSI 種子，那 14 天不計入 sample_size
+
+  - factor: orderbook_depth
+    spec: orderbook_depth.yaml
+    endpoint: https://fapi.binance.com/fapi/v1/depth
+    params: {symbol: ETHUSDT, limit: 1000}
+    note: Snapshot 型，沒有 window 參數
+
+  - factor: gas                  # ⭐ 2026-08-02 新增的 ETH 幣種專屬 factor
+    spec: gas.yaml
+    endpoint: https://etherscan.io/chart/gasprice
+    params: {output: csv}        # ⚠️ CSV 匯出不是 JSON API；無窗口參數，一次回全部
+    samples_per_day: 1
+    unit: Wei → Gwei（/1e9）
+    measured_2026_08_02: |-
+      ✅ 實測 4021 筆，涵蓋 2015-07-30 ~ 2026-08-01，最新 598132802 Wei（0.598 Gwei）
+      ⚠️ 但價格基準 CSV 只有 1888 天，ic 可用樣本被交集卡在 1874
+
+not_applicable:
+  - {factor: etf,            reason: "bitbo.io 只追蹤美國現貨 BTC ETF；美國現貨 ETH ETF 存在，但沒有免 key 的對應資料源——這是資料源限制，不是資產類別不存在"}
+  - {factor: active_address, reason: "blockchain.info 只涵蓋 BTC UTXO 鏈。ETH 是帳戶模型鏈，要同類指標得另找資料源"}
+  - {factor: hash_rate,      reason: "⚠️ 概念不成立——ETH 2022 The Merge 後轉 PoS，沒有算力這回事"}
