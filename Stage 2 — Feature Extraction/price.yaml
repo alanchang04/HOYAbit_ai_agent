@@ -1,0 +1,55 @@
+# Stage 2 — Feature Extraction，Statistical Factor 骨架（price，示範：即時現貨報價）
+#
+# 跟 liquidation 同一種「結構性沒有歷史序列」的骨架，但成因不同：liquidation 是
+# 資料源限制（歷史清算單 API 已停用），這裡是本質限制——「現在的報價」定義上
+# 就只有一個值，沒有「回看過去 N 天的報價序列」這個問題要問（回看序列另有
+# agent/collectors/price.py 的五檔粒度統計與技術指標在做，不重複造一份，見
+# Stage 3 price.md「跟既有知識庫的關係」）。這份只示範現貨報價快照本身。
+#
+# 端點（免 key，公開）：
+#   主要：GET https://api.coingecko.com/api/v3/simple/price
+#         ?ids={symbol}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true
+#   備援：GET https://min-api.cryptocompare.com/data/pricemultifull?fsyms={SYMBOL}&tsyms=USD
+#   跟 agent/collectors/price.py 現有的 CoinGecko→CryptoCompare 容錯順序一致，
+#   demo 沿用同一順序，不是另外設計一套。
+
+feature:
+  factor: price
+  endpoint: https://api.coingecko.com/api/v3/simple/price
+  # ⚠️ params 這裡只示範形狀，不走 render_params() 的 {symbol} 樣板替換——那個樣板
+  # 對應的是 PERP_SYMBOL（BTCUSDT 這種永續合約代號），CoinGecko 的 ids 要的是
+  # coingecko_id（"bitcoin"／"ethereum" 這種），兩者不是同一個字串，硬套樣板會拿到
+  # 錯的值。demo 端點直接用 agent/collectors/coin_map.py 的 get_coin_info().coingecko_id
+  # 組 params，跟 cpi.yaml 的 value_source.params（固定值，同樣不走 symbol 替換）同一種處理方式。
+  params:
+    ids: bitcoin   # 示範值；實際請求依查詢幣種換成對應的 coingecko_id
+    vs_currencies: usd
+    include_24hr_change: "true"
+    include_24hr_vol: "true"
+
+  # Raw（唯一能真的填出數字的區塊——這是一次性快照，不是序列）
+  current_value: quote.price_usd
+  change_24h_pct: quote.change_24h_pct
+  volume_24h_usd: quote.volume_24h_usd
+
+  # Relative
+  percentile: null   # 本質限制：快照沒有母體可比——要看相對位置請看 agent/collectors/price.py
+                      # 的五檔粒度區間統計／技術指標，不是這份
+
+  # Trend / Momentum / Statistics
+  # 本質限制：這份只抓「當下」一個時間點，不是同一 factor 的歷史時間序列，
+  # slope／roc／rolling_* 這類需要跨時間點比較的欄位一律留 null，不編造推算值。
+  slope: null
+  slope_7d: null
+  slope_30d: null
+  roc_1d: null
+  roc_7d: null
+  rolling_mean: null
+  rolling_std: null
+  rolling_max: null
+  rolling_min: null
+  z_score: null
+
+  # Quality
+  missing_ratio: null   # 「缺漏」這個概念不適用單次快照
+  sample_size: 1         # 每次執行只有一筆快照，不是多筆歷史樣本

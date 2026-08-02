@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-01T05:17:19.881461+00:00",
-  "as_of_exclusive_utc": "2026-08-01",
-  "last_complete_date": "2026-07-31",
+  "generated_at": "2026-08-02T01:06:28.232346+00:00",
+  "as_of_exclusive_utc": "2026-08-02",
+  "last_complete_date": "2026-08-01",
   "baseline_policy": "data/*.csv is the immutable HOYA BIT official baseline",
   "source_priority": [
     "Coinbase Exchange USD",
@@ -13,11 +13,11 @@
       "fallback_symbol": "BTCUSDT",
       "official_start": "2021-06-01",
       "official_end": "2026-05-31",
-      "extended_end": "2026-07-31",
+      "extended_end": "2026-08-01",
       "official_rows": 1826,
-      "extension_rows": 61,
+      "extension_rows": 62,
       "source_rows": {
-        "coinbase_exchange_usd": 61,
+        "coinbase_exchange_usd": 62,
         "binance_spot_usdt": 0
       },
       "coinbase_error": null,
@@ -28,11 +28,11 @@
       "fallback_symbol": "ETHUSDT",
       "official_start": "2021-06-01",
       "official_end": "2026-05-31",
-      "extended_end": "2026-07-31",
+      "extended_end": "2026-08-01",
       "official_rows": 1826,
-      "extension_rows": 61,
+      "extension_rows": 62,
       "source_rows": {
-        "coinbase_exchange_usd": 61,
+        "coinbase_exchange_usd": 62,
         "binance_spot_usdt": 0
       },
       "coinbase_error": null,
@@ -43,11 +43,11 @@
       "fallback_symbol": "SOLUSDT",
       "official_start": "2021-06-01",
       "official_end": "2026-05-31",
-      "extended_end": "2026-07-31",
+      "extended_end": "2026-08-01",
       "official_rows": 1826,
-      "extension_rows": 61,
+      "extension_rows": 62,
       "source_rows": {
-        "coinbase_exchange_usd": 61,
+        "coinbase_exchange_usd": 62,
         "binance_spot_usdt": 0
       },
       "coinbase_error": null,
@@ -58,11 +58,11 @@
       "fallback_symbol": "BNBUSDT",
       "official_start": "2021-06-01",
       "official_end": "2026-05-31",
-      "extended_end": "2026-07-31",
+      "extended_end": "2026-08-01",
       "official_rows": 1826,
-      "extension_rows": 61,
+      "extension_rows": 62,
       "source_rows": {
-        "coinbase_exchange_usd": 61,
+        "coinbase_exchange_usd": 62,
         "binance_spot_usdt": 0
       },
       "coinbase_error": null,
@@ -73,11 +73,11 @@
       "fallback_symbol": "XRPUSDT",
       "official_start": "2021-06-01",
       "official_end": "2026-05-31",
-      "extended_end": "2026-07-31",
+      "extended_end": "2026-08-01",
       "official_rows": 1826,
-      "extension_rows": 61,
+      "extension_rows": 62,
       "source_rows": {
-        "coinbase_exchange_usd": 61,
+        "coinbase_exchange_usd": 62,
         "binance_spot_usdt": 0
       },
       "coinbase_error": null,
